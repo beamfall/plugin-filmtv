@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "packages": {
+    "github.com/beamfall/plugin-filmtv": 74.0,
+    "github.com/beamfall/plugin-filmtv/internal/foreignimport": 89.0,
+    "github.com/beamfall/plugin-filmtv/internal/mediaimport": 92.0
+  }
+}
