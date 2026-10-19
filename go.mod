@@ -1,6 +1,6 @@
 module github.com/beamfall/plugin-filmtv
 
-go 1.26.9
+go 1.27.2
 
 require (
 	github.com/beamfall/plugin-sdk v0.3.2
