@@ -501,7 +501,7 @@ EXPECTED_JOB_STEPS = {
         "bounded parser fuzz",
     ),
 }
-EXPECTED_WORKFLOW_FINGERPRINT = "954a6a86e0d2f64297453b0a29ddda37eea8c589035e3b473b6a6d1c8bccbca0"
+EXPECTED_WORKFLOW_FINGERPRINT = "cce2d90d1dca68677501e743ace346b96f67c1f24855832c5a129f266369fa04"
 
 
 def workflow_fingerprint(document: dict[str, object]) -> str:
@@ -756,7 +756,7 @@ def workflow_errors(workflow: str, discovered_fuzz: set[tuple[str, str]]) -> lis
             "golangci-lint",
             None,
             LINT_ACTION,
-            {"version": "v2.12.2", "working-directory": PLUGIN_DIRECTORY},
+            {"version": "v2.15.0", "working-directory": PLUGIN_DIRECTORY},
         ),
     ):
         require_step(
