@@ -28,8 +28,8 @@ func Bundle() sdk.Bundle {
 	return sdk.Bundle{
 		ID:          PluginID,
 		Version:     "0.1.4",
-		SDKFloor:    "0.3.3",
-		SDKCeiling:  "0.3.3",
+		SDKFloor:    "0.3.4",
+		SDKCeiling:  "0.3.4",
 		DisplayName: sdk.LocaleString{"en": "Film & TV", "fr": "Films et séries"},
 		// Per-item display labels key off the typed Media field
 		// `class: movie | episode`; MediaLabel stays the class-neutral
