@@ -378,6 +378,7 @@ func Bundle() sdk.Bundle {
 			{
 				ID:          "tmdb-movie",
 				DisplayName: sdk.L("TMDB (Movies)"),
+				Attribution: tmdbAttribution,
 				Kind:        "http-json",
 				Endpoint:    "https://api.themoviedb.org/3",
 				AuthRef:     "tmdb-api-key",
@@ -456,6 +457,7 @@ func Bundle() sdk.Bundle {
 			{
 				ID:          "tmdb-tv",
 				DisplayName: sdk.L("TMDB (TV)"),
+				Attribution: tmdbAttribution,
 				Kind:        "http-json",
 				Endpoint:    "https://api.themoviedb.org/3",
 				AuthRef:     "tmdb-api-key",
@@ -538,6 +540,7 @@ func Bundle() sdk.Bundle {
 			{
 				ID:          "tvdb-series",
 				DisplayName: sdk.L("TheTVDB (Series)"),
+				Attribution: tvdbAttribution,
 				Kind:        "http-json",
 				Endpoint:    "https://api4.thetvdb.com/v4",
 				AuthRef:     "tvdb-api-key",
@@ -670,3 +673,18 @@ func Bundle() sdk.Bundle {
 		},
 	}
 }
+
+// The credits TMDB and TheTVDB require wherever their metadata is shown
+// (themoviedb.org API FAQ; thetvdb.com/api-information#attribution, both read
+// 2026-11-11). TheTVDB's text is its published sample; a negotiated license
+// may set different wording.
+var (
+	tmdbAttribution = &sdk.Attribution{
+		Text: sdk.L("This product uses the TMDB API but is not endorsed or certified by TMDB."),
+		URL:  "https://www.themoviedb.org",
+	}
+	tvdbAttribution = &sdk.Attribution{
+		Text: sdk.L("Metadata provided by TheTVDB. Please consider adding missing information or subscribing."),
+		URL:  "https://www.thetvdb.com",
+	}
+)

@@ -315,3 +315,33 @@ func TestBundleCompatibleWithPinnedSDK(t *testing.T) {
 		t.Fatalf("Bundle() compat range [%s, %s] excludes pinned SDK %s", b.SDKFloor, b.SDKCeiling, sdk.Version)
 	}
 }
+
+// TestCredentialedScrapersDeclareAttribution: TMDB and TheTVDB require a
+// visible credit with a link wherever their metadata is shown (CORE-1126).
+func TestCredentialedScrapersDeclareAttribution(t *testing.T) {
+	want := map[string]string{
+		"tmdb-movie":  "https://www.themoviedb.org",
+		"tmdb-tv":     "https://www.themoviedb.org",
+		"tvdb-series": "https://www.thetvdb.com",
+	}
+	for _, scraper := range filmtv.Bundle().Scrapers {
+		link, ok := want[scraper.ID]
+		if !ok {
+			continue
+		}
+		delete(want, scraper.ID)
+		if scraper.Attribution == nil {
+			t.Errorf("scraper %s declares no attribution", scraper.ID)
+			continue
+		}
+		if scraper.Attribution.URL != link {
+			t.Errorf("scraper %s attribution link = %q, want %q", scraper.ID, scraper.Attribution.URL, link)
+		}
+		if scraper.Attribution.Text.Resolve("") == "" {
+			t.Errorf("scraper %s attribution has no text", scraper.ID)
+		}
+	}
+	for id := range want {
+		t.Errorf("scraper %s not found", id)
+	}
+}
