@@ -345,3 +345,30 @@ func TestCredentialedScrapersDeclareAttribution(t *testing.T) {
 		t.Errorf("scraper %s not found", id)
 	}
 }
+
+// TestTVDBNeedsSubscriberPIN: TheTVDB's free project key only works with each
+// user's own subscriber PIN, so the PIN is the scraper's AuthRef (no PIN, no
+// TheTVDB) and the project key rides beside it as a second login secret
+// (CORE-1129).
+func TestTVDBNeedsSubscriberPIN(t *testing.T) {
+	for _, scraper := range filmtv.Bundle().Scrapers {
+		if scraper.ID != "tvdb-series" {
+			continue
+		}
+		if scraper.AuthRef != "tvdb-subscriber-pin" {
+			t.Errorf("tvdb-series AuthRef = %q, want tvdb-subscriber-pin", scraper.AuthRef)
+		}
+		login := scraper.Login
+		if login == nil {
+			t.Fatal("tvdb-series declares no login")
+		}
+		if login.SecretField != "pin" {
+			t.Errorf("tvdb-series login SecretField = %q, want pin", login.SecretField)
+		}
+		if got := login.SecretFields["apikey"]; got != "tvdb-api-key" {
+			t.Errorf("tvdb-series login apikey AuthRef = %q, want tvdb-api-key", got)
+		}
+		return
+	}
+	t.Fatal("scraper tvdb-series not found")
+}

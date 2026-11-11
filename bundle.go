@@ -360,8 +360,10 @@ func Bundle() sdk.Bundle {
 						Source: sdk.SourceSpec{Kind: "entity-media"}},
 				}},
 		},
-		// TMDB is the primary source: operator-registered key,
-		// named by AuthRef (Console config field), never embedded. The v3
+		// TMDB is the primary source and works out of the box: official
+		// builds carry Beamfall's own key for the AuthRef, and an operator
+		// key saved in the Console replaces it. The plugin itself never
+		// embeds a key. The v3
 		// key travels as the classic api_key query parameter (the
 		// "query:api_key" auth style). Identification is the full
 		// declarative chain: SearchTemplate → results candidates (the search-element
@@ -543,14 +545,19 @@ func Bundle() sdk.Bundle {
 				Attribution: tvdbAttribution,
 				Kind:        "http-json",
 				Endpoint:    "https://api4.thetvdb.com/v4",
-				AuthRef:     "tvdb-api-key",
-				// TVDB v4 auth: POST /login {"apikey": <secret>} →
+				// TheTVDB's free project key works only with each user's own
+				// subscriber PIN, so the PIN gates the scraper: no saved PIN,
+				// no TheTVDB. The project key rides beside it — Beamfall's
+				// bundled one in official builds, or the operator's own.
+				AuthRef: "tvdb-subscriber-pin",
+				// TVDB v4 auth: POST /login {"apikey": <key>, "pin": <PIN>} →
 				// {"data": {"token": <JWT>}}, then Bearer — pure data.
 				AuthStyle: "login-bearer",
 				Login: &sdk.LoginSpec{
-					Path:        "/login",
-					SecretField: "apikey",
-					TokenPath:   "data.token",
+					Path:         "/login",
+					SecretField:  "pin",
+					SecretFields: map[string]string{"apikey": "tvdb-api-key"},
+					TokenPath:    "data.token",
 				},
 				// GET /search?query=…&type=series — {"status": "success",
 				// "data": [{objectID, tvdb_id, name, overview, year,
