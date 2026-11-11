@@ -1,6 +1,6 @@
 module github.com/beamfall/plugin-filmtv/tools
 
-go 1.27.3
+go 1.27.4
 
 require (
 	golang.org/x/mod v0.38.0 // indirect
