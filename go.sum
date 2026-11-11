@@ -1,5 +1,5 @@
-github.com/beamfall/plugin-sdk v0.3.3 h1:Y7eJNn+OV6KQ8xbdfPz6S7RUTD/vWfyugwferc/zaQI=
-github.com/beamfall/plugin-sdk v0.3.3/go.mod h1:9Rf4igNoBecxjLj558B2VanL4lgvfAMBiw5WP9TmnI4=
+github.com/beamfall/plugin-sdk v0.3.4 h1:7vR7DeZZSAs4hYXOeeTEvFBcO4pCGqNVU+R3FTJtXqs=
+github.com/beamfall/plugin-sdk v0.3.4/go.mod h1:CFm3zZHYmW1KlV82+yNAJnnMLopqh1P9S0B61OalQXQ=
 github.com/dustin/go-humanize v1.0.1 h1:GzkhY7T5VNhEkwH0PVJgjz+fX1rhBrR7pRT3mDkpeCY=
 github.com/dustin/go-humanize v1.0.1/go.mod h1:Mu1zIs6XwVuF/gI1OepvI0qD18qycQx+mFykh5fBlto=
 github.com/google/pprof v0.0.0-20250317173921-a4b03ec1a45e h1:ijClszYn+mADRFY17kjQEVQ1XRhq2/JR1M3sGqeJoxs=
