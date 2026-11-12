@@ -26,13 +26,25 @@ type Parser struct{}
 func New() *Parser { return &Parser{} }
 
 var (
-	// SxxEyy with optional -Eyy / Eyy range tail (multi-episode files).
-	reSeasonEpisode = regexp.MustCompile(`s(\d{1,2})e(\d{1,3})(?:[-]?e(\d{1,3}))?`)
+	// SxxEyy, also written "S01.E01" or "S01 E01". The multi-episode tail
+	// (E02, -E02, -S01E02, ...) is read by episodeChain, not this pattern.
+	reSeasonEpisode = regexp.MustCompile(`s(\d{1,2})[ ._]?e(\d{1,3})`)
+	// One further episode token of a multi-episode file, anchored at the end of
+	// the previous one: an optional separator, an optional repeated season, Eyy.
+	reEpisodeChainLink = regexp.MustCompile(`^[-+._ ]?(?:s\d{1,2})?e(\d{1,3})`)
 	// "season X episode Y" long form.
-	reSeasonEpisodeWords = regexp.MustCompile(`season[ ._]*(\d{1,2})[ ._]*episode[ ._]*(\d{1,3})`)
-	// XxYY shorthand (e.g. 3x07); guarded so a resolution like 1920x1080 never
-	// matches (those numbers are far larger than a season/episode).
-	reSeasonX = regexp.MustCompile(`\b(\d{1,2})x(\d{1,3})\b`)
+	reSeasonEpisodeWords = regexp.MustCompile(`season[ ._]*(\d{1,2})[ ._,-]*episode[ ._]*(\d{1,3})`)
+	// XxYY shorthand (e.g. 3x07), optionally a "1x01-1x02" range; guarded so a
+	// resolution like 1920x1080 never matches (those numbers are far larger
+	// than a season/episode).
+	reSeasonX = regexp.MustCompile(`\b(\d{1,2})x(\d{1,3})(?:-\d{1,2}x(\d{1,3}))?\b`)
+	// A folder that holds one season of a series: the series name is then the
+	// folder above it.
+	reSeasonFolder = regexp.MustCompile(`^(?:(?:season|series)[ ._-]*\d{1,4}|s\d{1,2}|specials)$`)
+	// Release-group brackets in front of a series name ("[Group] Show - S01E01").
+	reLeadingGroups = regexp.MustCompile(`^(?:\s*\[[^\]]*\])+`)
+	// A video resolution token: 480p, 1080i, 2160p.
+	reResolution = regexp.MustCompile(`^\d{3,4}[pi]$`)
 	// A 4-digit year, optionally parenthesized; range-guarded to 1900–2099 in
 	// code (the regexp only narrows the century).
 	reYear         = regexp.MustCompile(`\(?\b(19\d{2}|20\d{2})\b\)?`)
@@ -49,16 +61,37 @@ type providerIDTag struct {
 	pattern  *regexp.Regexp
 }
 
-// releaseNoise is the lower-cased set of release-name tokens that mark the end
-// of a real title. The cut is conservative: only well-known noise words.
+// EpisodeTitleField is the plugin-declared Media field that carries an
+// episode's own name ("Earthfall"), parsed from the text after the episode
+// token. ParsedMedia.Title stays the series name: it is the provider search
+// query and the scorer's input.
+const EpisodeTitleField = "episode-title"
+
+// releaseNoise is the lower-cased set of release-name tokens that always mark
+// the end of a real title: sources, codecs and audio formats that are not
+// ordinary words. Resolutions are matched by reResolution. A hyphenated or
+// dotted tag is listed joined ("web-dl" and "h.264" tokenize as two tokens and
+// are looked up as "webdl" and "h264").
 var releaseNoise = map[string]bool{
-	"1080p": true, "720p": true, "480p": true, "2160p": true, "4k": true,
-	"bluray": true, "blu-ray": true, "brrip": true, "bdrip": true,
-	"webrip": true, "web-dl": true, "webdl": true, "hdrip": true,
-	"dvdrip": true, "hdtv": true, "x264": true, "x265": true,
-	"h264": true, "h265": true, "hevc": true, "xvid": true, "divx": true,
-	"aac": true, "ac3": true, "dts": true, "remux": true, "proper": true,
-	"repack": true, "extended": true, "unrated": true, "internal": true,
+	"4k": true, "uhd": true,
+	"bluray": true, "brrip": true, "bdrip": true, "bdremux": true,
+	"webrip": true, "webdl": true, "hdrip": true, "dvdrip": true,
+	"hdtv": true, "pdtv": true, "sdtv": true, "remux": true,
+	"x264": true, "x265": true, "h264": true, "h265": true, "hevc": true,
+	"xvid": true, "divx": true, "av1": true, "10bit": true,
+	"aac": true, "aac2": true, "ac3": true, "eac3": true, "dts": true,
+	"dd5": true, "ddp5": true, "truehd": true, "hdr10": true,
+}
+
+// releaseWords are release tags that are also ordinary words, so one can sit
+// inside a real title ("Internal Affairs", "Extended Family", "Charlotte's
+// Web"). Such a word ends the title only when a release tag follows it; the
+// ones mapped to true also end it as the last word of the name
+// ("Cool.Movie.PROPER").
+var releaseWords = map[string]bool{
+	"proper": true, "repack": true, "rerip": true, "extended": true,
+	"unrated": true, "internal": true, "uncut": true, "remastered": true,
+	"web": false, "multi": false, "dubbed": false, "subbed": false,
 }
 
 // Parse derives a best-guess ParsedMedia from a path and its local NFO evidence.
@@ -67,6 +100,35 @@ var releaseNoise = map[string]bool{
 func (p *Parser) Parse(path string, probe sdk.ParseProbe) (sdk.ParsedMedia, bool) {
 	_ = probe // probe rides the seam for future parsers.
 
+	parsed, _, ok := parseName(path)
+	if !ok {
+		return sdk.ParsedMedia{}, false
+	}
+	parsed.ProviderIDs, parsed.HintSource = providerIDHints(path)
+	return parsed, true
+}
+
+// ParseWithContext implements sdk.ContextFilenameParser. Film and TV provider
+// hints are file-local, so bounded directory-count context does not alter them.
+func (p *Parser) ParseWithContext(path string, probe sdk.ParseProbe, _ sdk.ParseContext) (sdk.ParsedMedia, bool) {
+	return p.Parse(path, probe)
+}
+
+// ParseMediaFields implements sdk.MediaFieldParser: an episode file whose name
+// carries the episode's own title yields it as the EpisodeTitleField Media
+// field. It reads the path only, so it agrees with Parse on what is an episode.
+func (p *Parser) ParseMediaFields(path string, _ sdk.ParseProbe) []sdk.ParsedTextField {
+	parsed, episodeTitle, ok := parseName(path)
+	if !ok || parsed.Class != "episode" || episodeTitle == "" {
+		return nil
+	}
+	return []sdk.ParsedTextField{{Name: EpisodeTitleField, Text: episodeTitle}}
+}
+
+// parseName is the path-only parse shared by Parse and ParseMediaFields. It
+// returns the parsed fields (without provider hints) and, for an episode, the
+// episode's own title when the name carries one.
+func parseName(path string) (sdk.ParsedMedia, string, bool) {
 	base := filepath.Base(path)
 	name := strings.TrimSuffix(base, filepath.Ext(base))
 	name = removeProviderIDTags(name)
@@ -77,27 +139,14 @@ func (p *Parser) Parse(path string, probe sdk.ParseProbe) (sdk.ParsedMedia, bool
 	// 1. Episode detection. cut marks where the title ends on the original-cased
 	// string (the earliest of any episode/year/noise token start).
 	cut := len(name)
+	episode, isEpisode := findEpisode(lower)
 	episodeCut := -1
-	if m := reSeasonEpisode.FindStringSubmatchIndex(lower); m != nil {
-		parsed.Sequence = numericText(lower[m[2]:m[3]])
-		parsed.Index = atoi(lower[m[4]:m[5]])
-		if m[6] >= 0 {
-			parsed.IndexEnd = atoi(lower[m[6]:m[7]])
-		}
+	if isEpisode {
 		parsed.Class = "episode"
-		episodeCut = m[0]
-	} else if m := reSeasonEpisodeWords.FindStringSubmatchIndex(lower); m != nil {
-		parsed.Sequence = numericText(lower[m[2]:m[3]])
-		parsed.Index = atoi(lower[m[4]:m[5]])
-		parsed.Class = "episode"
-		episodeCut = m[0]
-	} else if m := reSeasonX.FindStringSubmatchIndex(lower); m != nil {
-		parsed.Sequence = numericText(lower[m[2]:m[3]])
-		parsed.Index = atoi(lower[m[4]:m[5]])
-		parsed.Class = "episode"
-		episodeCut = m[0]
-	}
-	if episodeCut >= 0 && episodeCut < cut {
+		parsed.Sequence = episode.sequence
+		parsed.Index = episode.index
+		parsed.IndexEnd = episode.indexEnd
+		episodeCut = episode.start
 		cut = episodeCut
 	}
 
@@ -117,13 +166,26 @@ func (p *Parser) Parse(path string, probe sdk.ParseProbe) (sdk.ParsedMedia, bool
 	// Family"), so once a year/episode token has already bounded the title, a
 	// noise token elsewhere in the string must not truncate it further.
 	if cut == len(name) {
-		if noiseStart := firstNoiseToken(lower); noiseStart >= 0 && noiseStart < cut {
+		if noiseStart := firstNoiseToken(lower); noiseStart >= 0 {
 			cut = noiseStart
 		}
 	}
 
 	// 4. Title cleanup: take everything before the cut, normalise separators.
-	parsed.Title = cleanTitle(name[:cut])
+	// For an episode this is the series name: a release-group bracket in front
+	// of it is dropped, and a file that carries no series name of its own
+	// ("S01E01 - Earthfall") takes the one of the folder above its season folder.
+	rawTitle := name[:cut]
+	if isEpisode {
+		rawTitle = rawTitle[len(reLeadingGroups.FindString(rawTitle)):]
+	}
+	parsed.Title = cleanTitle(rawTitle)
+	if isEpisode && parsed.Title == "" {
+		var folderYear int
+		if parsed.Title, folderYear = seriesFromSeasonFolder(path); folderYear > 0 {
+			parsed.Year = folderYear
+		}
+	}
 
 	// 5. Class fallback: episode signals already set "episode"; otherwise any
 	// useful parse (a year or a clean title) is a movie.
@@ -133,16 +195,111 @@ func (p *Parser) Parse(path string, probe sdk.ParseProbe) (sdk.ParsedMedia, bool
 
 	// Return ok only when a non-empty Title survived cleanup.
 	if parsed.Title == "" {
-		return sdk.ParsedMedia{}, false
+		return sdk.ParsedMedia{}, "", false
 	}
-	parsed.ProviderIDs, parsed.HintSource = providerIDHints(path)
-	return parsed, true
+	if !isEpisode {
+		return parsed, "", true
+	}
+	return parsed, episodeTitle(name[episode.end:], lower[episode.end:]), true
 }
 
-// ParseWithContext implements sdk.ContextFilenameParser. Film and TV provider
-// hints are file-local, so bounded directory-count context does not alter them.
-func (p *Parser) ParseWithContext(path string, probe sdk.ParseProbe, _ sdk.ParseContext) (sdk.ParsedMedia, bool) {
-	return p.Parse(path, probe)
+// episodeToken is one recognised season/episode marker: its byte span in the
+// name and the ordinals it carries.
+type episodeToken struct {
+	start, end      int
+	sequence        string
+	index, indexEnd int
+}
+
+// findEpisode locates the season/episode marker in the ASCII-folded name. The
+// forms are tried in order of how unambiguous they are: SxxEyy, "season X
+// episode Y", then XxYY.
+func findEpisode(lower string) (episodeToken, bool) {
+	if m := reSeasonEpisode.FindStringSubmatchIndex(lower); m != nil {
+		token := episodeToken{start: m[0], end: m[1], sequence: numericText(lower[m[2]:m[3]]), index: atoi(lower[m[4]:m[5]])}
+		last, end := episodeChain(lower, token.end)
+		token.end = end
+		token.indexEnd = rangeEnd(token.index, last)
+		return token, true
+	}
+	if m := reSeasonEpisodeWords.FindStringSubmatchIndex(lower); m != nil {
+		return episodeToken{start: m[0], end: m[1], sequence: numericText(lower[m[2]:m[3]]), index: atoi(lower[m[4]:m[5]])}, true
+	}
+	if m := reSeasonX.FindStringSubmatchIndex(lower); m != nil {
+		token := episodeToken{start: m[0], end: m[1], sequence: numericText(lower[m[2]:m[3]]), index: atoi(lower[m[4]:m[5]])}
+		if m[6] >= 0 {
+			token.indexEnd = rangeEnd(token.index, atoi(lower[m[6]:m[7]]))
+		}
+		return token, true
+	}
+	return episodeToken{}, false
+}
+
+// episodeChain reads the further episode tokens of a multi-episode file
+// ("S01E01E02", "S01E01-E02-E03", "S01E01-S01E02") starting at pos, the end of
+// the first one. It returns the last episode number of the chain (0 when there
+// is none) and the offset the chain ends at. A link must end on a word
+// boundary, so a title word that merely starts like one ("E20th") is not eaten.
+func episodeChain(lower string, pos int) (int, int) {
+	last, end := 0, pos
+	for {
+		m := reEpisodeChainLink.FindStringSubmatchIndex(lower[pos:])
+		if m == nil {
+			return last, end
+		}
+		pos += m[1]
+		if pos == len(lower) || !isASCIIAlnum(lower[pos]) {
+			last, end = atoi(lower[pos-(m[3]-m[2]):pos]), pos
+		}
+	}
+}
+
+// rangeEnd is the IndexEnd of an episode range first..last: last when it is a
+// real range end, 0 (no range) otherwise.
+func rangeEnd(first, last int) int {
+	if last > first {
+		return last
+	}
+	return 0
+}
+
+// episodeTitle extracts the episode's own title from the text after the
+// episode token: everything up to the first tag bracket or release-noise
+// token, cleaned like a title. tail and lowerTail are the same span of the
+// name and of its ASCII-folded copy.
+func episodeTitle(tail, lowerTail string) string {
+	end := len(tail)
+	if bracket := strings.IndexAny(tail, "[{"); bracket >= 0 {
+		end = bracket
+	}
+	if noiseStart := firstNoiseToken(lowerTail[:end]); noiseStart >= 0 {
+		end = noiseStart
+	}
+	return cleanTitle(tail[:end])
+}
+
+// seriesFromSeasonFolder returns the series name and year carried by the
+// folder above path's season folder ("Pioneer One (2010)/Season 01/…"), or
+// ("", 0) when path does not sit in a season folder. Only that layout is
+// trusted: the parent of a loose file is as likely a library root as a series.
+func seriesFromSeasonFolder(path string) (string, int) {
+	seasonDir := filepath.Dir(path)
+	if !reSeasonFolder.MatchString(asciiLower(filepath.Base(seasonDir))) {
+		return "", 0
+	}
+	series := removeProviderIDTags(filepath.Base(filepath.Dir(seasonDir)))
+	if series == "." || strings.ContainsRune(series, filepath.Separator) {
+		return "", 0
+	}
+	year, yearStart := findYear(series, asciiLower(series), -1)
+	if yearStart >= 0 {
+		series = series[:yearStart]
+	}
+	title := cleanTitle(series)
+	if title == "" {
+		return "", 0
+	}
+	return title, year
 }
 
 func providerIDHints(path string) (map[string]string, sdk.ParseHintSource) {
@@ -253,37 +410,78 @@ func findYear(name, lower string, episodeCut int) (int, int) {
 	return bestYear, bestStart
 }
 
-// firstNoiseToken returns the start index in lower of the first release-noise
-// token, or -1. Tokens are split on the same separators cleanTitle collapses.
+// firstNoiseToken returns the start index in lower of the first token that
+// ends a title as release noise, or -1.
 func firstNoiseToken(lower string) int {
-	idx := 0
-	for _, token := range splitTokens(lower) {
-		start := strings.Index(lower[idx:], token)
-		if start < 0 {
-			continue
-		}
-		start += idx
-		idx = start + len(token)
-		if releaseNoise[token] {
-			return start
+	tokens := tokenSpans(lower)
+	words := make([]string, len(tokens))
+	for i, span := range tokens {
+		words[i] = lower[span[0]:span[1]]
+	}
+	for i := range words {
+		if endsTitle(words[i:]) {
+			return tokens[i][0]
 		}
 	}
 	return -1
 }
 
-// splitTokens splits a lower-cased name into word tokens on the separators
-// cleanTitle normalises (`.`, `_`, space, `-`).
-func splitTokens(lower string) []string {
-	return strings.FieldsFunc(lower, func(r rune) bool {
-		return r == '.' || r == '_' || r == ' ' || r == '-'
-	})
+// endsTitle reports whether words[0] is release noise, given the words after
+// it. A resolution or a releaseNoise tag always is, alone or joined with the
+// next word ("web-dl", "h.264"). A releaseWords word is noise only in front of
+// more release noise or, for the ones that allow it, as the last word; said
+// twice in a row ("The.Web.WEB-DL") the first is a title word.
+func endsTitle(words []string) bool {
+	word := words[0]
+	if reResolution.MatchString(word) || releaseNoise[word] {
+		return true
+	}
+	if len(words) > 1 && releaseNoise[word+words[1]] {
+		return true
+	}
+	endsName, isWord := releaseWords[word]
+	if !isWord {
+		return false
+	}
+	if len(words) == 1 {
+		return endsName
+	}
+	return words[1] != word && endsTitle(words[1:])
+}
+
+// tokenSpans splits a lower-cased name into word tokens, as [start, end) byte
+// spans, on the separators cleanTitle normalises (`.`, `_`, space, `-`) and on
+// brackets, so a tag in "[1080p]" or "(WEB-DL)" is seen as a token.
+func tokenSpans(lower string) [][2]int {
+	var spans [][2]int
+	start := -1
+	for i := 0; i <= len(lower); i++ {
+		if i < len(lower) && !strings.ContainsRune("._ -[](){}", rune(lower[i])) {
+			if start < 0 {
+				start = i
+			}
+			continue
+		}
+		if start >= 0 {
+			spans = append(spans, [2]int{start, i})
+			start = -1
+		}
+	}
+	return spans
 }
 
 // cleanTitle turns a raw title fragment into a display title: `.`/`_` → spaces,
-// whitespace collapsed, trailing separators trimmed.
+// whitespace collapsed, and the separators and unbalanced brackets a cut leaves
+// dangling at either end trimmed ("Pioneer One - " → "Pioneer One").
 func cleanTitle(raw string) string {
 	replaced := strings.NewReplacer(".", " ", "_", " ").Replace(raw)
-	return strings.Join(strings.Fields(replaced), " ")
+	title := strings.Join(strings.Fields(replaced), " ")
+	title = strings.TrimLeft(title, " -–—,:;)]}")
+	return strings.TrimRight(title, " -–—,:;([{")
+}
+
+func isASCIIAlnum(c byte) bool {
+	return 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z' || '0' <= c && c <= '9'
 }
 
 // asciiLower lower-cases only the ASCII letters of s, byte for byte, so every

@@ -57,6 +57,12 @@ func Bundle() sdk.Bundle {
 			// display-only — none feed the Profile policy ceiling (that stays the "certification" field + scale above).
 			{Name: "original-title", Type: "text", Searchable: true,
 				Label: sdk.LocaleString{"en": "Original Title", "fr": "Titre original"}},
+			// An episode's own name ("Earthfall"), read from the filename by
+			// the parser (parse.go ParseMediaFields). An episode's Media title
+			// stays the series name, so this field is what tells two episodes
+			// of one series apart before a provider has identified them.
+			{Name: EpisodeTitleField, Type: "text", Searchable: true,
+				Label: sdk.LocaleString{"en": "Episode Title", "fr": "Titre de l'épisode"}},
 			{Name: "tagline", Type: "text",
 				Label: sdk.LocaleString{"en": "Tagline", "fr": "Accroche"}},
 			// The per-region certification display set (distinct from

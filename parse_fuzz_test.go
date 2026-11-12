@@ -16,6 +16,10 @@ func FuzzParseFilename(f *testing.F) {
 		"Some.Show.S02E05-E07.2020.WEB-DL.mkv",
 		"Season 3 Episode 9.mp4",
 		"KK.Movie.2003.mkv",
+		"Pioneer One - S01E01 - Earthfall.mkv",
+		"Show Name - 1x01-1x02 - Pilot (Part 1) [1080p].mkv",
+		"Show (2010)/Season 01/S01E01E02-E03.Internal.WEB-DL.mkv",
+		"[Group] - S01 E01 - .PROPER.mkv",
 		"",
 	} {
 		f.Add(seed)
@@ -31,14 +35,35 @@ func FuzzParseFilename(f *testing.F) {
 		if ok != againOK || !reflect.DeepEqual(got, again) {
 			t.Fatalf("Parse(%q) is not deterministic: (%+v, %v) then (%+v, %v)", path, got, ok, again, againOK)
 		}
+		fields := parser.ParseMediaFields(path, sdk.ParseProbe{})
+		if !reflect.DeepEqual(fields, parser.ParseMediaFields(path, sdk.ParseProbe{})) {
+			t.Fatalf("ParseMediaFields(%q) is not deterministic", path)
+		}
 		if !ok {
 			if !reflect.DeepEqual(got, sdk.ParsedMedia{}) {
 				t.Fatalf("Parse(%q) returned non-zero refusal: %+v", path, got)
+			}
+			if fields != nil {
+				t.Fatalf("ParseMediaFields(%q) returned fields for a refused parse: %+v", path, fields)
 			}
 			return
 		}
 		if got.Title == "" || got.Title != strings.TrimSpace(got.Title) {
 			t.Fatalf("Parse(%q) returned invalid title %q", path, got.Title)
+		}
+		if got.Title != cleanTitle(got.Title) {
+			t.Fatalf("Parse(%q) returned a title with dangling separators: %q", path, got.Title)
+		}
+		if got.IndexEnd != 0 && got.IndexEnd <= got.Index {
+			t.Fatalf("Parse(%q) returned an index end that is not after the index: %+v", path, got)
+		}
+		for _, field := range fields {
+			if got.Class != "episode" || len(fields) != 1 || field.Name != EpisodeTitleField {
+				t.Fatalf("ParseMediaFields(%q) = %+v for class %q", path, fields, got.Class)
+			}
+			if field.Text == "" || field.Text != cleanTitle(field.Text) {
+				t.Fatalf("ParseMediaFields(%q) returned an unclean episode title %q", path, field.Text)
+			}
 		}
 		if got.Class != "movie" && got.Class != "episode" {
 			t.Fatalf("Parse(%q) returned unknown class %q", path, got.Class)
