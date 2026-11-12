@@ -501,7 +501,7 @@ EXPECTED_JOB_STEPS = {
         "bounded parser fuzz",
     ),
 }
-EXPECTED_WORKFLOW_FINGERPRINT = "cce2d90d1dca68677501e743ace346b96f67c1f24855832c5a129f266369fa04"
+EXPECTED_WORKFLOW_FINGERPRINT = "d7ed5be515996965b7e032df97f2f4a20dc3adace76fade721a152e4d68539aa"
 
 
 def workflow_fingerprint(document: dict[str, object]) -> str:
@@ -675,6 +675,7 @@ def sdk_errors(errors: list[str], job_name: str, job: str) -> None:
             "repository": "beamfall/plugin-sdk",
             "ref": "${{ inputs.sdk_ref }}",
             "path": "beamfall-plugin-sdk",
+            "persist-credentials": "false",
         },
     )
     require_step(
@@ -734,7 +735,7 @@ def workflow_errors(workflow: str, discovered_fuzz: set[tuple[str, str]]) -> lis
             job,
             "Checkout plugin",
             uses=CHECKOUT_ACTION,
-            with_values={"path": PLUGIN_DIRECTORY},
+            with_values={"path": PLUGIN_DIRECTORY, "persist-credentials": "false"},
         )
         require_step(
             errors,
