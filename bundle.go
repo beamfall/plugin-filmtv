@@ -63,6 +63,10 @@ func Bundle() sdk.Bundle {
 			// of one series apart before a provider has identified them.
 			{Name: EpisodeTitleField, Type: "text", Searchable: true,
 				Label: sdk.LocaleString{"en": "Episode Title", "fr": "Titre de l'épisode"}},
+			// Set by Core's hydration seam once a file's local show and
+			// season containers are written (local.go).
+			{Name: HydratedField, Type: "flag",
+				Label: sdk.LocaleString{"en": "Grouped Locally", "fr": "Regroupé localement"}},
 			{Name: "tagline", Type: "text",
 				Label: sdk.LocaleString{"en": "Tagline", "fr": "Accroche"}},
 			// The per-region certification display set (distinct from
@@ -153,6 +157,14 @@ func Bundle() sdk.Bundle {
 						Label: sdk.LocaleString{"en": "Air Date", "fr": "Date de diffusion"}},
 					{Name: "specials", Type: "flag",
 						Label: sdk.LocaleString{"en": "Specials", "fr": "Épisodes spéciaux"}},
+				},
+				// Local grouping (local.go): Core writes these from the
+				// filename when no provider has matched the file, so local
+				// episodes still land in a season of a show. One season per
+				// episode; the season title is unique only within its show.
+				Relations: []sdk.RelationSpec{
+					{Name: SeasonEpisodeRelation, ToKind: sdk.MediaKindName, Cardinality: "one"},
+					{Name: SeasonOfRelation, ToKind: "show"},
 				},
 			},
 			{
@@ -291,6 +303,12 @@ func Bundle() sdk.Bundle {
 					ArtworkSlot: "poster",
 					Source: sdk.SourceSpec{Kind: "all-items",
 						FieldFilters: map[string]any{"class": "movie"}}},
+				// Shows, local or matched: the show Entities of this
+				// Library. A show opens on its seasons.
+				{ID: "browse-shows", Kind: "grid",
+					Title:       sdk.LocaleString{"en": "Shows", "fr": "Séries"},
+					ArtworkSlot: "poster",
+					Source:      sdk.SourceSpec{Kind: "entity-items", EntityKind: "show"}},
 				{ID: "browse-episodes", Kind: "grid",
 					Title:       sdk.LocaleString{"en": "Episodes", "fr": "Épisodes"},
 					ArtworkSlot: "poster",
