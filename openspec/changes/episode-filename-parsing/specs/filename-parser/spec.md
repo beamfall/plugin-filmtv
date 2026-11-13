@@ -76,3 +76,8 @@ index end.
 
 - **WHEN** the file is `Show.Name.1x01-1x02-1x03.Pilot.mkv`
 - **THEN** the index is 1, the index end is 3 and `episode-title` is `Pilot`
+
+#### Scenario: Chain that crosses seasons
+
+- **WHEN** the file is `Show.S01E01-S02E03.Pilot.mkv`
+- **THEN** the sequence is `1`, the index is 1, there is no index end and `episode-title` is `Pilot`

@@ -207,6 +207,22 @@ func parseCorpus() []parseCase {
 			resolvable: true,
 		},
 		{
+			name: "cross-season-chain-is-not-a-range",
+			path: "Show.S01E01-S02E03.Pilot.mkv",
+			// A repeated season that differs makes the chain span seasons:
+			// season 2's episode is not part of a season 1 range.
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Show", Class: "episode", Sequence: "1", Index: 1},
+			resolvable: true,
+		},
+		{
+			name:       "cross-season-xXYY-chain-is-not-a-range",
+			path:       "Show.1x01-2x02-2x03.Pilot.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Show", Class: "episode", Sequence: "1", Index: 1},
+			resolvable: true,
+		},
+		{
 			name:       "dash-prefixed-xXYY-range",
 			path:       "Pioneer One - 1x01-1x02 - Earthfall.mkv",
 			wantOK:     true,
@@ -346,10 +362,28 @@ func parseCorpus() []parseCase {
 			resolvable: true,
 		},
 		{
-			name:       "release-word-before-resolution-and-source-is-a-tag",
-			path:       "Cool.Movie.WEB.1080p.x264-GRP.mkv",
+			name: "release-word-before-resolution-and-codec-stays-in-title",
+			path: "Charlotte's.Web.1080p.x264.mkv",
+			// The look-ahead stops at the resolution: the codec after it does
+			// not make "Web" a tag.
 			wantOK:     true,
-			want:       sdk.ParsedMedia{Title: "Cool Movie", Class: "movie"},
+			want:       sdk.ParsedMedia{Title: "Charlotte's Web", Class: "movie"},
+			resolvable: true,
+		},
+		{
+			name: "two-hyphenated-words-are-the-title",
+			path: "Uncut-Gems.mkv",
+			// "Uncut" is a release word, but the hyphenated second word is
+			// not a release group: dropping it would empty the title.
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Uncut-Gems", Class: "movie"},
+			resolvable: true,
+		},
+		{
+			name:       "hyphenated-resolution-is-still-a-tag",
+			path:       "Movie-1080p.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Movie", Class: "movie"},
 			resolvable: true,
 		},
 		{
@@ -559,6 +593,9 @@ func TestParseEpisodeTitle(t *testing.T) {
 		{"release-word-inside-title", "Show.S01E02.Internal.Affairs.720p.HDTV.x264-GRP.mkv", "Internal Affairs"},
 		{"release-word-then-same-tag", "Show.S01E02.The.Web.WEB-DL.DDP5.1.H.264-GRP.mkv", "The Web"},
 		{"release-word-then-resolution", "Show.S01E01.The.Web.1080p.mkv", "The Web"},
+		{"release-word-then-resolution-and-codec", "Show.S01E01.The.Web.1080p.x264.mkv", "The Web"},
+		{"after-cross-season-chain", "Show.S01E01-S02E03.Pilot.mkv", "Pilot"},
+		{"after-cross-season-xXYY-chain", "Show.1x01-2x02-2x03.Pilot.mkv", "Pilot"},
 		{"strong-release-word-before-group", "Show.S01E01.Pilot.PROPER-GRP.mkv", "Pilot"},
 		{"title-word-that-starts-like-an-episode-token", "Show.S01E01.E20th.Century.mkv", "E20th Century"},
 		// No episode title in the name: no field.

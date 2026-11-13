@@ -31,15 +31,17 @@ var (
 	reSeasonEpisode = regexp.MustCompile(`s(\d{1,2})[ ._]?e(\d{1,3})`)
 	// One further episode token of a multi-episode file, anchored at the end of
 	// the previous one: an optional separator, an optional repeated season, Eyy.
-	reEpisodeChainLink = regexp.MustCompile(`^[-+._ ]?(?:s\d{1,2})?e(\d{1,3})`)
+	// Groups: the repeated season (empty when absent), the episode.
+	reEpisodeChainLink = regexp.MustCompile(`^[-+._ ]?(?:s(\d{1,2}))?e(\d{1,3})`)
 	// "season X episode Y" long form.
 	reSeasonEpisodeWords = regexp.MustCompile(`season[ ._]*(\d{1,2})[ ._,-]*episode[ ._]*(\d{1,3})`)
 	// XxYY shorthand (e.g. 3x07); guarded so a resolution like 1920x1080 never
 	// matches (those numbers are far larger than a season/episode). A range
 	// ("1x01-1x02-1x03") is read by episodeChain with reSeasonXChainLink.
 	reSeasonX = regexp.MustCompile(`\b(\d{1,2})x(\d{1,3})\b`)
-	// One further XxYY token of a multi-episode shorthand range.
-	reSeasonXChainLink = regexp.MustCompile(`^-\d{1,2}x(\d{1,3})`)
+	// One further XxYY token of a multi-episode shorthand range. Groups: the
+	// season, the episode.
+	reSeasonXChainLink = regexp.MustCompile(`^-(\d{1,2})x(\d{1,3})`)
 	// A folder that holds one season of a series: the series name is then the
 	// folder above it.
 	reSeasonFolder = regexp.MustCompile(`^(?:(?:season|series)[ ._-]*\d{1,4}|s\d{1,2}|specials)$`)
@@ -219,7 +221,7 @@ type episodeToken struct {
 func findEpisode(lower string) (episodeToken, bool) {
 	if m := reSeasonEpisode.FindStringSubmatchIndex(lower); m != nil {
 		token := episodeToken{start: m[0], end: m[1], sequence: numericText(lower[m[2]:m[3]]), index: atoi(lower[m[4]:m[5]])}
-		last, end := episodeChain(lower, token.end, reEpisodeChainLink)
+		last, end := episodeChain(lower, token.end, reEpisodeChainLink, token.sequence)
 		token.end = end
 		token.indexEnd = rangeEnd(token.index, last)
 		return token, true
@@ -229,7 +231,7 @@ func findEpisode(lower string) (episodeToken, bool) {
 	}
 	if m := reSeasonX.FindStringSubmatchIndex(lower); m != nil {
 		token := episodeToken{start: m[0], end: m[1], sequence: numericText(lower[m[2]:m[3]]), index: atoi(lower[m[4]:m[5]])}
-		last, end := episodeChain(lower, token.end, reSeasonXChainLink)
+		last, end := episodeChain(lower, token.end, reSeasonXChainLink, token.sequence)
 		token.end = end
 		token.indexEnd = rangeEnd(token.index, last)
 		return token, true
@@ -240,19 +242,30 @@ func findEpisode(lower string) (episodeToken, bool) {
 // episodeChain reads the further episode tokens of a multi-episode file
 // ("S01E01E02", "S01E01-E02-E03", "S01E01-S01E02", or with reSeasonXChainLink
 // "1x01-1x02-1x03") starting at pos, the end of the first one; link matches one
-// token and captures its episode number. It returns the last episode number of the chain (0 when there
-// is none) and the offset the chain ends at. A link must end on a word
-// boundary, so a title word that merely starts like one ("E20th") is not eaten.
-func episodeChain(lower string, pos int, link *regexp.Regexp) (int, int) {
-	last, end := 0, pos
+// token and captures its season (empty when not repeated) and episode number.
+// It returns the last episode number of the chain (0 when there is none) and
+// the offset the chain ends at. A chain with a token naming a season other
+// than sequence ("S01E01-S02E03") spans seasons, so it reports no range, but
+// its tokens still end at the returned offset and stay out of the episode
+// title. A link must end on a word boundary, so a title word that merely
+// starts like one ("E20th") is not eaten.
+func episodeChain(lower string, pos int, link *regexp.Regexp, sequence string) (int, int) {
+	last, end, crossesSeason := 0, pos, false
 	for {
 		m := link.FindStringSubmatchIndex(lower[pos:])
 		if m == nil {
+			if crossesSeason {
+				return 0, end
+			}
 			return last, end
 		}
+		start := pos
 		pos += m[1]
 		if pos == len(lower) || !isASCIIAlnum(lower[pos]) {
-			last, end = atoi(lower[pos-(m[3]-m[2]):pos]), pos
+			if m[2] >= 0 && numericText(lower[start+m[2]:start+m[3]]) != sequence {
+				crossesSeason = true
+			}
+			last, end = atoi(lower[pos-(m[5]-m[4]):pos]), pos
 		}
 	}
 }
@@ -414,12 +427,13 @@ func findYear(name, lower string, episodeCut int) (int, int) {
 }
 
 // firstNoiseToken returns the start index in lower of the first token that
-// ends a title as release noise, or -1. A release group hyphenated onto the
-// last word ("PROPER-GRP") is not a title word, so it is left out of the
-// words endsTitle looks ahead over.
+// ends a title as release noise, or -1. A release group hyphenated onto a
+// last release word ("Movie.PROPER-GRP") is not a title word, so it is left
+// out of the words endsTitle looks ahead over. A name of two hyphenated words
+// ("Uncut-Gems") keeps both: the first cannot end a title it would empty.
 func firstNoiseToken(lower string) int {
 	tokens := tokenSpans(lower)
-	if n := len(tokens); n > 1 && tokens[n-1][0] > 0 && lower[tokens[n-1][0]-1] == '-' && tokens[n-2][1] == tokens[n-1][0]-1 {
+	if n := len(tokens); n > 2 && trailingGroup(lower, tokens[n-2], tokens[n-1]) {
 		tokens = tokens[:n-1]
 	}
 	words := make([]string, len(tokens))
@@ -432,6 +446,21 @@ func firstNoiseToken(lower string) int {
 		}
 	}
 	return -1
+}
+
+// trailingGroup reports whether last is a release group hyphenated directly
+// onto prev, a release word ("PROPER-GRP"); a group that is itself a tag
+// ("Movie-1080p") stays a word endsTitle can see.
+func trailingGroup(lower string, prev, last [2]int) bool {
+	if prev[1] != last[0]-1 || lower[prev[1]] != '-' {
+		return false
+	}
+	group := lower[last[0]:last[1]]
+	if reResolution.MatchString(group) || releaseNoise[group] {
+		return false
+	}
+	_, isWord := releaseWords[lower[prev[0]:prev[1]]]
+	return isWord
 }
 
 // endsTitle reports whether words[0] is release noise, given the words after
@@ -466,13 +495,15 @@ func endsTitle(words []string) bool {
 }
 
 // tagFollows reports whether words open with a releaseNoise tag, possibly
-// after resolutions and other release words.
+// after other release words. A resolution stops the look-ahead: a title runs
+// straight into one, and the codec after it ("Charlotte's.Web.1080p.x264")
+// says nothing about the word before.
 func tagFollows(words []string) bool {
 	for i, word := range words {
 		if releaseNoise[word] || i+1 < len(words) && releaseNoise[word+words[i+1]] {
 			return true
 		}
-		if _, isWord := releaseWords[word]; !isWord && !reResolution.MatchString(word) {
+		if _, isWord := releaseWords[word]; !isWord {
 			return false
 		}
 	}
