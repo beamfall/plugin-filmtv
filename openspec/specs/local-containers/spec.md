@@ -1,7 +1,9 @@
 # local-containers Specification
 
 ## Purpose
-TBD - created by archiving change local-episode-containers. Update Purpose after archive.
+How the Film & TV plugin groups local episode files that have no provider match into show and
+season containers: the bundle relations, the hydrated marker, the path-only grouping Core's
+hydration seam reads and the episode title Core displays.
 
 ## Requirements
 
