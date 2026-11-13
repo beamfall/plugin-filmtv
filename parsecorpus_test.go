@@ -111,6 +111,22 @@ func parseCorpus() []parseCase {
 			want:       sdk.ParsedMedia{Title: "Cool Movie", Class: "movie"},
 			resolvable: true,
 		},
+		{
+			name: "noise-cut-before-release-group",
+			path: "Cool.Movie.PROPER-GRP.mkv",
+			// A release group hyphenated onto the last tag is not a title
+			// word: "PROPER" still ends the title.
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Cool Movie", Class: "movie"},
+			resolvable: true,
+		},
+		{
+			name:       "strong-release-word-before-resolution",
+			path:       "Cool.Movie.PROPER.1080p.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Cool Movie", Class: "movie"},
+			resolvable: true,
+		},
 
 		// --- Movie nested in a show/library folder: only the basename is read. ---
 		{
@@ -133,10 +149,9 @@ func parseCorpus() []parseCase {
 			name:   "contiguous-multi-episode-range",
 			path:   "Show.Name.S01E01-E02-E03.mkv",
 			wantOK: true,
-			// The parser captures the first and the last E-token of the range
-			// (Index=1, IndexEnd=2 from the E01..E02 span); the third token is
-			// outside the two-group regex. Pinned as-is (regression contract).
-			want:       sdk.ParsedMedia{Title: "Show Name", Class: "episode", Sequence: "1", Index: 1, IndexEnd: 2},
+			// The range is the first and the LAST E-token of the chain, however
+			// many tokens it holds: E01-E02-E03 is episodes 1 to 3.
+			want:       sdk.ParsedMedia{Title: "Show Name", Class: "episode", Sequence: "1", Index: 1, IndexEnd: 3},
 			resolvable: true,
 		},
 		{
@@ -164,6 +179,228 @@ func parseCorpus() []parseCase {
 			resolvable: true,
 		},
 		{
+			name:       "adjacent-two-episode-file",
+			path:       "Pioneer One - S01E01E02 - Earthfall.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Pioneer One", Class: "episode", Sequence: "1", Index: 1, IndexEnd: 2},
+			resolvable: true,
+		},
+		{
+			name:       "multi-episode-repeated-season",
+			path:       "Show Name - S01E01-S01E02 - Pilot.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Show Name", Class: "episode", Sequence: "1", Index: 1, IndexEnd: 2},
+			resolvable: true,
+		},
+		{
+			name:       "multi-episode-xXYY-range",
+			path:       "Show Name - 1x01-1x02 - Pilot.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Show Name", Class: "episode", Sequence: "1", Index: 1, IndexEnd: 2},
+			resolvable: true,
+		},
+		{
+			name:       "multi-episode-xXYY-three-token-range",
+			path:       "Show.Name.1x01-1x02-1x03.Pilot.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Show Name", Class: "episode", Sequence: "1", Index: 1, IndexEnd: 3},
+			resolvable: true,
+		},
+		{
+			name: "cross-season-chain-is-not-a-range",
+			path: "Show.S01E01-S02E03.Pilot.mkv",
+			// A repeated season that differs makes the chain span seasons:
+			// season 2's episode is not part of a season 1 range.
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Show", Class: "episode", Sequence: "1", Index: 1},
+			resolvable: true,
+		},
+		{
+			name:       "cross-season-token-followed-by-episode-is-not-a-range",
+			path:       "Show.S01E01-S02E02E03.Pilot.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Show", Class: "episode", Sequence: "1", Index: 1},
+			resolvable: true,
+		},
+		{
+			name:       "cross-season-xXYY-chain-is-not-a-range",
+			path:       "Show.1x01-2x02-2x03.Pilot.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Show", Class: "episode", Sequence: "1", Index: 1},
+			resolvable: true,
+		},
+		{
+			name:       "dash-prefixed-xXYY-range",
+			path:       "Pioneer One - 1x01-1x02 - Earthfall.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Pioneer One", Class: "episode", Sequence: "1", Index: 1, IndexEnd: 2},
+			resolvable: true,
+		},
+		{
+			name:       "dash-prefixed-multi-episode-chain",
+			path:       "Pioneer One - S01E01-E02-E03 - Earthfall.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Pioneer One", Class: "episode", Sequence: "1", Index: 1, IndexEnd: 3},
+			resolvable: true,
+		},
+
+		// --- Separators around the episode token never leak into the series
+		// title: it is the card title, the provider search query and the
+		// scorer's input (the "Pioneer One -" defect). ---
+		{
+			name:       "dash-separated-episode-title",
+			path:       "Pioneer One - S01E01 - Earthfall.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Pioneer One", Class: "episode", Sequence: "1", Index: 1},
+			resolvable: true,
+		},
+		{
+			name:       "dotted-scene-episode-title-and-group",
+			path:       "Pioneer.One.S01E01.Earthfall.1080p.x264-GRP.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Pioneer One", Class: "episode", Sequence: "1", Index: 1},
+			resolvable: true,
+		},
+		{
+			name:       "dash-separated-xXYY",
+			path:       "Pioneer One - 1x01 - Earthfall.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Pioneer One", Class: "episode", Sequence: "1", Index: 1},
+			resolvable: true,
+		},
+		{
+			name:       "bare-series-and-token",
+			path:       "Pioneer One S01E01.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Pioneer One", Class: "episode", Sequence: "1", Index: 1},
+			resolvable: true,
+		},
+		{
+			name:       "underscore-and-dash-separators",
+			path:       "Show_Name_-_S01E01_-_Episode_Title.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Show Name", Class: "episode", Sequence: "1", Index: 1},
+			resolvable: true,
+		},
+		{
+			name:       "spaced-season-episode-token",
+			path:       "Show.S01.E02.Title.Here.2160p.WEB.h265.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Show", Class: "episode", Sequence: "1", Index: 2},
+			resolvable: true,
+		},
+		{
+			name:       "release-group-bracket-before-series",
+			path:       "[Group] Pioneer One - S01E03 - Alone in the Night [1080p].mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Pioneer One", Class: "episode", Sequence: "1", Index: 3},
+			resolvable: true,
+		},
+		{
+			name:       "year-before-episode-token",
+			path:       "Doctor.Who.2005.S01E01.Rose.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Doctor Who", Class: "episode", Year: 2005, Sequence: "1", Index: 1},
+			resolvable: true,
+		},
+		{
+			name:       "movie-dash-before-year",
+			path:       "Movie Title - 1999.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Movie Title", Class: "movie", Year: 1999},
+			resolvable: true,
+		},
+
+		// --- A file with no series name of its own takes the folder above its
+		// season folder; nothing else is trusted as a series name. ---
+		{
+			name:       "series-name-from-folder-above-season",
+			path:       "Pioneer One (2010)/Season 01/S01E01 - Earthfall.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Pioneer One", Class: "episode", Year: 2010, Sequence: "1", Index: 1},
+			resolvable: true,
+		},
+		{
+			name:       "xXYY-first-in-season-folder",
+			path:       "Pioneer One/Season 1/1x02 - The Man From Mars.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Pioneer One", Class: "episode", Sequence: "1", Index: 2},
+			resolvable: true,
+		},
+		// The parent of a loose file is as likely a library root ("TV") as a
+		// series, so with no season folder the parser still refuses.
+		{
+			name:       "no-series-name-outside-season-folder",
+			path:       "TV/S01E01 - Earthfall.mkv",
+			wantOK:     false,
+			resolvable: false,
+		},
+
+		// --- A release tag that is also a word ends a title only in front of
+		// another release tag, or (for the unambiguous ones) as the last word. ---
+		{
+			name:       "release-word-is-the-title-no-year",
+			path:       "Extended.Family.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Extended Family", Class: "movie"},
+			resolvable: true,
+		},
+		{
+			name:       "release-word-ends-title-no-year",
+			path:       "Charlotte's Web.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Charlotte's Web", Class: "movie"},
+			resolvable: true,
+		},
+		{
+			name: "release-word-before-resolution-stays-in-title",
+			path: "Charlotte's.Web.1080p.mkv",
+			// A resolution alone after "Web" does not make it a tag: titles
+			// run straight into a resolution.
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Charlotte's Web", Class: "movie"},
+			resolvable: true,
+		},
+		{
+			name:       "release-word-before-resolution-and-group",
+			path:       "Charlotte's.Web.1080p-GRP.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Charlotte's Web", Class: "movie"},
+			resolvable: true,
+		},
+		{
+			name: "release-word-before-resolution-and-codec-stays-in-title",
+			path: "Charlotte's.Web.1080p.x264.mkv",
+			// The look-ahead stops at the resolution: the codec after it does
+			// not make "Web" a tag.
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Charlotte's Web", Class: "movie"},
+			resolvable: true,
+		},
+		{
+			name: "two-hyphenated-words-are-the-title",
+			path: "Uncut-Gems.mkv",
+			// "Uncut" is a release word, but the hyphenated second word is
+			// not a release group: dropping it would empty the title.
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Uncut-Gems", Class: "movie"},
+			resolvable: true,
+		},
+		{
+			name:       "hyphenated-resolution-is-still-a-tag",
+			path:       "Movie-1080p.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Movie", Class: "movie"},
+			resolvable: true,
+		},
+		{
+			name:       "hyphenated-tag-ends-title-no-year",
+			path:       "Cool.Movie.WEB-DL.DDP5.1.H.264-GRP.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Cool Movie", Class: "movie"},
+			resolvable: true,
+		},
+		{
 			name:       "roman-numeral-and-parenthetical-year",
 			path:       "Frozen II (2019).mkv",
 			wantOK:     true,
@@ -185,26 +422,27 @@ func parseCorpus() []parseCase {
 			resolvable: false,
 		},
 		// Absolute-numbered anime with fansub group + resolution brackets: there
-		// is no SxxEyy/xXYY/year token, so noise-bounding never triggers and the
-		// bracketed group + absolute number leak into the title. Pinned as the
-		// current (unusable) parse so a future absolute-numbering rule shows up
-		// as a rising rate.
+		// is no SxxEyy/xXYY/year token, so only the bracketed resolution is cut
+		// as release noise and the group + absolute number leak into the title.
+		// Pinned as the current (unusable) parse so a future absolute-numbering
+		// rule shows up as a rising rate.
 		{
 			name:       "absolute-anime-fansub-brackets",
 			path:       "[HorribleSubs] One Piece - 1015 [720p].mkv",
 			wantOK:     true,
-			want:       sdk.ParsedMedia{Title: "[HorribleSubs] One Piece - 1015 [720p]", Class: "movie"},
+			want:       sdk.ParsedMedia{Title: "[HorribleSubs] One Piece - 1015", Class: "movie"},
 			resolvable: false,
 		},
 		{
 			name:       "absolute-anime-dash-number",
 			path:       "Naruto - 001 [1080p].mkv",
 			wantOK:     true,
-			want:       sdk.ParsedMedia{Title: "Naruto - 001 [1080p]", Class: "movie"},
+			want:       sdk.ParsedMedia{Title: "Naruto - 001", Class: "movie"},
 			resolvable: false,
 		},
-		// Episode token BEFORE the title: the xXYY match sits at index 0, so the
-		// title cut is empty and the parser refuses. Documented limitation.
+		// Episode token BEFORE the title, outside a season folder: the xXYY
+		// match sits at index 0, so the title cut is empty and the parser
+		// refuses. Documented limitation.
 		{
 			name:       "episode-token-before-title",
 			path:       "3x07.Some.Show.mkv",
@@ -228,15 +466,15 @@ func parseCorpus() []parseCase {
 // against this reference corpus: at least this fraction of the corpus must parse
 // into a clean, auto-appliable ParsedMedia (correct title, class, and ordinals).
 //
-// The corpus holds 18 cases; 13 currently resolve cleanly, for an observed rate
-// of 0.72. The target sits at 0.65 — below the current rate so a single new
-// parser regression (dropping to 12/18 = 0.67) still passes but two (11/18 =
-// 0.61) reds this test, and ABOVE it enough that improving the documented gaps
+// The corpus holds 36 cases; 30 currently resolve cleanly, for an observed rate
+// of 0.83. The target sits at 0.80 — below the current rate so a single new
+// parser regression (dropping to 29/36 = 0.81) still passes but two (28/36 =
+// 0.78) reds this test, and ABOVE it enough that improving the documented gaps
 // (date-stamped shows, absolute-numbered anime) only ever moves the rate up.
-// It is deliberately not 1.0: five corpus cases are known parser limitations or
+// It is deliberately not 1.0: six corpus cases are known parser limitations or
 // genuinely unresolvable noise, so a 1.0 target would be dishonest. Raising this
 // floor is the acceptance signal for a future parser-coverage improvement.
-const ParseAutoMatchTarget = 0.65
+const ParseAutoMatchTarget = 0.80
 
 // TestParseCorpus is the per-case parser regression gate: every adversarial
 // fixture pins the parser's exact output (or documented refusal), so any change
@@ -330,4 +568,78 @@ func TestParseCaseFoldOffsetSafety(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestParseEpisodeTitle pins the episode's own title, which the parser emits as
+// the plugin-declared EpisodeTitleField Media field (the series name stays in
+// ParsedMedia.Title). want "" means no field is emitted.
+func TestParseEpisodeTitle(t *testing.T) {
+	var _ sdk.MediaFieldParser = filmtv.New()
+	parser := filmtv.New()
+	cases := []struct {
+		name string
+		path string
+		want string
+	}{
+		{"dash-separated", "Pioneer One - S01E01 - Earthfall.mkv", "Earthfall"},
+		{"dotted-before-release-tags", "Pioneer.One.S01E01.Earthfall.1080p.x264-GRP.mkv", "Earthfall"},
+		{"xXYY", "Pioneer One - 1x01 - Earthfall.mkv", "Earthfall"},
+		{"multi-word-dotted", "Sherlock.S02E01.A.Scandal.in.Belgravia.1080p.HDTV.mkv", "A Scandal in Belgravia"},
+		{"after-multi-episode-chain", "Pioneer One - S01E01E02 - Earthfall & The Man From Mars.mkv", "Earthfall & The Man From Mars"},
+		{"after-xXYY-range", "Show Name - 1x01-1x02 - Pilot.mkv", "Pilot"},
+		{"after-three-token-xXYY-range", "Show.Name.1x01-1x02-1x03.Pilot.mkv", "Pilot"},
+		{"dash-prefixed-sxxeyy-dotted-title", "Pioneer One - S01E02 - The.Man.From.Mars.mkv", "The Man From Mars"},
+		{"dash-prefixed-xXYY-two-digit-season", "Pioneer One - 10x01 - Earthfall.mkv", "Earthfall"},
+		{"underscores", "Show_Name_-_S01E01_-_Episode_Title.mkv", "Episode Title"},
+		{"parenthesised-part-kept", "Show - S01E01 - The Best of Both Worlds (Part 1).mkv", "The Best of Both Worlds (Part 1)"},
+		{"parenthesised-tags-dropped", "Show - S01E01 - Title (1080p WEB-DL).mkv", "Title"},
+		{"bracketed-tags-dropped", "[Group] Pioneer One - S01E03 - Alone in the Night [1080p][ABCD1234].mkv", "Alone in the Night"},
+		{"series-from-folder", "Pioneer One (2010)/Season 01/S01E01 - Earthfall.mkv", "Earthfall"},
+		// A release tag that is also a word stays in the title until a real
+		// release tag follows it.
+		{"release-word-inside-title", "Show.S01E02.Internal.Affairs.720p.HDTV.x264-GRP.mkv", "Internal Affairs"},
+		{"release-word-then-same-tag", "Show.S01E02.The.Web.WEB-DL.DDP5.1.H.264-GRP.mkv", "The Web"},
+		{"release-word-then-resolution", "Show.S01E01.The.Web.1080p.mkv", "The Web"},
+		{"release-word-then-resolution-and-codec", "Show.S01E01.The.Web.1080p.x264.mkv", "The Web"},
+		{"after-cross-season-chain", "Show.S01E01-S02E03.Pilot.mkv", "Pilot"},
+		{"after-cross-season-xXYY-chain", "Show.1x01-2x02-2x03.Pilot.mkv", "Pilot"},
+		{"strong-release-word-before-group", "Show.S01E01.Pilot.PROPER-GRP.mkv", "Pilot"},
+		{"title-word-that-starts-like-an-episode-token", "Show.S01E01.E20th.Century.mkv", "E20th Century"},
+		// No episode title in the name: no field.
+		{"token-only", "Pioneer One S01E01.mkv", ""},
+		{"release-tags-only", "Show.S01E02.PROPER.720p.HDTV.x264-GRP.mkv", ""},
+		{"long-form-token", "Some.Show.Season 2 Episode 5.mkv", ""},
+		// Not an episode, or refused: no field.
+		{"movie", "The.Matrix.1999.1080p.mkv", ""},
+		{"refused", "TV/S01E01 - Earthfall.mkv", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := parser.ParseMediaFields(tc.path, sdk.ParseProbe{})
+			if tc.want == "" {
+				if got != nil {
+					t.Fatalf("ParseMediaFields(%q) = %+v, want none", tc.path, got)
+				}
+				return
+			}
+			want := []sdk.ParsedTextField{{Name: filmtv.EpisodeTitleField, Text: tc.want}}
+			if !reflect.DeepEqual(got, want) {
+				t.Errorf("ParseMediaFields(%q) = %+v, want %+v", tc.path, got, want)
+			}
+		})
+	}
+}
+
+// TestEpisodeTitleFieldDeclared pins that the field the parser emits is one the
+// bundle declares: Core persists only declared Media fields.
+func TestEpisodeTitleFieldDeclared(t *testing.T) {
+	for _, field := range filmtv.Bundle().MediaFields {
+		if field.Name == filmtv.EpisodeTitleField {
+			if field.Type != "text" || !field.Searchable {
+				t.Fatalf("%s is declared as %+v, want searchable text", filmtv.EpisodeTitleField, field)
+			}
+			return
+		}
+	}
+	t.Fatalf("bundle declares no %s Media field", filmtv.EpisodeTitleField)
 }
