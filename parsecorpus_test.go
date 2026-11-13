@@ -216,6 +216,13 @@ func parseCorpus() []parseCase {
 			resolvable: true,
 		},
 		{
+			name:       "cross-season-token-followed-by-episode-is-not-a-range",
+			path:       "Show.S01E01-S02E02E03.Pilot.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Show", Class: "episode", Sequence: "1", Index: 1},
+			resolvable: true,
+		},
+		{
 			name:       "cross-season-xXYY-chain-is-not-a-range",
 			path:       "Show.1x01-2x02-2x03.Pilot.mkv",
 			wantOK:     true,

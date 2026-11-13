@@ -259,12 +259,11 @@ func episodeChain(lower string, pos int, link *regexp.Regexp, sequence string) (
 			}
 			return last, end
 		}
-		start := pos
+		if m[2] >= 0 && numericText(lower[pos+m[2]:pos+m[3]]) != sequence {
+			crossesSeason = true
+		}
 		pos += m[1]
 		if pos == len(lower) || !isASCIIAlnum(lower[pos]) {
-			if m[2] >= 0 && numericText(lower[start+m[2]:start+m[3]]) != sequence {
-				crossesSeason = true
-			}
 			last, end = atoi(lower[pos-(m[5]-m[4]):pos]), pos
 		}
 	}
