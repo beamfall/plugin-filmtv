@@ -34,10 +34,12 @@ var (
 	reEpisodeChainLink = regexp.MustCompile(`^[-+._ ]?(?:s\d{1,2})?e(\d{1,3})`)
 	// "season X episode Y" long form.
 	reSeasonEpisodeWords = regexp.MustCompile(`season[ ._]*(\d{1,2})[ ._,-]*episode[ ._]*(\d{1,3})`)
-	// XxYY shorthand (e.g. 3x07), optionally a "1x01-1x02" range; guarded so a
-	// resolution like 1920x1080 never matches (those numbers are far larger
-	// than a season/episode).
-	reSeasonX = regexp.MustCompile(`\b(\d{1,2})x(\d{1,3})(?:-\d{1,2}x(\d{1,3}))?\b`)
+	// XxYY shorthand (e.g. 3x07); guarded so a resolution like 1920x1080 never
+	// matches (those numbers are far larger than a season/episode). A range
+	// ("1x01-1x02-1x03") is read by episodeChain with reSeasonXChainLink.
+	reSeasonX = regexp.MustCompile(`\b(\d{1,2})x(\d{1,3})\b`)
+	// One further XxYY token of a multi-episode shorthand range.
+	reSeasonXChainLink = regexp.MustCompile(`^-\d{1,2}x(\d{1,3})`)
 	// A folder that holds one season of a series: the series name is then the
 	// folder above it.
 	reSeasonFolder = regexp.MustCompile(`^(?:(?:season|series)[ ._-]*\d{1,4}|s\d{1,2}|specials)$`)
@@ -217,7 +219,7 @@ type episodeToken struct {
 func findEpisode(lower string) (episodeToken, bool) {
 	if m := reSeasonEpisode.FindStringSubmatchIndex(lower); m != nil {
 		token := episodeToken{start: m[0], end: m[1], sequence: numericText(lower[m[2]:m[3]]), index: atoi(lower[m[4]:m[5]])}
-		last, end := episodeChain(lower, token.end)
+		last, end := episodeChain(lower, token.end, reEpisodeChainLink)
 		token.end = end
 		token.indexEnd = rangeEnd(token.index, last)
 		return token, true
@@ -227,23 +229,24 @@ func findEpisode(lower string) (episodeToken, bool) {
 	}
 	if m := reSeasonX.FindStringSubmatchIndex(lower); m != nil {
 		token := episodeToken{start: m[0], end: m[1], sequence: numericText(lower[m[2]:m[3]]), index: atoi(lower[m[4]:m[5]])}
-		if m[6] >= 0 {
-			token.indexEnd = rangeEnd(token.index, atoi(lower[m[6]:m[7]]))
-		}
+		last, end := episodeChain(lower, token.end, reSeasonXChainLink)
+		token.end = end
+		token.indexEnd = rangeEnd(token.index, last)
 		return token, true
 	}
 	return episodeToken{}, false
 }
 
 // episodeChain reads the further episode tokens of a multi-episode file
-// ("S01E01E02", "S01E01-E02-E03", "S01E01-S01E02") starting at pos, the end of
-// the first one. It returns the last episode number of the chain (0 when there
+// ("S01E01E02", "S01E01-E02-E03", "S01E01-S01E02", or with reSeasonXChainLink
+// "1x01-1x02-1x03") starting at pos, the end of the first one; link matches one
+// token and captures its episode number. It returns the last episode number of the chain (0 when there
 // is none) and the offset the chain ends at. A link must end on a word
 // boundary, so a title word that merely starts like one ("E20th") is not eaten.
-func episodeChain(lower string, pos int) (int, int) {
+func episodeChain(lower string, pos int, link *regexp.Regexp) (int, int) {
 	last, end := 0, pos
 	for {
-		m := reEpisodeChainLink.FindStringSubmatchIndex(lower[pos:])
+		m := link.FindStringSubmatchIndex(lower[pos:])
 		if m == nil {
 			return last, end
 		}
@@ -411,9 +414,14 @@ func findYear(name, lower string, episodeCut int) (int, int) {
 }
 
 // firstNoiseToken returns the start index in lower of the first token that
-// ends a title as release noise, or -1.
+// ends a title as release noise, or -1. A release group hyphenated onto the
+// last word ("PROPER-GRP") is not a title word, so it is left out of the
+// words endsTitle looks ahead over.
 func firstNoiseToken(lower string) int {
 	tokens := tokenSpans(lower)
+	if n := len(tokens); n > 1 && tokens[n-1][0] > 0 && lower[tokens[n-1][0]-1] == '-' && tokens[n-2][1] == tokens[n-1][0]-1 {
+		tokens = tokens[:n-1]
+	}
 	words := make([]string, len(tokens))
 	for i, span := range tokens {
 		words[i] = lower[span[0]:span[1]]
@@ -428,9 +436,11 @@ func firstNoiseToken(lower string) int {
 
 // endsTitle reports whether words[0] is release noise, given the words after
 // it. A resolution or a releaseNoise tag always is, alone or joined with the
-// next word ("web-dl", "h.264"). A releaseWords word is noise only in front of
-// more release noise or, for the ones that allow it, as the last word; said
-// twice in a row ("The.Web.WEB-DL") the first is a title word.
+// next word ("web-dl", "h.264"). A releaseWords word mapped to true is noise
+// in front of more release noise or as the last word; one mapped to false
+// needs a releaseNoise tag after it, because a title often runs straight into
+// a resolution ("Charlotte's.Web.1080p"). Said twice in a row
+// ("The.Web.WEB-DL") the first is a title word.
 func endsTitle(words []string) bool {
 	word := words[0]
 	if reResolution.MatchString(word) || releaseNoise[word] {
@@ -446,7 +456,27 @@ func endsTitle(words []string) bool {
 	if len(words) == 1 {
 		return endsName
 	}
-	return words[1] != word && endsTitle(words[1:])
+	if words[1] == word {
+		return false
+	}
+	if endsName {
+		return endsTitle(words[1:])
+	}
+	return tagFollows(words[1:])
+}
+
+// tagFollows reports whether words open with a releaseNoise tag, possibly
+// after resolutions and other release words.
+func tagFollows(words []string) bool {
+	for i, word := range words {
+		if releaseNoise[word] || i+1 < len(words) && releaseNoise[word+words[i+1]] {
+			return true
+		}
+		if _, isWord := releaseWords[word]; !isWord && !reResolution.MatchString(word) {
+			return false
+		}
+	}
+	return false
 }
 
 // tokenSpans splits a lower-cased name into word tokens, as [start, end) byte

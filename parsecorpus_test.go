@@ -111,6 +111,22 @@ func parseCorpus() []parseCase {
 			want:       sdk.ParsedMedia{Title: "Cool Movie", Class: "movie"},
 			resolvable: true,
 		},
+		{
+			name: "noise-cut-before-release-group",
+			path: "Cool.Movie.PROPER-GRP.mkv",
+			// A release group hyphenated onto the last tag is not a title
+			// word: "PROPER" still ends the title.
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Cool Movie", Class: "movie"},
+			resolvable: true,
+		},
+		{
+			name:       "strong-release-word-before-resolution",
+			path:       "Cool.Movie.PROPER.1080p.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Cool Movie", Class: "movie"},
+			resolvable: true,
+		},
 
 		// --- Movie nested in a show/library folder: only the basename is read. ---
 		{
@@ -181,6 +197,27 @@ func parseCorpus() []parseCase {
 			path:       "Show Name - 1x01-1x02 - Pilot.mkv",
 			wantOK:     true,
 			want:       sdk.ParsedMedia{Title: "Show Name", Class: "episode", Sequence: "1", Index: 1, IndexEnd: 2},
+			resolvable: true,
+		},
+		{
+			name:       "multi-episode-xXYY-three-token-range",
+			path:       "Show.Name.1x01-1x02-1x03.Pilot.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Show Name", Class: "episode", Sequence: "1", Index: 1, IndexEnd: 3},
+			resolvable: true,
+		},
+		{
+			name:       "dash-prefixed-xXYY-range",
+			path:       "Pioneer One - 1x01-1x02 - Earthfall.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Pioneer One", Class: "episode", Sequence: "1", Index: 1, IndexEnd: 2},
+			resolvable: true,
+		},
+		{
+			name:       "dash-prefixed-multi-episode-chain",
+			path:       "Pioneer One - S01E01-E02-E03 - Earthfall.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Pioneer One", Class: "episode", Sequence: "1", Index: 1, IndexEnd: 3},
 			resolvable: true,
 		},
 
@@ -290,6 +327,29 @@ func parseCorpus() []parseCase {
 			path:       "Charlotte's Web.mkv",
 			wantOK:     true,
 			want:       sdk.ParsedMedia{Title: "Charlotte's Web", Class: "movie"},
+			resolvable: true,
+		},
+		{
+			name: "release-word-before-resolution-stays-in-title",
+			path: "Charlotte's.Web.1080p.mkv",
+			// A resolution alone after "Web" does not make it a tag: titles
+			// run straight into a resolution.
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Charlotte's Web", Class: "movie"},
+			resolvable: true,
+		},
+		{
+			name:       "release-word-before-resolution-and-group",
+			path:       "Charlotte's.Web.1080p-GRP.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Charlotte's Web", Class: "movie"},
+			resolvable: true,
+		},
+		{
+			name:       "release-word-before-resolution-and-source-is-a-tag",
+			path:       "Cool.Movie.WEB.1080p.x264-GRP.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Cool Movie", Class: "movie"},
 			resolvable: true,
 		},
 		{
@@ -486,6 +546,9 @@ func TestParseEpisodeTitle(t *testing.T) {
 		{"multi-word-dotted", "Sherlock.S02E01.A.Scandal.in.Belgravia.1080p.HDTV.mkv", "A Scandal in Belgravia"},
 		{"after-multi-episode-chain", "Pioneer One - S01E01E02 - Earthfall & The Man From Mars.mkv", "Earthfall & The Man From Mars"},
 		{"after-xXYY-range", "Show Name - 1x01-1x02 - Pilot.mkv", "Pilot"},
+		{"after-three-token-xXYY-range", "Show.Name.1x01-1x02-1x03.Pilot.mkv", "Pilot"},
+		{"dash-prefixed-sxxeyy-dotted-title", "Pioneer One - S01E02 - The.Man.From.Mars.mkv", "The Man From Mars"},
+		{"dash-prefixed-xXYY-two-digit-season", "Pioneer One - 10x01 - Earthfall.mkv", "Earthfall"},
 		{"underscores", "Show_Name_-_S01E01_-_Episode_Title.mkv", "Episode Title"},
 		{"parenthesised-part-kept", "Show - S01E01 - The Best of Both Worlds (Part 1).mkv", "The Best of Both Worlds (Part 1)"},
 		{"parenthesised-tags-dropped", "Show - S01E01 - Title (1080p WEB-DL).mkv", "Title"},
@@ -495,6 +558,8 @@ func TestParseEpisodeTitle(t *testing.T) {
 		// release tag follows it.
 		{"release-word-inside-title", "Show.S01E02.Internal.Affairs.720p.HDTV.x264-GRP.mkv", "Internal Affairs"},
 		{"release-word-then-same-tag", "Show.S01E02.The.Web.WEB-DL.DDP5.1.H.264-GRP.mkv", "The Web"},
+		{"release-word-then-resolution", "Show.S01E01.The.Web.1080p.mkv", "The Web"},
+		{"strong-release-word-before-group", "Show.S01E01.Pilot.PROPER-GRP.mkv", "Pilot"},
 		{"title-word-that-starts-like-an-episode-token", "Show.S01E01.E20th.Century.mkv", "E20th Century"},
 		// No episode title in the name: no field.
 		{"token-only", "Pioneer One S01E01.mkv", ""},

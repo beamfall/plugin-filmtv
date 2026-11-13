@@ -42,6 +42,16 @@ Media field.
 - **WHEN** the file is `Show.S01E02.Internal.Affairs.720p.HDTV.mkv`
 - **THEN** `episode-title` is `Internal Affairs`
 
+#### Scenario: Weak release word before a resolution only
+
+- **WHEN** the file is `Show.S01E01.The.Web.1080p.mkv`
+- **THEN** `episode-title` is `The Web`
+
+#### Scenario: Release tag before a release group
+
+- **WHEN** the file is `Show.S01E01.Pilot.PROPER-GRP.mkv`
+- **THEN** `episode-title` is `Pilot`
+
 #### Scenario: No episode title
 
 - **WHEN** the file is `Pioneer One S01E01.mkv`
@@ -61,3 +71,8 @@ index end.
 
 - **WHEN** the file is `Show Name - 1x01-1x02 - Pilot.mkv`
 - **THEN** the index is 1, the index end is 2 and `episode-title` is `Pilot`
+
+#### Scenario: Three-token season-by-episode chain
+
+- **WHEN** the file is `Show.Name.1x01-1x02-1x03.Pilot.mkv`
+- **THEN** the index is 1, the index end is 3 and `episode-title` is `Pilot`
