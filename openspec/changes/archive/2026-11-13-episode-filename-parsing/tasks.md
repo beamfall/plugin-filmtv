@@ -19,4 +19,4 @@
 
 - [x] 4.1 `openspec validate --all --strict`
 - [x] 4.2 `script/gate.sh` and `script/gate.sh fuzz` for `FuzzParseFilename`
-- [ ] 4.3 `openspec archive episode-filename-parsing` after landing
+- [x] 4.3 `openspec archive episode-filename-parsing` after landing
