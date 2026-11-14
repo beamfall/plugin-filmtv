@@ -1,7 +1,7 @@
 ## 1. Build
 
 - [x] 1.1 Fill `ParsedMedia.VersionLabel` in the filename parser
-- [ ] 1.2 Pin the plugin-sdk release that carries `VersionLabel` in `go.mod`
+- [x] 1.2 Pin the plugin-sdk commit that carries `VersionLabel` in `go.mod` (a pseudo-version; repin to the v0.3.5 tag when it is cut)
 
 ## 2. Prove
 
