@@ -433,8 +433,8 @@ func findYear(name, lower string, episodeCut int) (int, int) {
 // underscores and hyphens removed, that names something other than a version
 // of the title: a stacked part of one long file (cd1, part 2, disc1) or an
 // extra, singular or plural and optionally numbered (trailer 2, Deleted
-// Scenes, Behind the Scenes).
-var reNotVersion = regexp.MustCompile(`^(?:(?:cd|dvd|part|pt|disc|disk)\d+|(?:trailer|sample|featurette|behindthescene|deleted|deletedscene|interview|scene|short|clip|extra|other)s?\d*)$`)
+// Scenes, Behind the Scenes, Making Of, Bloopers).
+var reNotVersion = regexp.MustCompile(`^(?:(?:cd|dvd|part|pt|disc|disk)\d+|(?:trailer|sample|featurette|behindthescene|deleted|deletedscene|interview|scene|short|clip|extra|other|blooper|outtake|gagreel|makingof|teaser|bonus)s?\d*)$`)
 
 // notVersionKey folds a label to the form reNotVersion matches.
 func notVersionKey(label string) string {

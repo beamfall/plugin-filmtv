@@ -43,6 +43,9 @@ func TestParseVersionLabel(t *testing.T) {
 		{"Night Harbor (2004) - Behind the Scenes.mkv", "Night Harbor", ""},
 		{"Night Harbor (2004) - Deleted Scenes.mkv", "Night Harbor", ""},
 		{"Night Harbor (2004) - Interviews.mkv", "Night Harbor", ""},
+		{"Night Harbor (2004) - Bloopers.mkv", "Night Harbor", ""},
+		{"Night Harbor (2004) - Making Of.mkv", "Night Harbor", ""},
+		{"Night Harbor (2004) - Teaser 1.mkv", "Night Harbor", ""},
 		{"Night Harbor (2004) - disc_1.mkv", "Night Harbor", ""},
 		{"Coastline (2011) - S01E02 - Low Tide.mkv", "Coastline", ""},
 	}
