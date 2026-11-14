@@ -429,10 +429,23 @@ func findYear(name, lower string, episodeCut int) (int, int) {
 	return bestYear, bestStart
 }
 
-// reNotVersion matches a " - <label>" suffix that names something other than a
-// version of the title: a stacked part of one long file (cd1, part 2, disc1)
-// or an extra (trailer, sample, featurette, ...).
-var reNotVersion = regexp.MustCompile(`^(?:(?:cd|dvd|part|pt|disc|disk)[ ._-]*\d+|trailer|sample|featurette|behindthescenes|deleted|deletedscene|interview|scene|short|clip|extra|extras|other)$`)
+// reNotVersion matches a " - <label>" suffix, lowercased with spaces, dots,
+// underscores and hyphens removed, that names something other than a version
+// of the title: a stacked part of one long file (cd1, part 2, disc1) or an
+// extra, singular or plural and optionally numbered (trailer 2, Deleted
+// Scenes, Behind the Scenes).
+var reNotVersion = regexp.MustCompile(`^(?:(?:cd|dvd|part|pt|disc|disk)\d+|(?:trailer|sample|featurette|behindthescene|deleted|deletedscene|interview|scene|short|clip|extra|other)s?\d*)$`)
+
+// notVersionKey folds a label to the form reNotVersion matches.
+func notVersionKey(label string) string {
+	return strings.Map(func(r rune) rune {
+		switch r {
+		case ' ', '.', '_', '-':
+			return -1
+		}
+		return r
+	}, asciiLower(label))
+}
 
 // versionLabel reads the version label of a movie named in the
 // `Title (Year) - <label>` convention ("Heat (1995) - 1080p", "Heat (1995) -
@@ -463,7 +476,7 @@ func versionLabel(name string, yearStart int) string {
 		}
 		label = strings.TrimSpace(label[:cut])
 	}
-	if label == "" || reNotVersion.MatchString(asciiLower(label)) || !sdk.ValidVersionLabel(label) {
+	if label == "" || reNotVersion.MatchString(notVersionKey(label)) || !sdk.ValidVersionLabel(label) {
 		return ""
 	}
 	return label
