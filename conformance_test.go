@@ -28,6 +28,12 @@ func TestParseConformance(t *testing.T) {
 			WantOK: true,
 		},
 		{
+			Name:   "version label after a parenthesized year",
+			Path:   "Night Harbor (2004) - 1080p.mkv",
+			Want:   sdk.ParsedMedia{Title: "Night Harbor", Class: "movie", Year: 2004, VersionLabel: "1080p"},
+			WantOK: true,
+		},
+		{
 			Name:   "episode SxxEyy",
 			Path:   "Some.Show.S02E05.720p.HDTV.mkv",
 			Want:   sdk.ParsedMedia{Title: "Some Show", Class: "episode", Sequence: "2", Index: 5},

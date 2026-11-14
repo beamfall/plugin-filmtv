@@ -20,6 +20,8 @@ func FuzzParseFilename(f *testing.F) {
 		"Show Name - 1x01-1x02 - Pilot (Part 1) [1080p].mkv",
 		"Show (2010)/Season 01/S01E01E02-E03.Internal.WEB-DL.mkv",
 		"[Group] - S01 E01 - .PROPER.mkv",
+		"Night Harbor (2004) - [Director's Cut].mkv",
+		"Night Harbor (2004) - 2160p HDR.mkv",
 		"",
 	} {
 		f.Add(seed)
@@ -34,6 +36,9 @@ func FuzzParseFilename(f *testing.F) {
 		again, againOK := parser.Parse(path, sdk.ParseProbe{})
 		if ok != againOK || !reflect.DeepEqual(got, again) {
 			t.Fatalf("Parse(%q) is not deterministic: (%+v, %v) then (%+v, %v)", path, got, ok, again, againOK)
+		}
+		if err := sdk.ValidateVersionLabel(got); err != nil {
+			t.Fatalf("Parse(%q) version label contract: %v", path, err)
 		}
 		fields := parser.ParseMediaFields(path, sdk.ParseProbe{})
 		if !reflect.DeepEqual(fields, parser.ParseMediaFields(path, sdk.ParseProbe{})) {

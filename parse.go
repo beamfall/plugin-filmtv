@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/beamfall/plugin-filmtv/internal/mediaimport"
 	sdk "github.com/beamfall/plugin-sdk"
@@ -161,6 +162,9 @@ func parseName(path string) (sdk.ParsedMedia, string, bool) {
 		parsed.Year = year
 		if yearStart >= 0 && yearStart < cut {
 			cut = yearStart
+		}
+		if !isEpisode {
+			parsed.VersionLabel = versionLabel(name, yearStart)
 		}
 	}
 
@@ -423,6 +427,59 @@ func findYear(name, lower string, episodeCut int) (int, int) {
 		return parenYear, parenStart
 	}
 	return bestYear, bestStart
+}
+
+// reNotVersion matches a " - <label>" suffix, lowercased with spaces, dots,
+// underscores and hyphens removed, that names something other than a version
+// of the title: a stacked part of one long file (cd1, part 2, disc1) or an
+// extra, singular or plural and optionally numbered (trailer 2, Deleted
+// Scenes, Behind the Scenes, Making Of, Bloopers).
+var reNotVersion = regexp.MustCompile(`^(?:(?:cd|dvd|part|pt|disc|disk)\d+|(?:trailer|sample|featurette|behindthescene|deleted|deletedscene|interview|scene|short|clip|extra|other|blooper|outtake|gagreel|makingof|teaser|bonus)s?\d*)$`)
+
+// notVersionKey folds a label to the form reNotVersion matches.
+func notVersionKey(label string) string {
+	return strings.Map(func(r rune) rune {
+		switch r {
+		case ' ', '.', '_', '-':
+			return -1
+		}
+		return r
+	}, asciiLower(label))
+}
+
+// versionLabel reads the version label of a movie named in the
+// `Title (Year) - <label>` convention ("Heat (1995) - 1080p", "Heat (1995) -
+// [Director's Cut]"): the text after a parenthesized year and a spaced hyphen,
+// one layer of enclosing brackets dropped, bounded to sdk.MaxVersionLabelLen.
+// It returns "" when the name does not follow the convention, when the suffix
+// names a stacked part or an extra, or when the label breaks the SDK contract.
+// A dotted release name ("Heat.1995.1080p.BluRay") carries no label: its tail
+// is release noise, not a version the operator named.
+func versionLabel(name string, yearStart int) string {
+	const parenYearLen = len("(1995)")
+	if yearStart < 0 || yearStart+parenYearLen > len(name) || name[yearStart] != '(' || name[yearStart+parenYearLen-1] != ')' {
+		return ""
+	}
+	rest := name[yearStart+parenYearLen:]
+	trimmed := strings.TrimLeft(rest, " ")
+	if len(trimmed) == len(rest) || !strings.HasPrefix(trimmed, "- ") {
+		return ""
+	}
+	label := strings.TrimSpace(trimmed[len("- "):])
+	if len(label) >= 2 && (label[0] == '[' && label[len(label)-1] == ']' || label[0] == '(' && label[len(label)-1] == ')') {
+		label = strings.TrimSpace(label[1 : len(label)-1])
+	}
+	if len(label) > sdk.MaxVersionLabelLen {
+		cut := sdk.MaxVersionLabelLen
+		for cut > 0 && !utf8.RuneStart(label[cut]) {
+			cut--
+		}
+		label = strings.TrimSpace(label[:cut])
+	}
+	if label == "" || reNotVersion.MatchString(notVersionKey(label)) || !sdk.ValidVersionLabel(label) {
+		return ""
+	}
+	return label
 }
 
 // firstNoiseToken returns the start index in lower of the first token that
