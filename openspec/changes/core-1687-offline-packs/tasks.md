@@ -10,4 +10,4 @@
 ## 3. Verify and close
 
 - [x] 3.1 `openspec validate --all --strict`
-- [ ] 3.2 `script/gate.sh`
+- [x] 3.2 `script/gate.sh`
