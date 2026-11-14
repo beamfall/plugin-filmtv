@@ -1,0 +1,286 @@
+{
+  "id": 82,
+  "url": "https://www.tvmaze.com/shows/82/pioneer-one",
+  "name": "Pioneer One",
+  "type": "Animation",
+  "language": "Japanese",
+  "genres": [
+    "Drama",
+    "Science-Fiction"
+  ],
+  "status": "Ended",
+  "premiered": "2010-01-01",
+  "network": {
+    "id": 7,
+    "name": "Example Network",
+    "country": {
+      "name": "Japan",
+      "code": "JP"
+    }
+  },
+  "webChannel": null,
+  "externals": {
+    "tvrage": null,
+    "thetvdb": 121361,
+    "imdb": "tt0000001"
+  },
+  "image": {
+    "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/1/1.jpg",
+    "original": "https://static.tvmaze.com/uploads/images/original_untouched/1/1.jpg"
+  },
+  "summary": "<p>A synthetic show.</p>",
+  "_embedded": {
+    "episodes": [
+      {
+        "id": 9001,
+        "url": "https://www.tvmaze.com/episodes/9001",
+        "name": "Episode 1",
+        "season": 1,
+        "number": 1,
+        "type": "regular",
+        "airdate": "2010-01-01",
+        "runtime": 24
+      },
+      {
+        "id": 9002,
+        "url": "https://www.tvmaze.com/episodes/9002",
+        "name": "Episode 2",
+        "season": 1,
+        "number": 2,
+        "type": "regular",
+        "airdate": "2010-01-02",
+        "runtime": 24
+      },
+      {
+        "id": 9003,
+        "url": "https://www.tvmaze.com/episodes/9003",
+        "name": "Episode 3",
+        "season": 1,
+        "number": 3,
+        "type": "regular",
+        "airdate": "2010-01-03",
+        "runtime": 24
+      },
+      {
+        "id": 9004,
+        "url": "https://www.tvmaze.com/episodes/9004",
+        "name": "Episode 4",
+        "season": 1,
+        "number": 4,
+        "type": "regular",
+        "airdate": "2010-01-04",
+        "runtime": 24
+      },
+      {
+        "id": 9005,
+        "url": "https://www.tvmaze.com/episodes/9005",
+        "name": "Episode 5",
+        "season": 1,
+        "number": 5,
+        "type": "regular",
+        "airdate": "2010-01-05",
+        "runtime": 24
+      },
+      {
+        "id": 9006,
+        "url": "https://www.tvmaze.com/episodes/9006",
+        "name": "Episode 6",
+        "season": 1,
+        "number": 6,
+        "type": "regular",
+        "airdate": "2010-01-06",
+        "runtime": 24
+      },
+      {
+        "id": 9007,
+        "url": "https://www.tvmaze.com/episodes/9007",
+        "name": "Episode 7",
+        "season": 1,
+        "number": 7,
+        "type": "regular",
+        "airdate": "2010-01-07",
+        "runtime": 24
+      },
+      {
+        "id": 9008,
+        "url": "https://www.tvmaze.com/episodes/9008",
+        "name": "Episode 8",
+        "season": 1,
+        "number": 8,
+        "type": "regular",
+        "airdate": "2010-01-08",
+        "runtime": 24
+      },
+      {
+        "id": 9009,
+        "url": "https://www.tvmaze.com/episodes/9009",
+        "name": "Episode 9",
+        "season": 1,
+        "number": 9,
+        "type": "regular",
+        "airdate": "2010-01-09",
+        "runtime": 24
+      },
+      {
+        "id": 9010,
+        "url": "https://www.tvmaze.com/episodes/9010",
+        "name": "Episode 10",
+        "season": 1,
+        "number": 10,
+        "type": "regular",
+        "airdate": "2010-01-10",
+        "runtime": 24
+      },
+      {
+        "id": 9011,
+        "url": "https://www.tvmaze.com/episodes/9011",
+        "name": "Episode 11",
+        "season": 1,
+        "number": 11,
+        "type": "regular",
+        "airdate": "2010-01-11",
+        "runtime": 24
+      },
+      {
+        "id": 9012,
+        "url": "https://www.tvmaze.com/episodes/9012",
+        "name": "Episode 12",
+        "season": 1,
+        "number": 12,
+        "type": "regular",
+        "airdate": "2010-01-12",
+        "runtime": 24
+      },
+      {
+        "id": 9013,
+        "url": "https://www.tvmaze.com/episodes/9013",
+        "name": "Recap Special",
+        "season": 1,
+        "number": null,
+        "type": "significant_special",
+        "airdate": "2010-03-01",
+        "runtime": 24
+      },
+      {
+        "id": 9014,
+        "url": "https://www.tvmaze.com/episodes/9014",
+        "name": "Episode 13",
+        "season": 2,
+        "number": 1,
+        "type": "regular",
+        "airdate": "2010-07-01",
+        "runtime": 24
+      },
+      {
+        "id": 9015,
+        "url": "https://www.tvmaze.com/episodes/9015",
+        "name": "Episode 14",
+        "season": 2,
+        "number": 2,
+        "type": "regular",
+        "airdate": "2010-07-02",
+        "runtime": 24
+      },
+      {
+        "id": 9016,
+        "url": "https://www.tvmaze.com/episodes/9016",
+        "name": "Episode 15",
+        "season": 2,
+        "number": 3,
+        "type": "regular",
+        "airdate": "2010-07-03",
+        "runtime": 24
+      },
+      {
+        "id": 9017,
+        "url": "https://www.tvmaze.com/episodes/9017",
+        "name": "Episode 16",
+        "season": 2,
+        "number": 4,
+        "type": "regular",
+        "airdate": "2010-07-04",
+        "runtime": 24
+      },
+      {
+        "id": 9018,
+        "url": "https://www.tvmaze.com/episodes/9018",
+        "name": "Episode 17",
+        "season": 2,
+        "number": 5,
+        "type": "regular",
+        "airdate": "2010-07-05",
+        "runtime": 24
+      },
+      {
+        "id": 9019,
+        "url": "https://www.tvmaze.com/episodes/9019",
+        "name": "Episode 18",
+        "season": 2,
+        "number": 6,
+        "type": "regular",
+        "airdate": "2010-07-06",
+        "runtime": 24
+      },
+      {
+        "id": 9020,
+        "url": "https://www.tvmaze.com/episodes/9020",
+        "name": "Episode 19",
+        "season": 2,
+        "number": 7,
+        "type": "regular",
+        "airdate": "2010-07-07",
+        "runtime": 24
+      },
+      {
+        "id": 9021,
+        "url": "https://www.tvmaze.com/episodes/9021",
+        "name": "Episode 20",
+        "season": 2,
+        "number": 8,
+        "type": "regular",
+        "airdate": "2010-07-08",
+        "runtime": 24
+      },
+      {
+        "id": 9022,
+        "url": "https://www.tvmaze.com/episodes/9022",
+        "name": "Episode 21",
+        "season": 2,
+        "number": 9,
+        "type": "regular",
+        "airdate": "2010-07-09",
+        "runtime": 24
+      },
+      {
+        "id": 9023,
+        "url": "https://www.tvmaze.com/episodes/9023",
+        "name": "Episode 22",
+        "season": 2,
+        "number": 10,
+        "type": "regular",
+        "airdate": "2010-07-10",
+        "runtime": 24
+      },
+      {
+        "id": 9024,
+        "url": "https://www.tvmaze.com/episodes/9024",
+        "name": "Episode 23",
+        "season": 2,
+        "number": 11,
+        "type": "regular",
+        "airdate": "2010-07-11",
+        "runtime": 24
+      },
+      {
+        "id": 9025,
+        "url": "https://www.tvmaze.com/episodes/9025",
+        "name": "Episode 24",
+        "season": 2,
+        "number": 12,
+        "type": "regular",
+        "airdate": "2010-07-12",
+        "runtime": 24
+      }
+    ]
+  }
+}
