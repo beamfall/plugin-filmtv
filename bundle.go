@@ -816,10 +816,11 @@ var tvmazeAttribution = &sdk.Attribution{
 
 // Request spacing inside each source's published limit: TVmaze allows at least
 // 20 calls per 10 s per address; AniList allows 90 per minute, currently
-// lowered to 30.
+// lowered to 30. Core spaces requests per scraper ID, and the two AniList
+// scrapers share one token and address, so each takes half the budget.
 const (
 	tvmazeRequestIntervalMS  = 500
-	anilistRequestIntervalMS = 2000
+	anilistRequestIntervalMS = 4000
 )
 
 // anilistTokenRef names the operator's own AniList access token.

@@ -18,8 +18,8 @@ episode, and nothing in the plugin can turn an absolute number into a season and
 - Two AniList scrapers, `anilist-series` (implies class `episode`) and `anilist-movie` (implies
   class `movie`), using AniList's GraphQL API. Each operator supplies their own AniList access
   token (`anilist-access-token`). The credential is optional: without it the scrapers are left out
-  and send no requests. Requests are spaced 2 s apart, inside AniList's current limit of 30 per
-  minute.
+  and send no requests. Core spaces requests per scraper, so each AniList scraper waits 4 s
+  between requests: together they stay inside AniList's current limit of 30 per minute.
 - A plugin-owned mapper from an absolute episode number to a season and episode, over a series'
   regular episodes in season order, with a decoder for TVmaze's embedded episode list.
 

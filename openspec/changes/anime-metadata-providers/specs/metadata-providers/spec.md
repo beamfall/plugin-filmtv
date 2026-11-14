@@ -24,7 +24,7 @@ to `https://www.tvmaze.com`.
 The bundle SHALL declare `anilist-series` (class `episode`) and `anilist-movie` (class `movie`)
 scrapers that search and look up anime through AniList's GraphQL API, present the operator's
 `anilist-access-token` as a bearer token, are omitted when that credential is unset and space
-their requests at least 2 s apart.
+their requests so that both together send at most 30 per minute, AniList's current limit.
 
 #### Scenario: No token
 

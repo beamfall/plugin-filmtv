@@ -73,7 +73,9 @@ func TestTVmazeTermsAreHonored(t *testing.T) {
 // TestAniListNeedsOperatorToken: AniList is reached with each operator's own
 // access token, so without one the scrapers are omitted and send nothing; its
 // current limit is 30 requests per minute (docs.anilist.co, read 2026-11-14).
+// Core spaces requests per scraper ID, so the two scrapers' rates add up.
 func TestAniListNeedsOperatorToken(t *testing.T) {
+	perMinute := 0
 	for id, class := range map[string]string{"anilist-series": "episode", "anilist-movie": "movie"} {
 		scraper := scraperByID(t, id)
 		if scraper.AuthRef != "anilist-access-token" {
@@ -85,12 +87,16 @@ func TestAniListNeedsOperatorToken(t *testing.T) {
 		if scraper.AuthStyle != "" && scraper.AuthStyle != "bearer" {
 			t.Errorf("%s AuthStyle = %q, want bearer", id, scraper.AuthStyle)
 		}
-		if scraper.MinRequestIntervalMS < 2000 {
-			t.Errorf("%s MinRequestIntervalMS = %d, want at least 2000", id, scraper.MinRequestIntervalMS)
+		if scraper.MinRequestIntervalMS <= 0 {
+			t.Fatalf("%s declares no request spacing", id)
 		}
+		perMinute += 60000 / scraper.MinRequestIntervalMS
 		if got := scraper.ImpliedMediaFields["media.class"]; got != class {
 			t.Errorf("%s implies class %q, want %q", id, got, class)
 		}
+	}
+	if perMinute > 30 {
+		t.Errorf("AniList scrapers together allow %d requests per minute, want at most 30", perMinute)
 	}
 }
 
