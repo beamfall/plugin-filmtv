@@ -622,6 +622,93 @@ func Bundle() sdk.Bundle {
 				// Series-shaped, like tmdb-tv: the file is an episode.
 				ImpliedMediaFields: map[string]string{"media.class": "episode"},
 			},
+			// TVmaze needs no key or account (tvmaze.com/api, read
+			// 2026-11-14). Its search response is a bare JSON array, which
+			// the SDK refuses as a candidates path, so this scraper has no
+			// free-text search yet: it looks a show up by its TVmaze id, and
+			// declares lookups for TheTVDB and IMDb ids. Summaries are HTML
+			// and stay unmapped until the transform vocabulary can strip it.
+			{
+				ID:          "tvmaze-show",
+				DisplayName: sdk.L("TVmaze"),
+				Attribution: tvmazeAttribution,
+				Kind:        "http-json",
+				Endpoint:    "https://api.tvmaze.com",
+				// GET /shows/{id}?embed=episodes — the show document with its
+				// episode list under _embedded.episodes (the list the
+				// absolute-episode mapper reads, see absolute.go).
+				LookupTemplate: "/shows/{id}?embed=episodes",
+				// /lookup/shows answers with a same-origin redirect to the
+				// show document, which the engine follows.
+				LookupByIDTemplate: map[string]string{
+					"tvdb": "/lookup/shows?thetvdb={id}",
+					"imdb": "/lookup/shows?imdb={id}",
+				},
+				FieldMap: map[string]string{
+					"title": "name",
+					// premiered is "YYYY-MM-DD" → year transform below.
+					"year":           "premiered",
+					"media.air-date": "premiered",
+					"media.network":  "network.name",
+				},
+				Transforms: map[string]string{"year": "year-from-date"},
+				ArtworkMap: map[string]string{
+					// image.original is an absolute static.tvmaze.com URL.
+					"poster": "image.original",
+				},
+				ImpliedMediaFields: map[string]string{"media.class": "episode"},
+				// genres is a plain string array: each element is the name.
+				EntityMaps: []sdk.EntityMap{
+					{Kind: "genre", Relation: "genre-of", Path: "genres", NamePath: ""},
+				},
+				// TVmaze allows at least 20 calls per 10 s per address.
+				MinRequestIntervalMS: tvmazeRequestIntervalMS,
+			},
+			// AniList (docs.anilist.co terms of use and rate limiting, read
+			// 2026-11-14) is reached with each operator's own access token,
+			// so the operator is the API user. Without a token both scrapers
+			// are left out and send nothing. AniList splits anime into one
+			// entry per season or film, so the series and movie scrapers
+			// mirror the TMDB split by format. Descriptions are HTML and
+			// stay unmapped, like TVmaze's.
+			{
+				ID:                   "anilist-series",
+				DisplayName:          sdk.L("AniList (Series)"),
+				Kind:                 "http-graphql",
+				Endpoint:             "https://graphql.anilist.co",
+				AuthRef:              anilistTokenRef,
+				OptionalAuth:         true,
+				SearchTemplate:       anilistSearchQuery("TV, TV_SHORT, ONA, OVA, SPECIAL"),
+				CandidatesPath:       "Page.media",
+				CandidateIDPath:      "id",
+				LookupTemplate:       anilistLookupQuery,
+				FieldMap:             anilistFieldMap,
+				ArtworkMap:           anilistArtworkMap,
+				SearchFieldMap:       anilistSearchFieldMap,
+				SearchArtworkMap:     anilistSearchArtworkMap,
+				ImpliedMediaFields:   map[string]string{"media.class": "episode"},
+				EntityMaps:           anilistEntityMaps,
+				MinRequestIntervalMS: anilistRequestIntervalMS,
+			},
+			{
+				ID:                   "anilist-movie",
+				DisplayName:          sdk.L("AniList (Movies)"),
+				Kind:                 "http-graphql",
+				Endpoint:             "https://graphql.anilist.co",
+				AuthRef:              anilistTokenRef,
+				OptionalAuth:         true,
+				SearchTemplate:       anilistSearchQuery("MOVIE"),
+				CandidatesPath:       "Page.media",
+				CandidateIDPath:      "id",
+				LookupTemplate:       anilistLookupQuery,
+				FieldMap:             anilistFieldMap,
+				ArtworkMap:           anilistArtworkMap,
+				SearchFieldMap:       anilistSearchFieldMap,
+				SearchArtworkMap:     anilistSearchArtworkMap,
+				ImpliedMediaFields:   map[string]string{"media.class": "movie"},
+				EntityMaps:           anilistEntityMaps,
+				MinRequestIntervalMS: anilistRequestIntervalMS,
+			},
 		},
 		// The three Library family scopes this plugin offers:
 		// one plugin, three Library "types". A manager picks one at creation;
@@ -717,5 +804,61 @@ var (
 	tvdbAttribution = &sdk.Attribution{
 		Text: sdk.L("Metadata provided by TheTVDB. Please consider adding missing information or subscribing."),
 		URL:  "https://www.thetvdb.com",
+	}
+)
+
+// TVmaze licenses its data CC BY-SA 4.0 and asks for a credit that links back
+// (tvmaze.com/api#licensing, read 2026-11-14).
+var tvmazeAttribution = &sdk.Attribution{
+	Text: sdk.L("TV data provided by TVmaze, licensed CC BY-SA 4.0."),
+	URL:  "https://www.tvmaze.com",
+}
+
+// Request spacing inside each source's published limit: TVmaze allows at least
+// 20 calls per 10 s per address; AniList allows 90 per minute, currently
+// lowered to 30.
+const (
+	tvmazeRequestIntervalMS  = 500
+	anilistRequestIntervalMS = 2000
+)
+
+// anilistTokenRef names the operator's own AniList access token.
+const anilistTokenRef = "anilist-access-token"
+
+// anilistSearchQuery is the GraphQL search body for one set of AniList media
+// formats. The engine escapes the substituted {query} as a string value.
+func anilistSearchQuery(formats string) string {
+	return `query { Page(perPage: 10) { media(search: "{query}", type: ANIME, format_in: [` + formats + `]) ` +
+		`{ id title { romaji } startDate { year } coverImage { extraLarge } popularity } } }`
+}
+
+// anilistLookupQuery fetches one AniList entry; the response's data object is
+// the lookup document, so every lookup path starts at Media.
+const anilistLookupQuery = `query { Media(id: {id}, type: ANIME) { id title { romaji native } ` +
+	`startDate { year } coverImage { extraLarge } bannerImage popularity genres ` +
+	`studios(isMain: true) { nodes { name } } } }`
+
+var (
+	anilistFieldMap = map[string]string{
+		"title":                "Media.title.romaji",
+		"year":                 "Media.startDate.year",
+		"popularity":           "Media.popularity",
+		"media.original-title": "Media.title.native",
+	}
+	anilistArtworkMap = map[string]string{
+		"poster":   "Media.coverImage.extraLarge",
+		"backdrop": "Media.bannerImage",
+	}
+	anilistSearchFieldMap = map[string]string{
+		"title":      "title.romaji",
+		"year":       "startDate.year",
+		"popularity": "popularity",
+	}
+	anilistSearchArtworkMap = map[string]string{
+		"poster": "coverImage.extraLarge",
+	}
+	anilistEntityMaps = []sdk.EntityMap{
+		{Kind: "genre", Relation: "genre-of", Path: "Media.genres", NamePath: ""},
+		{Kind: "studio", Relation: "produced", Path: "Media.studios.nodes", NamePath: "name"},
 	}
 )
