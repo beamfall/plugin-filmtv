@@ -104,7 +104,10 @@ func (p *Parser) MediaTitle(path string, _ sdk.ParseProbe) string {
 }
 
 // episodeCode is an episode's short display code: its ISO air date when it is
-// a dated episode, otherwise SxxEyy with a "-zz" range end.
+// a dated episode, otherwise SxxEyy with a "-zz" range end. Numbers are padded
+// to two digits, the common naming, so a season past episode 99 ("E100") sorts
+// ahead of "E11" by title; ordered season lists use the season relation's
+// numeric sort order instead.
 func episodeCode(name nameParse) string {
 	if !name.airDate.IsZero() {
 		return name.airDate.Format(time.DateOnly)

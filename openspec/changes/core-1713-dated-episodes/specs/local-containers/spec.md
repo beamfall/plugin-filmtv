@@ -38,7 +38,8 @@ episode code, followed by ` · ` and the episode title when the name carries one
 the ISO air date for a dated episode, otherwise `S` and the two-digit season, `E` and the two-digit
 episode, and for a range `-` and the two-digit last episode. For anything else it SHALL return the
 empty string, so Core keeps the parsed title. Because the code is zero-padded and the date is ISO,
-ordering a series' episodes by display title orders them by season and episode or by air date.
+ordering a series' episodes by display title orders them by season and episode (up to episode 99)
+or by air date.
 
 #### Scenario: Episode with a title
 
