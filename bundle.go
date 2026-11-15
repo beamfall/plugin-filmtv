@@ -284,6 +284,15 @@ func Bundle() sdk.Bundle {
 				{ID: "next-up", Kind: "shelf",
 					Title:       sdk.LocaleString{"en": "Next Up", "fr": "À suivre"},
 					ArtworkSlot: "poster", Source: sdk.SourceSpec{Kind: "next-up"}},
+				// Shows, local or matched: one card per show Entity of this
+				// Library, ahead of the per-episode "recently-added" shelf, so
+				// a TV Library's first catalog row is the shows people follow
+				// (CORE-1786). A show opens on its seasons; See All lists every
+				// show. No other home Section reads this Source.
+				{ID: "browse-shows", Kind: "shelf",
+					Title:       sdk.LocaleString{"en": "Shows", "fr": "Séries"},
+					ArtworkSlot: "poster",
+					Source:      sdk.SourceSpec{Kind: "entity-items", EntityKind: "show"}},
 				{ID: "recently-added", Kind: "shelf",
 					Title:       sdk.LocaleString{"en": "New Movies & Episodes", "fr": "Nouveaux films et épisodes"},
 					ArtworkSlot: "poster", Source: sdk.SourceSpec{Kind: "recently-added"}},
@@ -303,12 +312,6 @@ func Bundle() sdk.Bundle {
 					ArtworkSlot: "poster",
 					Source: sdk.SourceSpec{Kind: "all-items",
 						FieldFilters: map[string]any{"class": "movie"}}},
-				// Shows, local or matched: the show Entities of this
-				// Library. A show opens on its seasons.
-				{ID: "browse-shows", Kind: "grid",
-					Title:       sdk.LocaleString{"en": "Shows", "fr": "Séries"},
-					ArtworkSlot: "poster",
-					Source:      sdk.SourceSpec{Kind: "entity-items", EntityKind: "show"}},
 				{ID: "browse-episodes", Kind: "grid",
 					Title:       sdk.LocaleString{"en": "Episodes", "fr": "Épisodes"},
 					ArtworkSlot: "poster",

@@ -375,3 +375,34 @@ func TestTVDBNeedsSubscriberPIN(t *testing.T) {
 	}
 	t.Fatal("scraper tvdb-series not found")
 }
+
+// TestHomeLeadsWithShowsShelf pins that the home layout's first catalog shelf
+// after Continue Watching and Next Up is the show Entities, one card per
+// show, ahead of the per-episode recently-added shelf (CORE-1786).
+func TestHomeLeadsWithShowsShelf(t *testing.T) {
+	var home *sdk.LayoutSpec
+	layouts := filmtv.Bundle().Layouts
+	for i := range layouts {
+		if layouts[i].ID == "home" {
+			home = &layouts[i]
+		}
+	}
+	if home == nil {
+		t.Fatal("no home layout")
+	}
+	index := map[string]int{}
+	for i, section := range home.Sections {
+		index[section.ID] = i
+	}
+	shows, ok := index["browse-shows"]
+	if !ok {
+		t.Fatal("home layout has no browse-shows section")
+	}
+	section := home.Sections[shows]
+	if section.Kind != "shelf" || section.Source.Kind != "entity-items" || section.Source.EntityKind != "show" {
+		t.Fatalf("browse-shows = kind %q source %+v, want a shelf over entity-items of kind show", section.Kind, section.Source)
+	}
+	if shows != index["next-up"]+1 || shows >= index["recently-added"] {
+		t.Fatalf("browse-shows at %d, want directly after next-up (%d) and before recently-added (%d)", shows, index["next-up"], index["recently-added"])
+	}
+}
