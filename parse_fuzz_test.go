@@ -22,6 +22,8 @@ func FuzzParseFilename(f *testing.F) {
 		"[Group] - S01 E01 - .PROPER.mkv",
 		"Night Harbor (2004) - [Director's Cut].mkv",
 		"Night Harbor (2004) - 2160p HDR.mkv",
+		"Synthetic Daily 2023-03-01.mkv",
+		"Synthetic_Daily_2024_02_29 - Guest Night.mkv",
 		"",
 	} {
 		f.Add(seed)
@@ -76,8 +78,26 @@ func FuzzParseFilename(f *testing.F) {
 		if got.Year != 0 && (got.Year < 1900 || got.Year > 2099) {
 			t.Fatalf("Parse(%q) returned out-of-contract year %d", path, got.Year)
 		}
-		if got.Class == "episode" && got.Sequence == "" {
-			t.Fatalf("Parse(%q) returned an episode without a sequence: %+v", path, got)
+		typed := parser.ParseTypedMediaFields(path, sdk.ParseProbe{})
+		dated := false
+		for _, field := range typed {
+			switch {
+			case got.Class != "episode":
+				t.Fatalf("ParseTypedMediaFields(%q) = %+v for class %q", path, typed, got.Class)
+			case field.Name == AirDateField && !field.Date.IsZero() && field.Text == "":
+				dated = true
+			case field.Name != EpisodeTitleField || !field.Date.IsZero() || field.Text != cleanTitle(field.Text) || field.Text == "":
+				t.Fatalf("ParseTypedMediaFields(%q) returned an out-of-contract field %+v", path, field)
+			}
+		}
+		if dated && (got.Sequence != "" || got.Index != 0 || got.IndexEnd != 0) {
+			t.Fatalf("Parse(%q) returned ordinals for a dated episode: %+v", path, got)
+		}
+		if got.Class == "episode" && got.Sequence == "" && !dated {
+			t.Fatalf("Parse(%q) returned an episode without a sequence or an air date: %+v", path, got)
+		}
+		if title := parser.MediaTitle(path, sdk.ParseProbe{}); (title != "") != (got.Class == "episode") {
+			t.Fatalf("MediaTitle(%q) = %q for class %q", path, title, got.Class)
 		}
 		if got.Index < 0 || got.Index > 999 || got.IndexEnd < 0 || got.IndexEnd > 999 {
 			t.Fatalf("Parse(%q) returned an out-of-contract index: %+v", path, got)

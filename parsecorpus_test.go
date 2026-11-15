@@ -410,16 +410,15 @@ func parseCorpus() []parseCase {
 
 		// --- Documented parser gaps: pinned so a fix RAISES the auto-match-rate. ---
 
-		// Daily/date-stamped show: the AIR DATE (2024.01.15) is the real episode
-		// key, but the stdlib parser has no date-episode rule, so it reads the
-		// leading 2024 as a movie year and drops the day. Pinned as a movie parse
-		// with the date lost — a documented limitation, NOT an auto-match.
+		// Daily/date-stamped show: the AIR DATE (2024.01.15) is the episode key.
+		// It is an episode with no invented season/episode numbers; the date
+		// rides the air-date Media field (CORE-1713).
 		{
 			name:       "daily-show-date-stamped",
 			path:       "The.Daily.Show.2024.01.15.Guest.1080p.WEB.mkv",
 			wantOK:     true,
-			want:       sdk.ParsedMedia{Title: "The Daily Show", Class: "movie", Year: 2024},
-			resolvable: false,
+			want:       sdk.ParsedMedia{Title: "The Daily Show", Class: "episode"},
+			resolvable: true,
 		},
 		// Absolute-numbered anime with fansub group + resolution brackets: there
 		// is no SxxEyy/xXYY/year token, so only the bracketed resolution is cut
@@ -466,15 +465,15 @@ func parseCorpus() []parseCase {
 // against this reference corpus: at least this fraction of the corpus must parse
 // into a clean, auto-appliable ParsedMedia (correct title, class, and ordinals).
 //
-// The corpus holds 36 cases; 30 currently resolve cleanly, for an observed rate
-// of 0.83. The target sits at 0.80 — below the current rate so a single new
-// parser regression (dropping to 29/36 = 0.81) still passes but two (28/36 =
-// 0.78) reds this test, and ABOVE it enough that improving the documented gaps
-// (date-stamped shows, absolute-numbered anime) only ever moves the rate up.
-// It is deliberately not 1.0: six corpus cases are known parser limitations or
+// The corpus holds 36 cases; 31 currently resolve cleanly, for an observed rate
+// of 0.86. The target sits at 0.83 — below the current rate so a single new
+// parser regression (dropping to 30/36 = 0.833) still passes but two (29/36 =
+// 0.81) reds this test, and ABOVE it enough that improving the documented gaps
+// (absolute-numbered anime) only ever moves the rate up.
+// It is deliberately not 1.0: five corpus cases are known parser limitations or
 // genuinely unresolvable noise, so a 1.0 target would be dishonest. Raising this
 // floor is the acceptance signal for a future parser-coverage improvement.
-const ParseAutoMatchTarget = 0.80
+const ParseAutoMatchTarget = 0.83
 
 // TestParseCorpus is the per-case parser regression gate: every adversarial
 // fixture pins the parser's exact output (or documented refusal), so any change

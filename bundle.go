@@ -58,9 +58,9 @@ func Bundle() sdk.Bundle {
 			{Name: "original-title", Type: "text", Searchable: true,
 				Label: sdk.LocaleString{"en": "Original Title", "fr": "Titre original"}},
 			// An episode's own name ("Earthfall"), read from the filename by
-			// the parser (parse.go ParseMediaFields). An episode's Media title
-			// stays the series name, so this field is what tells two episodes
-			// of one series apart before a provider has identified them.
+			// the parser (parse.go ParseMediaFields). The parsed title stays the
+			// series name; the display title (local.go MediaTitle) carries the
+			// episode code and this name.
 			{Name: EpisodeTitleField, Type: "text", Searchable: true,
 				Label: sdk.LocaleString{"en": "Episode Title", "fr": "Titre de l'épisode"}},
 			// Set by Core's hydration seam once a file's local show and
@@ -76,10 +76,11 @@ func Bundle() sdk.Bundle {
 				Label: sdk.LocaleString{"en": "Rating", "fr": "Classification affichée"}},
 			// release-date vs air-date: a movie carries a
 			// theatrical release date, an episode/show an air date — kept
-			// as separate fields so neither is coerced into the other.
+			// as separate fields so neither is coerced into the other. The
+			// parser also fills air-date for a dated episode (AirDateField).
 			{Name: "release-date", Type: "date", Sortable: true,
 				Label: sdk.LocaleString{"en": "Release Date", "fr": "Date de sortie"}},
-			{Name: "air-date", Type: "date", Sortable: true,
+			{Name: AirDateField, Type: "date", Sortable: true,
 				Label: sdk.LocaleString{"en": "Air Date", "fr": "Date de diffusion"}},
 			// Production status: Returning/Ended/Canceled —
 			// display data written verbatim from TMDB's `status`.

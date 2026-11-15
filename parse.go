@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/beamfall/plugin-filmtv/internal/mediaimport"
@@ -43,6 +44,11 @@ var (
 	// One further XxYY token of a multi-episode shorthand range. Groups: the
 	// season, the episode.
 	reSeasonXChainLink = regexp.MustCompile(`^-(\d{1,2})x(\d{1,3})`)
+	// An air date naming a dated (daily) episode: YYYY-MM-DD, also with ".",
+	// "_" or " " separators, not inside a longer run of letters or digits
+	// (an underscore still separates it, unlike a \b boundary). Calendar-checked
+	// in code. Groups: year, month, day.
+	reAirDate = regexp.MustCompile(`(?:^|[^a-z0-9])((?:19|20)\d{2})[-._ ](\d{2})[-._ ](\d{2})(?:$|[^a-z0-9])`)
 	// A folder that holds one season of a series: the series name is then the
 	// folder above it.
 	reSeasonFolder = regexp.MustCompile(`^(?:(?:season|series)[ ._-]*\d{1,4}|s\d{1,2}|specials)$`)
@@ -71,6 +77,11 @@ type providerIDTag struct {
 // token. ParsedMedia.Title stays the series name: it is the provider search
 // query and the scorer's input.
 const EpisodeTitleField = "episode-title"
+
+// AirDateField is the declared date Media field that carries an episode's air
+// date. The parser fills it for a dated episode ("Show 2023-03-01.mkv");
+// identification fills it from the provider.
+const AirDateField = "air-date"
 
 // releaseNoise is the lower-cased set of release-name tokens that always mark
 // the end of a real title: sources, codecs and audio formats that are not
@@ -105,10 +116,11 @@ var releaseWords = map[string]bool{
 func (p *Parser) Parse(path string, probe sdk.ParseProbe) (sdk.ParsedMedia, bool) {
 	_ = probe // probe rides the seam for future parsers.
 
-	parsed, _, ok := parseName(path)
+	name, ok := parseName(path)
 	if !ok {
 		return sdk.ParsedMedia{}, false
 	}
+	parsed := name.parsed
 	parsed.ProviderIDs, parsed.HintSource = providerIDHints(path)
 	return parsed, true
 }
@@ -123,17 +135,43 @@ func (p *Parser) ParseWithContext(path string, probe sdk.ParseProbe, _ sdk.Parse
 // carries the episode's own title yields it as the EpisodeTitleField Media
 // field. It reads the path only, so it agrees with Parse on what is an episode.
 func (p *Parser) ParseMediaFields(path string, _ sdk.ParseProbe) []sdk.ParsedTextField {
-	parsed, episodeTitle, ok := parseName(path)
-	if !ok || parsed.Class != "episode" || episodeTitle == "" {
+	name, ok := parseName(path)
+	if !ok || name.parsed.Class != "episode" || name.episodeTitle == "" {
 		return nil
 	}
-	return []sdk.ParsedTextField{{Name: EpisodeTitleField, Text: episodeTitle}}
+	return []sdk.ParsedTextField{{Name: EpisodeTitleField, Text: name.episodeTitle}}
 }
 
-// parseName is the path-only parse shared by Parse and ParseMediaFields. It
-// returns the parsed fields (without provider hints) and, for an episode, the
-// episode's own title when the name carries one.
-func parseName(path string) (sdk.ParsedMedia, string, bool) {
+// ParseTypedMediaFields implements sdk.TypedMediaFieldParser, which Core
+// prefers over ParseMediaFields: the same EpisodeTitleField text plus, for a
+// dated episode, its air date as the AirDateField date.
+func (p *Parser) ParseTypedMediaFields(path string, _ sdk.ParseProbe) []sdk.ParsedField {
+	name, ok := parseName(path)
+	if !ok || name.parsed.Class != "episode" {
+		return nil
+	}
+	var fields []sdk.ParsedField
+	if name.episodeTitle != "" {
+		fields = append(fields, sdk.ParsedField{Name: EpisodeTitleField, Text: name.episodeTitle})
+	}
+	if !name.airDate.IsZero() {
+		fields = append(fields, sdk.ParsedField{Name: AirDateField, Date: name.airDate})
+	}
+	return fields
+}
+
+// nameParse is the path-only parse of one file name: the parsed fields
+// (without provider hints) and, for an episode, its own title when the name
+// carries one and its air date when it is a dated episode.
+type nameParse struct {
+	parsed       sdk.ParsedMedia
+	episodeTitle string
+	airDate      time.Time
+}
+
+// parseName is the path-only parse shared by Parse, the Media field parsers,
+// MediaTitle and LocalHydration.
+func parseName(path string) (nameParse, bool) {
 	base := filepath.Base(path)
 	name := strings.TrimSuffix(base, filepath.Ext(base))
 	name = removeProviderIDTags(name)
@@ -148,9 +186,11 @@ func parseName(path string) (sdk.ParsedMedia, string, bool) {
 	episodeCut := -1
 	if isEpisode {
 		parsed.Class = "episode"
-		parsed.Sequence = episode.sequence
-		parsed.Index = episode.index
-		parsed.IndexEnd = episode.indexEnd
+		if episode.airDate.IsZero() {
+			parsed.Sequence = episode.sequence
+			parsed.Index = episode.index
+			parsed.IndexEnd = episode.indexEnd
+		}
 		episodeCut = episode.start
 		cut = episodeCut
 	}
@@ -203,25 +243,31 @@ func parseName(path string) (sdk.ParsedMedia, string, bool) {
 
 	// Return ok only when a non-empty Title survived cleanup.
 	if parsed.Title == "" {
-		return sdk.ParsedMedia{}, "", false
+		return nameParse{}, false
 	}
 	if !isEpisode {
-		return parsed, "", true
+		return nameParse{parsed: parsed}, true
 	}
-	return parsed, episodeTitle(name[episode.end:], lower[episode.end:]), true
+	return nameParse{
+		parsed:       parsed,
+		episodeTitle: episodeTitle(name[episode.end:], lower[episode.end:]),
+		airDate:      episode.airDate,
+	}, true
 }
 
 // episodeToken is one recognised season/episode marker: its byte span in the
-// name and the ordinals it carries.
+// name and the ordinals it carries, or the air date of a dated episode (which
+// carries no ordinals).
 type episodeToken struct {
 	start, end      int
 	sequence        string
 	index, indexEnd int
+	airDate         time.Time
 }
 
 // findEpisode locates the season/episode marker in the ASCII-folded name. The
 // forms are tried in order of how unambiguous they are: SxxEyy, "season X
-// episode Y", then XxYY.
+// episode Y", then XxYY, then an air date.
 func findEpisode(lower string) (episodeToken, bool) {
 	if m := reSeasonEpisode.FindStringSubmatchIndex(lower); m != nil {
 		token := episodeToken{start: m[0], end: m[1], sequence: numericText(lower[m[2]:m[3]]), index: atoi(lower[m[4]:m[5]])}
@@ -239,6 +285,19 @@ func findEpisode(lower string) (episodeToken, bool) {
 		token.end = end
 		token.indexEnd = rangeEnd(token.index, last)
 		return token, true
+	}
+	return findAirDate(lower)
+}
+
+// findAirDate locates the first calendar-valid air date in the ASCII-folded
+// name. A date-shaped token that is no real day ("2023-02-30") is skipped.
+func findAirDate(lower string) (episodeToken, bool) {
+	for _, m := range reAirDate.FindAllStringSubmatchIndex(lower, -1) {
+		year, month, day := atoi(lower[m[2]:m[3]]), atoi(lower[m[4]:m[5]]), atoi(lower[m[6]:m[7]])
+		date := time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.UTC)
+		if date.Year() == year && int(date.Month()) == month && date.Day() == day {
+			return episodeToken{start: m[2], end: m[7], airDate: date}, true
+		}
 	}
 	return episodeToken{}, false
 }

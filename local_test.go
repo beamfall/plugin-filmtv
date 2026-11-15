@@ -40,14 +40,15 @@ func TestLocalHydration(t *testing.T) {
 
 // TestMediaTitleKeepsParsedSeriesTitle pins the split between the display
 // title and the parsed title: the parsed title stays the series name (the
-// provider search query) while MediaTitle carries the episode's own title.
+// provider search query) while MediaTitle carries the episode's code and its
+// own title.
 func TestMediaTitleKeepsParsedSeriesTitle(t *testing.T) {
 	p := &filmtv.Parser{}
 	cases := []struct {
 		path, wantTitle, wantParsed string
 	}{
-		{"/media/TV/Pioneer One/Season 01/Pioneer One - S01E01 - Earthfall.mkv", "Earthfall", "Pioneer One"},
-		{"/media/TV/Pioneer One/Season 01/Pioneer.One.S01E01.1080p.mkv", "", "Pioneer One"},
+		{"/media/TV/Pioneer One/Season 01/Pioneer One - S01E01 - Earthfall.mkv", "S01E01 · Earthfall", "Pioneer One"},
+		{"/media/TV/Pioneer One/Season 01/Pioneer.One.S01E01.1080p.mkv", "S01E01", "Pioneer One"},
 		{"/media/Movies/Sintel (2010)/Sintel (2010).mkv", "", "Sintel"},
 	}
 	for _, tc := range cases {
