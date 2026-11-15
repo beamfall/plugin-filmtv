@@ -54,7 +54,7 @@ func TestProviderIDLookupTemplates(t *testing.T) {
 	want := map[string]map[string]string{
 		"tmdb-movie":  {"tmdb": "/movie/{id}?append_to_response=credits"},
 		"tmdb-tv":     {"tmdb": "/tv/{id}?append_to_response=credits"},
-		"tvdb-series": {"tvdb": "/series/{id}"},
+		"tvdb-series": {"tvdb": "/series/{id}/extended?meta=translations", "imdb": "/search/remoteid/{id}", "tmdb": "/search/remoteid/{id}"},
 		"tvmaze-show": {"tvdb": "/lookup/shows?thetvdb={id}", "imdb": "/lookup/shows?imdb={id}"},
 	}
 	for _, scraper := range filmtv.Bundle().Scrapers {

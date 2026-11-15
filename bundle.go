@@ -381,6 +381,13 @@ func Bundle() sdk.Bundle {
 						Source: sdk.SourceSpec{Kind: "entity-media"}},
 				}},
 		},
+		// TheTVDB returns a series' name and overview in its original
+		// language; tvdb-series reads the translation in this language and
+		// falls back to the original (CORE-1128). TheTVDB language codes are
+		// three-letter ISO 639-2 ("eng", "fra", "spa").
+		ConfigFields: []sdk.ConfigFieldSpec{
+			{Name: "metadata-language", Type: "text", Label: sdk.L("TheTVDB metadata language (ISO 639-2 code)"), Default: "eng"},
+		},
 		// TMDB is the primary source and works out of the box: official
 		// builds carry Beamfall's own key for the AuthRef, and an operator
 		// key saved in the Console replaces it. The plugin itself never
@@ -571,6 +578,13 @@ func Bundle() sdk.Bundle {
 				// no TheTVDB. The project key rides beside it — Beamfall's
 				// bundled one in official builds, or the operator's own.
 				AuthRef: "tvdb-subscriber-pin",
+				// The Console and setup label the AuthRef field as the PIN it
+				// is and link to the subscription page (CORE-1127).
+				CredentialHelp: &sdk.CredentialHelp{
+					Label:     sdk.L("TheTVDB subscriber PIN"),
+					HelpURL:   "https://www.thetvdb.com/subscribe",
+					HelpLabel: sdk.L("Subscribe at thetvdb.com"),
+				},
 				// TVDB v4 auth: POST /login {"apikey": <key>, "pin": <PIN>} →
 				// {"data": {"token": <JWT>}}, then Bearer — pure data.
 				AuthStyle: "login-bearer",
@@ -580,30 +594,57 @@ func Bundle() sdk.Bundle {
 					SecretFields: map[string]string{"apikey": "tvdb-api-key"},
 					TokenPath:    "data.token",
 				},
-				// GET /search?query=…&type=series — {"status": "success",
+				// GET /search?query=…&type=series&year=… — {"status": "success",
 				// "data": [{objectID, tvdb_id, name, overview, year,
 				// image_url, …}, …]}: flat elements, no per-item envelope.
-				SearchTemplate: "/search?query={query}&type=series",
+				// year narrows same-titled series; the host drops it when the
+				// file carries no year (v4 swagger 4.8.0, CORE-1128).
+				SearchTemplate: "/search?query={query}&type=series&year={year}",
 				CandidatesPath: "data",
 				// tvdb_id is the bare numeric id ("121361") that /series/{id}
 				// takes; the element's `id` is the prefixed objectID form
 				// ("series-121361") and cannot feed the lookup.
 				CandidateIDPath: "tvdb_id",
-				// GET /series/{id} — TVDB v4 wraps payloads in
-				// {"status": "success", "data": {...}}.
-				LookupTemplate: "/series/{id}",
+				// GET /series/{id}/extended?meta=translations — TVDB v4 wraps
+				// payloads in {"status": "success", "data": {...}}; the
+				// extended record adds translations and every artwork.
+				LookupTemplate: "/series/{id}/extended?meta=translations",
+				// IMDb and TMDB ids resolve through /search/remoteid/{id},
+				// which answers {"data": [{"series": {...}}]} with a base
+				// record (no overview, translations as language codes only),
+				// so it only yields the series id; the host then maps that
+				// series' extended record like any lookup.
 				LookupByIDTemplate: map[string]string{
-					"tvdb": "/series/{id}",
+					"tvdb": "/series/{id}/extended?meta=translations",
+					"imdb": "/search/remoteid/{id}",
+					"tmdb": "/search/remoteid/{id}",
+				},
+				// The tvdb id fetches the extended record itself.
+				LookupByIDRecordIDPaths: map[string]string{
+					"imdb": "data.0.series.id",
+					"tmdb": "data.0.series.id",
 				},
 				FieldMap: map[string]string{
-					"title":   "data.name",
-					"summary": "data.overview",
+					// The configured language's translation, else the
+					// record's original-language value.
+					"title":   "data.translations.nameTranslations[language={config.metadata-language}].name||data.name",
+					"summary": "data.translations.overviewTranslations[language={config.metadata-language}].overview||data.overview",
 					// TVDB v4 carries year as a plain string already.
 					"year": "data.year",
 				},
 				ArtworkMap: map[string]string{
-					// data.image is an absolute artworks.thetvdb.com URL.
+					// data.image is an absolute artworks.thetvdb.com URL and
+					// the best poster (v4 README), so it needs no artwork call.
 					"poster": "data.image",
+					// Extra artwork by type id, read from /artwork/types at
+					// run time rather than hard-coded.
+					"backdrop": tvdbArtwork("background"),
+					"banner":   tvdbArtwork("banner"),
+					"logo":     tvdbArtwork("clearlogo"),
+				},
+				// /artwork/types is static; the host caches it for a week.
+				ReferenceDocuments: map[string]sdk.ReferenceDocument{
+					"artwork-types": {Path: "/artwork/types"},
 				},
 				// The search elements are flat — per-template maps carry the
 				// divergent shape (top-level keys, image_url for art).
@@ -788,6 +829,12 @@ func Bundle() sdk.Bundle {
 			},
 		},
 	}
+}
+
+// tvdbArtwork maps one TheTVDB series artwork type, by slug, to the image
+// of the first extended-record artwork of that type.
+func tvdbArtwork(slug string) string {
+	return "data.artworks[type={ref.artwork-types:data[slug=" + slug + ",recordType=series].id}].image"
 }
 
 // The credits TMDB and TheTVDB require wherever their metadata is shown
