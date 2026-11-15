@@ -107,18 +107,16 @@ func scrobbleTargetHint(spec *sdk.ScrobbleTargetSpec, value string) (scrobble.Ta
 }
 
 // TestMETAPARITY16 pins three incumbent-parity declarations: the network
-// browse facet, the episode-still artwork slot, and the guest-star credit
+// Media field, the episode-still artwork slot, and the guest-star credit
 // scoped to Episode Media.
 func TestMETAPARITY16(t *testing.T) {
 	b := filmtv.Bundle()
 
-	// 1. Network browse facet: a "network" text Media field feeds a
-	//    home filter-bar option, hydrated by the tmdb-tv scraper.
+	// 1. Network field: a "network" text Media field hydrated by the
+	//    tmdb-tv scraper. The filter-bar declares no fixed network
+	//    options (TestFilterBarDeclaresNoFixedNetworkOptions).
 	if _, ok := mediaFieldType(b, "network"); !ok {
-		t.Errorf("no `network` media field declared for the browse facet")
-	}
-	if !filterBarHasField(b, "network") {
-		t.Errorf("home filter-bar declares no `network` browse-facet option")
+		t.Errorf("no `network` media field declared")
 	}
 	if tmdbTVFieldMap(b)["media.network"] == "" {
 		t.Errorf("tmdb-tv scraper does not map media.network")
@@ -146,17 +144,21 @@ func mediaFieldType(b sdk.Bundle, name string) (string, bool) {
 	return "", false
 }
 
-func filterBarHasField(b sdk.Bundle, field string) bool {
-	for _, l := range b.Layouts {
+// TestFilterBarDeclaresNoFixedNetworkOptions pins CORE-1711: filter-bar
+// options are fixed field/value pairs, so a declared network or studio
+// value narrows a Library without it to an empty grid. Only the closed
+// `class` vocabulary may be declared.
+func TestFilterBarDeclaresNoFixedNetworkOptions(t *testing.T) {
+	for _, l := range filmtv.Bundle().Layouts {
 		for _, s := range l.Sections {
 			for _, o := range s.FilterOptions {
-				if o.Field == field {
-					return true
+				if o.Field != "class" {
+					t.Errorf("layout %q section %q declares fixed %q option %q; only `class` options may be declared",
+						l.ID, s.ID, o.Field, o.Value)
 				}
 			}
 		}
 	}
-	return false
 }
 
 func personRelationToMedia(b sdk.Bundle, name string) bool {

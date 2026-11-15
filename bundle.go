@@ -88,10 +88,10 @@ func Bundle() sdk.Bundle {
 			// Network (the network side of the Studio Kind's
 			// production-company-vs-network distinction). TMDB TV carries a
 			// series' originating networks separately from its production
-			// companies; the primary network name lands here so the home
-			// filter-bar can offer a network browse facet keyed on the
-			// `class`-neutral Media field. Movies carry no network — the
-			// field stays absent there, keeping the facet TV-scoped.
+			// companies; the primary network name lands here as a
+			// filterable, `class`-neutral Media field. The home filter-bar
+			// declares no fixed network options (CORE-1711). Movies carry
+			// no network — the field stays absent there.
 			{Name: "network", Type: "text", Filterable: true,
 				Label: sdk.LocaleString{"en": "Network", "fr": "Chaîne"}},
 		},
@@ -326,18 +326,11 @@ func Bundle() sdk.Bundle {
 							Label: sdk.LocaleString{"en": "Movies", "fr": "Films"}},
 						{Field: "class", Value: "episode",
 							Label: sdk.LocaleString{"en": "Episodes", "fr": "Épisodes"}},
-						// The network browse facet (the network side of the
-						// Studio distinction): the same filter-bar mechanism
-						// narrows the adjacent grid to a broadcast network's
-						// Media. Networks are plugin data hydrated verbatim by
-						// the tmdb-tv scraper's media.network mapping below — the
-						// built-in options are the major US networks TMDB names
-						// untranslated; more are a curation pass, not new
-						// vocabulary.
-						{Field: "network", Value: "HBO",
-							Label: sdk.L("HBO")},
-						{Field: "network", Value: "Netflix",
-							Label: sdk.L("Netflix")},
+						// No network or studio chips: a filter-bar option is a
+						// fixed field/value pair, and fixed network names would
+						// narrow a Library without them to an empty grid. Network
+						// chips return when Core can derive options from the
+						// values present in the Library (CORE-1711).
 					}},
 				// "all-items" here carries no FieldFilters, so it returns
 				// every Media row — movie
@@ -518,11 +511,10 @@ func Bundle() sdk.Bundle {
 					"media.tagline":           "tagline",
 					"media.air-date":          "first_air_date",
 					"media.production-status": "status",
-					// Network browse facet: the series' primary
-					// originating network name — TMDB's networks[] is the
-					// network side of the Studio distinction, separate from
-					// production_companies. The first element is the primary
-					// network the home filter-bar facet keys on.
+					// The series' primary originating network name —
+					// TMDB's networks[] is the network side of the Studio
+					// distinction, separate from production_companies. The
+					// first element is the primary network.
 					"media.network": "networks.0.name",
 				},
 				Transforms:     map[string]string{"year": "year-from-date"},
