@@ -74,9 +74,13 @@ func TestTVDBFollowsTheV4API(t *testing.T) {
 			t.Errorf("ArtworkMap[%s] = %q, want the %s type id from /artwork/types", slot, path, slug)
 		}
 	}
-	if scraper.LookupByIDRecordIDPath != "data.0.series.id" || scraper.LookupByIDTemplate["imdb"] != "/search/remoteid/{id}" {
-		t.Errorf("remote-id lookup = %q via %q, want /search/remoteid resolving data.0.series.id to the extended record",
-			scraper.LookupByIDTemplate["imdb"], scraper.LookupByIDRecordIDPath)
+	for provider, want := range map[string]string{"imdb": "data.0.series.id", "tmdb": "data.0.series.id", "tvdb": ""} {
+		if got := scraper.LookupByIDRecordIDPaths[provider]; got != want {
+			t.Errorf("LookupByIDRecordIDPaths[%s] = %q, want %q (remote ids resolve to the extended record; tvdb ids fetch it directly)", provider, got, want)
+		}
+	}
+	if scraper.LookupByIDTemplate["imdb"] != "/search/remoteid/{id}" || scraper.LookupByIDTemplate["tvdb"] != scraper.LookupTemplate {
+		t.Errorf("LookupByIDTemplate = %#v, want remote ids via /search/remoteid and tvdb via the extended record", scraper.LookupByIDTemplate)
 	}
 	for field, path := range scraper.FieldMap {
 		if strings.Contains(path, "series.") {

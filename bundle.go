@@ -614,7 +614,11 @@ func Bundle() sdk.Bundle {
 					"imdb": "/search/remoteid/{id}",
 					"tmdb": "/search/remoteid/{id}",
 				},
-				LookupByIDRecordIDPath: "data.0.series.id",
+				// The tvdb id fetches the extended record itself.
+				LookupByIDRecordIDPaths: map[string]string{
+					"imdb": "data.0.series.id",
+					"tmdb": "data.0.series.id",
+				},
 				FieldMap: map[string]string{
 					// The configured language's translation, else the
 					// record's original-language value.

@@ -23,8 +23,9 @@ supersedes CORE-1127's optional-PIN shape, so CORE-1127 here is presentation onl
   and fall back to the original-language base value.
 - **Remote IDs.** `LookupByIDTemplate` maps `imdb` and `tmdb` to `/search/remoteid/{id}`. Its
   `SeriesBaseRecord` has no overview and lists translations only as language codes, so
-  `LookupByIDRecordIDPath` (`data.0.series.id`) makes it resolve only the series id, and the host
-  maps that series' extended record exactly like a search match.
+  `LookupByIDRecordIDPaths` (`data.0.series.id` for `imdb` and `tmdb`) makes it resolve only the
+  series id, and the host maps that series' extended record exactly like a search match. The `tvdb`
+  id has no entry: its template fetches the extended record directly.
 - **Artwork.** Backdrop, banner and logo map from the extended record's artworks by type id, read
   from `/artwork/types` through the `artwork-types` reference document (cached for a week by the
   host) rather than hard-coded. The poster stays the base-record image, which the README names the
@@ -38,7 +39,7 @@ supersedes CORE-1127's optional-PIN shape, so CORE-1127 here is presentation onl
 
 ## Impact
 
-- Needs plugin-sdk v0.3.6 (`CredentialHelp`, `ReferenceDocuments`, `LookupByIDRecordIDPath`) and a core build with the
+- Needs plugin-sdk v0.3.6 (`CredentialHelp`, `ReferenceDocuments`, `LookupByIDRecordIDPaths`) and a core build with the
   CORE-1128 engine (`{year}`, multi-condition and `||` paths, `{ref.<name>:<path>}`). Core must land
   that engine before it repins to the filmtv release carrying this change.
 - `go.mod` names plugin-sdk v0.3.6, which is not tagged yet; `go.sum` gains its hash at the repin.
