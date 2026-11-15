@@ -115,10 +115,9 @@ func TestAnimeScraperTraces(t *testing.T) {
 				Requests: []sdktest.TraceRequest{{Role: "lookup", Method: "GET",
 					URL: "https://api.tvmaze.com/shows/82?embed=episodes"}},
 				Fields: map[string]string{
-					"title":          "Pioneer One",
-					"year":           "2010",
-					"media.air-date": "2010-01-01",
-					"media.network":  "Example Network",
+					"title":         "Pioneer One",
+					"year":          "2010",
+					"media.network": "Example Network",
 				},
 				Artwork: map[string]string{
 					"poster": "https://static.tvmaze.com/uploads/images/original_untouched/1/1.jpg",

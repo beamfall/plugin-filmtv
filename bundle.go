@@ -504,13 +504,14 @@ func Bundle() sdk.Bundle {
 					// persisted as Media metadata — a candidate-signal bare key).
 					"popularity": "popularity",
 					// Incumbent display fields. TV keys the
-					// original title off original_name and the date off
-					// first_air_date (the air-date field, not release-date);
-					// status is Returning Series/Ended/Canceled — the
-					// production-status values verbatim.
+					// original title off original_name; status is Returning
+					// Series/Ended/Canceled — the production-status values
+					// verbatim. first_air_date is the series premiere, not
+					// this episode's air date, so it is never mapped onto
+					// media.air-date: that would overwrite the parsed air
+					// date of a date-named episode (CORE-1713).
 					"media.original-title":    "original_name",
 					"media.tagline":           "tagline",
-					"media.air-date":          "first_air_date",
 					"media.production-status": "status",
 					// The series' primary originating network name —
 					// TMDB's networks[] is the network side of the Studio
@@ -639,10 +640,11 @@ func Bundle() sdk.Bundle {
 				},
 				FieldMap: map[string]string{
 					"title": "name",
-					// premiered is "YYYY-MM-DD" → year transform below.
-					"year":           "premiered",
-					"media.air-date": "premiered",
-					"media.network":  "network.name",
+					// premiered is "YYYY-MM-DD" → year transform below. It
+					// is the show's premiere, so like tmdb-tv it does not map
+					// onto the episode's media.air-date (CORE-1713).
+					"year":          "premiered",
+					"media.network": "network.name",
 				},
 				Transforms: map[string]string{"year": "year-from-date"},
 				ArtworkMap: map[string]string{

@@ -161,3 +161,18 @@ func TestAirDateFieldDeclaredAsDate(t *testing.T) {
 	}
 	t.Fatalf("bundle declares no %s Media field", filmtv.AirDateField)
 }
+
+// TestNoScraperOverwritesEpisodeAirDate: every TV scraper looks up the series,
+// whose premiere date is not an episode's air date, so identification never
+// writes media.air-date over the date parsed from a date-named episode.
+func TestNoScraperOverwritesEpisodeAirDate(t *testing.T) {
+	key := "media." + filmtv.AirDateField
+	for _, scraper := range filmtv.Bundle().Scrapers {
+		if path, ok := scraper.FieldMap[key]; ok {
+			t.Errorf("scraper %s maps %s from %q", scraper.ID, key, path)
+		}
+		if path, ok := scraper.SearchFieldMap[key]; ok {
+			t.Errorf("scraper %s search maps %s from %q", scraper.ID, key, path)
+		}
+	}
+}

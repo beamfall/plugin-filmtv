@@ -29,3 +29,9 @@ as the date Media field `air-date` through `ParseTypedMediaFields`, together wit
 
 - **WHEN** the file is `Synthetic Show S01E02 2023-03-01.mkv`
 - **THEN** the sequence is `1`, the index is 2 and no `air-date` is emitted
+
+#### Scenario: Identification keeps the parsed air date
+
+- **WHEN** a date-named episode is identified through a series scraper
+- **THEN** its `air-date` stays the parsed date, because no scraper maps the series premiere onto
+  `air-date`

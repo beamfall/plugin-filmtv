@@ -29,10 +29,15 @@ reuses that parse and only adds the date form and the display title.
   orders a show's episodes by season and episode, or by air date.
 - `LocalHydration` groups a dated episode under the season of its air year (`Season 2023`, number
   2023, Plex's convention for dated shows) ordered by month and day, and reports its `AirDate`.
+- The `tmdb-tv` and `tvmaze-show` scrapers stop mapping the series premiere date onto
+  `media.air-date`. Identification looks up the series, so that mapping wrote the premiere over
+  every episode's air date, including the date parsed from a date-named episode.
 
 ## Impact
 
-Plugin-only. Core already has the `MediaTitler` hook and the typed field parser seam. Core picks the
-behaviour up when it pins a plugin-filmtv release carrying this change (a core scan test proving it
-end to end lands with that repin). When CORE-1226's card subtitle lands, the episode code can move
+Core already has the `MediaTitler` hook and the typed field parser seam. Identification wrote the
+series name over the episode title; a companion core change (`core-1713-identify-keeps-parser-title`)
+makes identification keep a parser-owned display title. Core picks this behaviour up when it pins a
+plugin-filmtv release carrying this change (a core scan test proving it end to end lands with that
+repin). When CORE-1226's card subtitle lands, the episode code can move
 from the title to the subtitle.
