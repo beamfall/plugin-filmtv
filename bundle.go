@@ -605,25 +605,28 @@ func Bundle() sdk.Bundle {
 				// extended record adds translations and every artwork.
 				LookupTemplate: "/series/{id}/extended?meta=translations",
 				// IMDb and TMDB ids resolve through /search/remoteid/{id},
-				// which answers {"data": [{"series": {...}}]}; the maps below
-				// fall back to that shape.
+				// which answers {"data": [{"series": {...}}]} with a base
+				// record (no overview, translations as language codes only),
+				// so it only yields the series id; the host then maps that
+				// series' extended record like any lookup.
 				LookupByIDTemplate: map[string]string{
 					"tvdb": "/series/{id}/extended?meta=translations",
 					"imdb": "/search/remoteid/{id}",
 					"tmdb": "/search/remoteid/{id}",
 				},
+				LookupByIDRecordIDPath: "data.0.series.id",
 				FieldMap: map[string]string{
 					// The configured language's translation, else the
 					// record's original-language value.
-					"title":   "data.translations.nameTranslations[language={config.metadata-language}].name||data.name||data.0.series.name",
-					"summary": "data.translations.overviewTranslations[language={config.metadata-language}].overview||data.overview||data.0.series.overview",
+					"title":   "data.translations.nameTranslations[language={config.metadata-language}].name||data.name",
+					"summary": "data.translations.overviewTranslations[language={config.metadata-language}].overview||data.overview",
 					// TVDB v4 carries year as a plain string already.
-					"year": "data.year||data.0.series.year",
+					"year": "data.year",
 				},
 				ArtworkMap: map[string]string{
 					// data.image is an absolute artworks.thetvdb.com URL and
 					// the best poster (v4 README), so it needs no artwork call.
-					"poster": "data.image||data.0.series.image",
+					"poster": "data.image",
 					// Extra artwork by type id, read from /artwork/types at
 					// run time rather than hard-coded.
 					"backdrop": tvdbArtwork("background"),

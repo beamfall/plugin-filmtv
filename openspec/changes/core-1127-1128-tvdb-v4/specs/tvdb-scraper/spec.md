@@ -4,7 +4,7 @@
 
 The `tvdb-series` scraper SHALL search with the year when one is known, read the extended record
 with translations, map title and summary from the configured language with original-language
-fallback, resolve IMDb and TMDB ids through `/search/remoteid/{id}`, and map extra artwork by type
+fallback, resolve IMDb and TMDB ids through `/search/remoteid/{id}` to the series' extended record, and map extra artwork by type
 ids read from `/artwork/types`.
 
 #### Scenario: Same-titled series
@@ -16,6 +16,11 @@ ids read from `/artwork/types`.
 
 - **WHEN** the metadata language is `eng` and the record has an English translation
 - **THEN** the title and summary are the English ones, and the original-language values otherwise
+
+#### Scenario: IMDb id
+
+- **WHEN** a file carries an IMDb id
+- **THEN** `/search/remoteid/{id}` supplies the series id and the series' extended record is mapped
 
 #### Scenario: Artwork type ids
 

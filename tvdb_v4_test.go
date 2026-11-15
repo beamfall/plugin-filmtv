@@ -74,6 +74,15 @@ func TestTVDBFollowsTheV4API(t *testing.T) {
 			t.Errorf("ArtworkMap[%s] = %q, want the %s type id from /artwork/types", slot, path, slug)
 		}
 	}
+	if scraper.LookupByIDRecordIDPath != "data.0.series.id" || scraper.LookupByIDTemplate["imdb"] != "/search/remoteid/{id}" {
+		t.Errorf("remote-id lookup = %q via %q, want /search/remoteid resolving data.0.series.id to the extended record",
+			scraper.LookupByIDTemplate["imdb"], scraper.LookupByIDRecordIDPath)
+	}
+	for field, path := range scraper.FieldMap {
+		if strings.Contains(path, "series.") {
+			t.Errorf("FieldMap[%s] = %q still maps the remote-id base record", field, path)
+		}
+	}
 	if !strings.HasPrefix(scraper.ArtworkMap["poster"], "data.image") {
 		t.Errorf("poster = %q, want the base-record image", scraper.ArtworkMap["poster"])
 	}
