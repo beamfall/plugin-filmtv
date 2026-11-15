@@ -1,7 +1,9 @@
 package filmtv
 
 import (
+	"fmt"
 	"strconv"
+	"time"
 
 	sdk "github.com/beamfall/plugin-sdk"
 )
@@ -23,7 +25,10 @@ const (
 
 // LocalGrouping is the show and season a file belongs to, read from its path
 // alone. Episode is false for anything the parser does not classify as an
-// episode; the other fields are then empty.
+// episode; the other fields are then empty. A dated episode
+// ("Show 2023-03-01.mkv") sits in the season of its air year, its EpisodeIndex
+// is its month and day (MMDD) so one year's episodes order by date, and AirDate
+// is its ISO air date ("2023-03-01"); AirDate is empty for any other episode.
 type LocalGrouping struct {
 	Episode         bool
 	SeriesTitle     string
@@ -32,15 +37,29 @@ type LocalGrouping struct {
 	EpisodeIndex    int
 	EpisodeIndexEnd int
 	EpisodeTitle    string
+	AirDate         string
 }
 
 // LocalHydration reports the local show and season grouping of path. It reads
 // the path only, through the same parse as Parse, so the series title is the
 // one Core already stores as the parsed title.
 func LocalHydration(path string) LocalGrouping {
-	parsed, episodeTitle, ok := parseName(path)
-	if !ok || parsed.Class != "episode" {
+	name, ok := parseName(path)
+	if !ok || name.parsed.Class != "episode" {
 		return LocalGrouping{}
+	}
+	parsed := name.parsed
+	if !name.airDate.IsZero() {
+		year := name.airDate.Year()
+		return LocalGrouping{
+			Episode:      true,
+			SeriesTitle:  parsed.Title,
+			SeasonNumber: year,
+			SeasonTitle:  seasonTitle(year),
+			EpisodeIndex: int(name.airDate.Month())*100 + name.airDate.Day(),
+			EpisodeTitle: name.episodeTitle,
+			AirDate:      name.airDate.Format(time.DateOnly),
+		}
 	}
 	// The parser writes Sequence as plain decimal digits (numericText).
 	season := atoi(parsed.Sequence)
@@ -51,7 +70,7 @@ func LocalHydration(path string) LocalGrouping {
 		SeasonTitle:     seasonTitle(season),
 		EpisodeIndex:    parsed.Index,
 		EpisodeIndexEnd: parsed.IndexEnd,
-		EpisodeTitle:    episodeTitle,
+		EpisodeTitle:    name.episodeTitle,
 	}
 }
 
@@ -65,14 +84,37 @@ func seasonTitle(number int) string {
 }
 
 // MediaTitle implements Core's optional media-title hook: the title Core shows
-// for a file when it differs from the parsed title. An episode whose name
-// carries its own title shows that title; anything else returns "" and keeps
-// the parsed title. The parsed title stays the series name because it is the
-// provider search query and the scorer's input.
+// for a file (on every card and in the library landing) when it differs from
+// the parsed title. An episode shows its code, then " · " and its own title
+// when the name carries one: "S01E03 · Earthfall", "S01E03-04" for a range,
+// "2023-03-01" for a dated episode. The code is zero-padded and the date ISO,
+// so a title sort orders one series' episodes. Anything else returns "" and
+// keeps the parsed title. The parsed title stays the series name because it
+// is the provider search query and the scorer's input.
 func (p *Parser) MediaTitle(path string, _ sdk.ParseProbe) string {
-	parsed, episodeTitle, ok := parseName(path)
-	if !ok || parsed.Class != "episode" {
+	name, ok := parseName(path)
+	if !ok || name.parsed.Class != "episode" {
 		return ""
 	}
-	return episodeTitle
+	code := episodeCode(name)
+	if name.episodeTitle == "" {
+		return code
+	}
+	return code + " · " + name.episodeTitle
+}
+
+// episodeCode is an episode's short display code: its ISO air date when it is
+// a dated episode, otherwise SxxEyy with a "-zz" range end. Numbers are padded
+// to two digits, the common naming, so a season past episode 99 ("E100") sorts
+// ahead of "E11" by title; ordered season lists use the season relation's
+// numeric sort order instead.
+func episodeCode(name nameParse) string {
+	if !name.airDate.IsZero() {
+		return name.airDate.Format(time.DateOnly)
+	}
+	code := fmt.Sprintf("S%02dE%02d", atoi(name.parsed.Sequence), name.parsed.Index)
+	if name.parsed.IndexEnd > 0 {
+		code += fmt.Sprintf("-%02d", name.parsed.IndexEnd)
+	}
+	return code
 }
