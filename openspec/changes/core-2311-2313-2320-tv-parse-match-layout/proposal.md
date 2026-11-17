@@ -20,10 +20,11 @@ title lost 0.25, and every show-level candidate lost 0.05 more for carrying no e
 ## What Changes
 
 - The filename parser reads three more episode forms, each only with episode context (a season
-  folder, a show folder of the series' name, a TV or anime folder, or an anime group or checksum
-  bracket), and never for a camera clip stem such as `VID_0001`:
+  folder; a nearest TV or anime folder; a checksum bracket; a group bracket before ` - 001`; or a
+  show folder of the series' name, except for an `_0001` counter), never for a camera clip stem
+  such as `VID_0001` or `DJI_0001`, and never when the nearest library folder is a film folder:
   - a season-by-episode code with a bare `e` (`1e01-Yesterday's Jam`), never after a channel layout
-    (`DD5.1e01`);
+    (`DD5.1e01`); the code's own season stands, also in a season folder naming another;
   - a leading `season episode` number pair (`3 01 From Hell`), only inside a season folder whose
     number agrees, or in `Specials` as season 0;
   - an absolute episode number zero-padded to four digits (`Dealbreakers Talk Show 0001`), or to
@@ -32,9 +33,11 @@ title lost 0.25, and every show-level candidate lost 0.05 more for carrying no e
     grouping files it under its season folder, else Season 1, and its display code is `E01`.
 - A CRC32 checksum bracket (`[ABCD1234]`) is release noise. Image files are refused.
 - The match scorer removes apostrophes (`'`, `’`, `‘`, `ʼ`, backtick), joins a lone `s` to the word
-  before it (`Ocean_s_Eleven`), reads `&` as `and`, takes no episode penalty for a show-level
-  candidate, and scores an episode's series title equal but for a country qualifier
-  (`The Traitors UK` against `The Traitors`) 0.9 with no year needed.
+  before it (`Ocean_s_Eleven`), reads `&` as `and`, and takes only 0.01 off a show-level candidate,
+  so it auto-applies on an exact title but ranks below an agreeing episode candidate. A country
+  qualifier (`(US)` on the candidate, also bare `UK` on the parse) scores as exact when both carry
+  it; on one side only (`The Traitors UK` against `The Traitors`) it scores 0.9 and needs a year to
+  auto-apply, because the candidate carries no origin country to tell national versions apart.
 - `tvdb-series` declares its credential optional, so it is skipped without a PIN instead of listed
   as a missing key. This does not change matching: `tmdb-tv` comes first and already identified.
 - The home layout's `recently-added` and catch-all grid titles name no content class: "Recently
@@ -59,9 +62,9 @@ title lost 0.25, and every show-level candidate lost 0.05 more for carrying no e
 
 - Folder corroboration of a non-exact series title: the scorer sees no path, so softening the
   no-year penalty when the show folder names the series needs a `ParsedMedia` field in the SDK.
-- Region choice between same-title national versions: `Candidate` carries no origin country, and
-  Core breaks an exact score tie by popularity, so `The Office (UK)` against two `The Office`
-  candidates is decided by popularity in Core rather than failing closed.
+- Origin country: `Candidate` carries none and Core maps none from TMDB's `origin_country`, so a
+  one-sided country qualifier cannot auto-apply without a year (`The Traitors UK` stays in
+  Unmatched). Allowing it needs an SDK `Candidate` field and Core's candidate mapping.
 - The library kind: `ParseContext` carries none, so a TV library is inferred from folder names.
 
 ## Impact

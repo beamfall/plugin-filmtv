@@ -3,13 +3,24 @@
 ### Requirement: Episode context for weak episode forms
 
 The parser SHALL read a bare-e code or an absolute number only with episode context: a season
-folder, a parent folder named for the series, a `TV`, `TV Shows`, `Television`, `Shows`, `Series` or
-`Anime` folder above the file, or an anime group or CRC32 checksum bracket. A camera clip stem
-(`VID`, `IMG`, `DSC`, `MOV`, `GOPR`, `PXL` and similar) is never a series name.
+folder; else, unless the nearest library folder is a film one (`Movies`, `Films`), a nearest TV
+folder (`TV`, `Shows`, `Anime`…), a CRC32 bracket anywhere in the name, a group bracket before
+` - 001`, or a parent folder named for the series except for an `_0001` counter. A camera stem is
+never a series.
 
 #### Scenario: Camera clip
 
-- **WHEN** the file is `VID_0001.mp4` or `TV/PXL_0003.mp4`
+- **WHEN** the file is `VID_0001.mp4`, `TV/PXL_0003.mp4` or `Videos/DJI/DJI_0001.MP4`
+- **THEN** it is not read as an episode
+
+#### Scenario: Home video in its own folder
+
+- **WHEN** the file is `Home/Wedding/Wedding_0002.mp4`
+- **THEN** it is not read as an episode
+
+#### Scenario: Film folder below a TV folder
+
+- **WHEN** the file is `Media/TV/Movies/Bond - 007.mkv` or `Movies/[YTS] Agent 0011.mkv`
 - **THEN** it is not read as an episode
 
 #### Scenario: Film name ending on a number
@@ -21,14 +32,19 @@ folder, a parent folder named for the series, a `TV`, `TV Shows`, `Television`, 
 
 With episode context, the parser SHALL read `<season>e<episode>` (one or two season digits, two or
 three episode digits) at the start of the name or after a separator, not followed by a letter or
-digit and not after a channel layout such as `DD5.`. In a numbered season folder the season SHALL
-equal the folder's; in `Specials` it SHALL be 0. The rest SHALL be the `episode-title`.
+digit and not after a channel layout such as `DD5.`. The code's own season SHALL stand, also in a
+season folder naming another; in `Specials` it SHALL be 0. The rest SHALL be the `episode-title`.
 
 #### Scenario: Code before the episode title in a season folder
 
 - **WHEN** the file is `The IT Crowd/Season 1/1e01-Yesterday's Jam.mkv`
 - **THEN** the title is `The IT Crowd`, the class is `episode`, the sequence is `1`, the index is 1
   and `episode-title` is `Yesterday's Jam`
+
+#### Scenario: Season folder naming another season
+
+- **WHEN** the file is `TV/Show/Season 2/Show 1e01.mkv`
+- **THEN** the class is `episode`, the sequence is `1` and the index is 1
 
 #### Scenario: No episode context
 
@@ -89,7 +105,7 @@ title or precede ` - <episode-title>`.
 
 #### Scenario: Anime release
 
-- **WHEN** the file is `[Grp] Show - 001 [ABCD1234].mkv`
+- **WHEN** the file is `[Grp] Show - 001 [ABCD1234].mkv` or `Downloads/Show - 001 [ABCD1234].mkv`
 - **THEN** the title is `Show` and the index and the absolute ordinal are 1
 
 #### Scenario: Movie with a year

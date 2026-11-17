@@ -29,17 +29,25 @@ lone `s` joined to the word before it, and `&` read as `and`.
 
 ### Requirement: Show-level TV candidates auto-apply
 
-The scorer SHALL take no episode penalty for a candidate that carries neither season nor episode.
-For an episode, a series title equal to the candidate's but for a trailing country qualifier (`UK`,
-`US`, `(US)`) SHALL score 0.9 with no year needed; a candidate carrying the same qualifier SHALL
-score 1.0 and one carrying another SHALL not match.
+A candidate carrying neither season nor episode SHALL lose only 0.01, so an exact title still
+auto-applies but ranks below an agreeing episode candidate. A country qualifier is `(US)`-style on
+the candidate, and on the parse also bare all-caps (`UK`). The same qualifier on both SHALL score
+as exact; on one side only, the title scores 0.9 and SHALL NOT auto-apply without a year, because a
+candidate carries no origin country.
 
-#### Scenario: Country-qualified show
+#### Scenario: Show-level candidate
 
-- **WHEN** the parsed episode's series is `The Traitors UK` and the only candidate is `The Traitors`
-- **THEN** the score is 0.9 and the match auto-applies
+- **WHEN** the parsed episode's series is `Key and Peele` and the only candidate is `Key & Peele`
+- **THEN** the score is 0.99 and the match auto-applies
 
-#### Scenario: Two national versions under one title
+#### Scenario: Qualifier on one side only
 
-- **WHEN** the parsed series is `The Office (UK)` and two candidates are both titled `The Office`
-- **THEN** the two tie and neither auto-applies
+- **WHEN** the file is `The.Office.UK.S01E01.mkv` and the candidates are `The Office` (2001) and
+  `The Office` (2005), or the parse is `Shameless` and the candidates `Shameless (US)` and
+  `Shameless (UK)`
+- **THEN** neither candidate auto-applies
+
+#### Scenario: A word that looks like a country
+
+- **WHEN** the parsed series is `This Is` and the candidate is `This Is Us`
+- **THEN** `Us` is not read as a qualifier and the match does not auto-apply
