@@ -9,24 +9,34 @@ A tower QA pass on a real TV library found episodes filed as movies with raw fil
 (`1e01-Yesterday's Jam`, `3 01 From Hell`, `Dealbreakers Talk Show 0001`), every matched episode of
 a show titled with the show name and dated with the show's premiere year, scene names without
 apostrophes (`A Mothers Son`) failing to match the provider's `A Mother's Son`, TheTVDB shown as a
-required key although TV matches through TMDB, and a Films library showing rows titled
-"New Movies & Episodes" and "All Movies & Episodes".
+required key, and a Films library showing rows titled "New Movies & Episodes" and
+"All Movies & Episodes".
+
+The tower's unmatched queue showed why TV matched nothing (CORE-2311): about 1215 `tmdb-tv` rows
+were `below-threshold` with the right candidate. An episode name has no year, so any non-exact
+title lost 0.25, and every show-level candidate lost 0.05 more for carrying no episode numbers:
+`The Traitors UK` against `The Traitors` scored 0.55, `Key and Peele` against `Key & Peele` 0.367.
 
 ## What Changes
 
-- The filename parser reads three more episode forms:
-  - a season-by-episode code with a bare `e` (`1e01-Yesterday's Jam`), anywhere a season/episode
-    token may stand;
+- The filename parser reads three more episode forms, each only with episode context (a season
+  folder, a show folder of the series' name, a TV or anime folder, or an anime group or checksum
+  bracket), and never for a camera clip stem such as `VID_0001`:
+  - a season-by-episode code with a bare `e` (`1e01-Yesterday's Jam`), never after a channel layout
+    (`DD5.1e01`);
   - a leading `season episode` number pair (`3 01 From Hell`), only inside a season folder whose
-    number, when it has one, agrees;
-  - a trailing absolute episode number zero-padded to four digits (`Dealbreakers Talk Show 0001`),
-    or to three digits after ` - ` (`Naruto - 001`), when the name carries no other episode token
-    and no year. It carries an index but no season; the local
-    grouping files it under Season 1 and its display code is `E01`.
-- The match scorer compares titles with apostrophes removed instead of turned into word breaks, so
-  `A Mothers Son` and `A Mother's Son` are the same title.
-- `tvdb-series` declares its credential optional: TV matches through `tmdb-tv` and the built-in TMDB
-  key, and identification skips TheTVDB while its PIN is unset.
+    number agrees, or in `Specials` as season 0;
+  - an absolute episode number zero-padded to four digits (`Dealbreakers Talk Show 0001`), or to
+    three after ` - ` (`Naruto - 001`), ending the title or before ` - <episode title>`, when the
+    name carries no other episode token and no year. It carries an index but no season; the local
+    grouping files it under its season folder, else Season 1, and its display code is `E01`.
+- A CRC32 checksum bracket (`[ABCD1234]`) is release noise. Image files are refused.
+- The match scorer removes apostrophes (`'`, `’`, `‘`, `ʼ`, backtick), joins a lone `s` to the word
+  before it (`Ocean_s_Eleven`), reads `&` as `and`, takes no episode penalty for a show-level
+  candidate, and scores an episode's series title equal but for a country qualifier
+  (`The Traitors UK` against `The Traitors`) 0.9 with no year needed.
+- `tvdb-series` declares its credential optional, so it is skipped without a PIN instead of listed
+  as a missing key. This does not change matching: `tmdb-tv` comes first and already identified.
 - The home layout's `recently-added` and catch-all grid titles name no content class: "Recently
   Added" and "All Titles", so a Films or TV library is not labelled "Movies & Episodes".
 
@@ -46,6 +56,13 @@ required key although TV matches through TMDB, and a Films library showing rows 
   show Kind has no Media-targeted relation.
 - The order of the `recently-added` Source and the title of a detail page's related row are Core
   behaviour: `SourceSpec` and `SectionSpec` declare no sort or related-row title.
+
+- Folder corroboration of a non-exact series title: the scorer sees no path, so softening the
+  no-year penalty when the show folder names the series needs a `ParsedMedia` field in the SDK.
+- Region choice between same-title national versions: `Candidate` carries no origin country, and
+  Core breaks an exact score tie by popularity, so `The Office (UK)` against two `The Office`
+  candidates is decided by popularity in Core rather than failing closed.
+- The library kind: `ParseContext` carries none, so a TV library is inferred from folder names.
 
 ## Impact
 
