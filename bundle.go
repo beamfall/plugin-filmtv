@@ -100,6 +100,14 @@ func Bundle() sdk.Bundle {
 			"movie":   {"en": "Movie", "fr": "Film"},
 			"episode": {"en": "Episode", "fr": "Épisode"},
 		},
+		// How sibling Media differ on a card (CORE-1226): season and
+		// episode ordinals plus the episode's own title. A movie carries none
+		// of these values, so it renders no subtitle.
+		MediaSubtitle: []sdk.LocaleString{
+			{"en": "S{sequence}", "fr": "S{sequence}"},
+			{"en": "E{index}", "fr": "É{index}"},
+			{"en": "{" + EpisodeTitleField + "}"},
+		},
 		// Scrobble adapters consume only bounded target shapes. The plugin-owned
 		// class field selects that shape exactly; absent and unknown values stay
 		// unmapped so Core never guesses from Film/TV vocabulary.
@@ -558,6 +566,9 @@ func Bundle() sdk.Bundle {
 				ItemFieldMap: map[string]string{
 					"summary": "overview",
 					"year":    "air_date",
+					// The episode's own name, so a filename without one
+					// still renders a subtitle title (CORE-1226).
+					sdk.MediaFieldKeyPrefix + EpisodeTitleField: "name",
 				},
 				ItemArtworkMap: map[string]string{"thumb": "still_path"},
 				// A TV-shaped identification means the file is an episode.

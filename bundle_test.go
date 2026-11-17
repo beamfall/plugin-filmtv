@@ -327,6 +327,9 @@ func TestTMDBTVContainerHydration(t *testing.T) {
 	if scraper.ItemFieldMap["summary"] != "overview" || scraper.ItemFieldMap["year"] != "air_date" {
 		t.Errorf("ItemFieldMap = %v, want summary=overview and year=air_date", scraper.ItemFieldMap)
 	}
+	if scraper.ItemFieldMap["media."+filmtv.EpisodeTitleField] != "name" {
+		t.Errorf("ItemFieldMap = %v, want media.episode-title=name", scraper.ItemFieldMap)
+	}
 	if _, mapped := scraper.ItemFieldMap["title"]; mapped {
 		t.Error("ItemFieldMap maps title; the episode keeps the parser's title")
 	}
@@ -483,5 +486,31 @@ func TestHomeRowTitlesNameNoClass(t *testing.T) {
 	}
 	for id := range want {
 		t.Errorf("home layout has no %s section", id)
+	}
+}
+
+// TestBundleMediaSubtitle pins the CORE-1226 subtitle template and how a host
+// renders it for an episode and a movie.
+func TestBundleMediaSubtitle(t *testing.T) {
+	segments := filmtv.Bundle().MediaSubtitle
+	episode := map[string]string{"sequence": "5", "index": "3", filmtv.EpisodeTitleField: "Reunion"}
+	lookup := func(values map[string]string) func(string) (string, bool) {
+		return func(name string) (string, bool) {
+			value, ok := values[name]
+			return value, ok
+		}
+	}
+	if got := sdk.RenderMediaSubtitle(segments, "en", lookup(episode)); got != "S5 · E3 · Reunion" {
+		t.Errorf("episode subtitle = %q, want S5 · E3 · Reunion", got)
+	}
+	if got := sdk.RenderMediaSubtitle(segments, "fr", lookup(episode)); got != "S5 · É3 · Reunion" {
+		t.Errorf("fr episode subtitle = %q", got)
+	}
+	delete(episode, filmtv.EpisodeTitleField)
+	if got := sdk.RenderMediaSubtitle(segments, "en", lookup(episode)); got != "S5 · E3" {
+		t.Errorf("untitled episode subtitle = %q, want S5 · E3", got)
+	}
+	if got := sdk.RenderMediaSubtitle(segments, "en", lookup(nil)); got != "" {
+		t.Errorf("movie subtitle = %q, want empty", got)
 	}
 }
