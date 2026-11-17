@@ -1,7 +1,7 @@
 # media-subtitle Specification
 
 ## Purpose
-TBD - created by archiving change core-1226-media-subtitle. Update Purpose after archive.
+Declare the subtitle template hosts render under each Film and TV Media title, so episodes that share a show title stay distinguishable.
 
 ## Requirements
 
