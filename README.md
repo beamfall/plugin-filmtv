@@ -29,7 +29,9 @@ account and has no telemetry.
 - Metadata comes from TMDB and TVDB. TMDB is declared for both movies and TV, and TVDB for
   series. Identification fills in original title, tagline, release or air date, production
   status, and network, and links cast and crew, studios, and genres as browsable
-  entries. You register your own API keys; none are embedded.
+  entries. TMDB works out of the box with the embedded default key, and you can set your own
+  key instead. TheTVDB is an optional extra that needs your TheTVDB subscriber PIN; without one,
+  TV identifies through TMDB.
 - Shows hold ordered Seasons, Seasons hold Episodes, Season 0
   is Specials, and TMDB collections become Film Series. Guest stars attach to the episode they
   appear in.
