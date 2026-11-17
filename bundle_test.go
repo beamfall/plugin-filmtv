@@ -269,6 +269,11 @@ func TestTMDBTVEntityMaps(t *testing.T) {
 	for _, s := range b.Scrapers {
 		var kinds []string
 		for _, em := range s.EntityMaps {
+			if em.Container {
+				// Container maps hydrate the show and season (TV only);
+				// TestTMDBTVContainerHydration pins them.
+				continue
+			}
 			kinds = append(kinds, em.Kind+":"+em.Relation+":"+em.Path+":"+em.NamePath)
 		}
 		switch s.ID {
@@ -292,6 +297,47 @@ func TestTMDBTVEntityMaps(t *testing.T) {
 		if tvMaps[i] != want {
 			t.Errorf("tmdb-tv EntityMaps[%d] = %q, want %q (movie scraper pattern)", i, tvMaps[i], want)
 		}
+	}
+}
+
+// TestTMDBTVContainerHydration pins CORE-2335: tmdb-tv hydrates the show from
+// the series document root and the season from seasons[] by the parsed
+// season, and fetches the episode's own document by season and episode
+// number for its summary, year and still — never its title.
+func TestTMDBTVContainerHydration(t *testing.T) {
+	scraper := scraperByID(t, "tmdb-tv")
+	containers := map[string]sdk.EntityMap{}
+	for _, em := range scraper.EntityMaps {
+		if em.Container {
+			containers[em.Kind] = em
+		}
+	}
+	show, season := containers["show"], containers["season"]
+	if !show.Container || show.Path != "" || show.ArtworkPath != "poster_path" ||
+		show.FieldMap["overview"] != "overview" || show.FieldMap["first-air-date"] != "first_air_date" {
+		t.Errorf("show container map = %+v, want root poster_path, overview and first_air_date", show)
+	}
+	if !season.Container || season.Path != "seasons[season_number={sequence}]" || season.ArtworkPath != "poster_path" ||
+		season.FieldMap["overview"] != "overview" || season.FieldMap["air-date"] != "air_date" {
+		t.Errorf("season container map = %+v, want seasons[season_number={sequence}] poster_path, overview and air_date", season)
+	}
+	if scraper.ItemLookupTemplate != "/tv/{id}/season/{sequence}/episode/{index}" {
+		t.Errorf("ItemLookupTemplate = %q, want the per-episode document", scraper.ItemLookupTemplate)
+	}
+	if scraper.ItemFieldMap["summary"] != "overview" || scraper.ItemFieldMap["year"] != "air_date" {
+		t.Errorf("ItemFieldMap = %v, want summary=overview and year=air_date", scraper.ItemFieldMap)
+	}
+	if _, mapped := scraper.ItemFieldMap["title"]; mapped {
+		t.Error("ItemFieldMap maps title; the episode keeps the parser's title")
+	}
+	if scraper.ItemArtworkMap["thumb"] != "still_path" {
+		t.Errorf("ItemArtworkMap = %v, want thumb=still_path", scraper.ItemArtworkMap)
+	}
+	if scraper.Transforms["year"] != "year-from-date" {
+		t.Errorf("year transform = %q, want year-from-date for the episode air date", scraper.Transforms["year"])
+	}
+	if err := sdk.ValidateBundle(filmtv.Bundle()); err != nil {
+		t.Fatalf("ValidateBundle: %v", err)
 	}
 }
 

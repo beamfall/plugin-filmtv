@@ -130,6 +130,8 @@ func Bundle() sdk.Bundle {
 						Label: sdk.LocaleString{"en": "Certification", "fr": "Classification"}},
 					{Name: "tmdb-id", Type: "text",
 						Label: sdk.LocaleString{"en": "TMDB ID", "fr": "Identifiant TMDB"}},
+					{Name: "overview", Type: "text",
+						Label: sdk.LocaleString{"en": "Overview", "fr": "Synopsis"}},
 				},
 				Relations: []sdk.RelationSpec{
 					// Cast/crew is a relation with attributes, never a Kind:
@@ -158,6 +160,8 @@ func Bundle() sdk.Bundle {
 						Label: sdk.LocaleString{"en": "Air Date", "fr": "Date de diffusion"}},
 					{Name: "specials", Type: "flag",
 						Label: sdk.LocaleString{"en": "Specials", "fr": "Épisodes spéciaux"}},
+					{Name: "overview", Type: "text",
+						Label: sdk.LocaleString{"en": "Overview", "fr": "Synopsis"}},
 				},
 				// Local grouping (local.go): Core writes these from the
 				// filename when no provider has matched the file, so local
@@ -540,9 +544,22 @@ func Bundle() sdk.Bundle {
 					// synopsis"). TMDB's episode still lands on still_path;
 					// composed onto the same image CDN prefix and surfaced in
 					// the fixed "thumb" artwork slot the season-detail episode
-					// list already renders.
+					// list already renders. The series document has no
+					// still_path; the per-episode document below supplies it.
 					"thumb": "still_path",
 				},
+				// GET /tv/{id}/season/{s}/episode/{e} — the episode's own
+				// document, fetched with the parsed season (sequence) and
+				// episode (index); skipped when either is unknown (a
+				// date-named episode). Its overview, air date and still
+				// override the series values. The title is never mapped: the
+				// episode keeps the parser's title (CORE-1713).
+				ItemLookupTemplate: "/tv/{id}/season/{sequence}/episode/{index}",
+				ItemFieldMap: map[string]string{
+					"summary": "overview",
+					"year":    "air_date",
+				},
+				ItemArtworkMap: map[string]string{"thumb": "still_path"},
 				// A TV-shaped identification means the file is an episode.
 				ImpliedMediaFields: map[string]string{"media.class": "episode"},
 				// GET /tv/{id} carries genres: [{id, name}, …] and
@@ -566,6 +583,21 @@ func Bundle() sdk.Bundle {
 							"birthplace": "place_of_birth",
 							"biography":  "biography",
 							"homepage":   "homepage",
+						}},
+					// Container maps hydrate the show and season the local
+					// mapper built for this episode; they create nothing. The
+					// series document root carries the show's poster and
+					// overview, and seasons[] each season's (CORE-2335).
+					{Kind: "show", Container: true, ArtworkPath: "poster_path",
+						FieldMap: map[string]string{
+							"overview":       "overview",
+							"first-air-date": "first_air_date",
+						}},
+					{Kind: "season", Container: true, Path: "seasons[season_number={sequence}]",
+						ArtworkPath: "poster_path",
+						FieldMap: map[string]string{
+							"overview": "overview",
+							"air-date": "air_date",
 						}},
 				},
 			},
