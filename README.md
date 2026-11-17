@@ -33,8 +33,8 @@ account and has no telemetry.
 - Shows hold ordered Seasons, Seasons hold Episodes, Season 0
   is Specials, and TMDB collections become Film Series. Guest stars attach to the episode they
   appear in.
-- The home screen has Most Played, Continue Watching, Next Up, New
-  Movies & Episodes, a genre shelf, Movies and Episodes grids, a filter bar by type,
+- The home screen has Most Played, Continue Watching, Next Up, Recently
+  Added, a genre shelf, an All Titles grid, Movies and Episodes grids, a filter bar by type,
   and there are detail pages for movies, shows, and seasons. Labels ship in English and French.
 - Titles have a certification field, and the US MPA scale (G to NC-17) is
   declared in order so Core can enforce Profile rating ceilings.

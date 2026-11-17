@@ -44,6 +44,21 @@ var (
 	// One further XxYY token of a multi-episode shorthand range. Groups: the
 	// season, the episode.
 	reSeasonXChainLink = regexp.MustCompile(`^-(\d{1,2})x(\d{1,3})`)
+	// A season-by-episode code with a bare "e" ("1e01-Yesterday's Jam"), at
+	// the start of the name or after a separator and not followed by a letter
+	// or digit, so a checksum tag ("[4E01A2B3]") never matches. Groups: the
+	// season, the episode.
+	reSeasonE = regexp.MustCompile(`(?:^|[ ._-])(\d{1,2})e(\d{2,3})(?:$|[^a-z0-9])`)
+	// A leading "season episode" number pair ("3 01 From Hell"). Only read in
+	// a season folder whose number agrees (leadingEpisode): a film name can
+	// start with two numbers too ("3 10 to Yuma"). Groups: season, episode.
+	reLeadingNumbers = regexp.MustCompile(`^(\d{1,2})[ ._-]+(\d{2,3})(?:$|[ ._-])`)
+	// An absolute episode number ending a title: zero-padded to four digits
+	// ("Dealbreakers Talk Show 0001"), or to three after " - " ("Naruto -
+	// 001"). A bare three-digit "007" stays part of a film title. The title
+	// cut may leave the separator or bracket that opened the release noise.
+	// Groups: the four-digit form, the three-digit form.
+	reAbsoluteEpisode = regexp.MustCompile(`(?:[ ._-](0\d{3})|[ ._]-[ ._](0\d{2}))[ ._\-\[(]*$`)
 	// An air date naming a dated (daily) episode: YYYY-MM-DD, also with ".",
 	// "_" or " " separators, not inside a longer run of letters or digits
 	// (an underscore still separates it, unlike a \b boundary). Calendar-checked
@@ -183,6 +198,9 @@ func parseName(path string) (nameParse, bool) {
 	// string (the earliest of any episode/year/noise token start).
 	cut := len(name)
 	episode, isEpisode := findEpisode(lower)
+	if !isEpisode {
+		episode, isEpisode = leadingEpisode(path, lower)
+	}
 	episodeCut := -1
 	if isEpisode {
 		parsed.Class = "episode"
@@ -216,6 +234,19 @@ func parseName(path string) (nameParse, bool) {
 	if cut == len(name) {
 		if noiseStart := firstNoiseToken(lower); noiseStart >= 0 {
 			cut = noiseStart
+		}
+	}
+
+	// 3b. Absolute episode number. A name with no other episode token and no
+	// year that ends its title on a zero-padded number is an absolute-numbered
+	// episode: it carries an index and an absolute ordinal but no season.
+	if !isEpisode && parsed.Year == 0 {
+		if token, ok := findAbsoluteEpisode(name[:cut], lower[:cut]); ok {
+			episode, isEpisode = token, true
+			parsed.Class = "episode"
+			parsed.Index = token.index
+			parsed.AbsoluteOrdinal = token.index
+			cut = token.start
 		}
 	}
 
@@ -267,7 +298,7 @@ type episodeToken struct {
 
 // findEpisode locates the season/episode marker in the ASCII-folded name. The
 // forms are tried in order of how unambiguous they are: SxxEyy, "season X
-// episode Y", then XxYY, then an air date.
+// episode Y", XxYY, XeYY, then an air date.
 func findEpisode(lower string) (episodeToken, bool) {
 	if m := reSeasonEpisode.FindStringSubmatchIndex(lower); m != nil {
 		token := episodeToken{start: m[0], end: m[1], sequence: numericText(lower[m[2]:m[3]]), index: atoi(lower[m[4]:m[5]])}
@@ -286,7 +317,56 @@ func findEpisode(lower string) (episodeToken, bool) {
 		token.indexEnd = rangeEnd(token.index, last)
 		return token, true
 	}
+	if m := reSeasonE.FindStringSubmatchIndex(lower); m != nil {
+		return episodeToken{start: m[2], end: m[5], sequence: numericText(lower[m[2]:m[3]]), index: atoi(lower[m[4]:m[5]])}, true
+	}
 	return findAirDate(lower)
+}
+
+// leadingEpisode reads a leading "season episode" number pair ("3 01 From
+// Hell") when path sits in a season folder of that season. Outside a season folder two leading numbers are as likely a
+// film title ("3 10 to Yuma"), so they are not read.
+func leadingEpisode(path, lower string) (episodeToken, bool) {
+	m := reLeadingNumbers.FindStringSubmatchIndex(lower)
+	if m == nil {
+		return episodeToken{}, false
+	}
+	folderSeason, inSeasonFolder := seasonFolderNumber(path)
+	sequence := numericText(lower[m[2]:m[3]])
+	if !inSeasonFolder || folderSeason != atoi(sequence) {
+		return episodeToken{}, false
+	}
+	return episodeToken{start: 0, end: m[5], sequence: sequence, index: atoi(lower[m[4]:m[5]])}, true
+}
+
+// seasonFolderNumber reports whether path sits in a season folder and that
+// folder's season number, 0 for "Specials". Every other season folder name
+// reSeasonFolder accepts ends in its number.
+func seasonFolderNumber(path string) (int, bool) {
+	folder := asciiLower(filepath.Base(filepath.Dir(path)))
+	if !reSeasonFolder.MatchString(folder) {
+		return 0, false
+	}
+	return atoi(strings.TrimLeftFunc(folder, func(r rune) bool { return r < '0' || r > '9' })), true
+}
+
+// findAbsoluteEpisode reads an absolute episode number ending title, the part
+// of the name before any year or release noise, and lowerTitle, its
+// ASCII-folded copy. The number must follow a series name of its own.
+func findAbsoluteEpisode(title, lowerTitle string) (episodeToken, bool) {
+	m := reAbsoluteEpisode.FindStringSubmatchIndex(lowerTitle)
+	if m == nil || cleanTitle(title[:m[0]]) == "" {
+		return episodeToken{}, false
+	}
+	digits := m[4:6]
+	if m[2] >= 0 {
+		digits = m[2:4]
+	}
+	index := atoi(lowerTitle[digits[0]:digits[1]])
+	if index == 0 {
+		return episodeToken{}, false
+	}
+	return episodeToken{start: m[0], end: m[1], index: index}, true
 }
 
 // findAirDate locates the first calendar-valid air date in the ASCII-folded

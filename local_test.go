@@ -25,6 +25,19 @@ func TestLocalHydration(t *testing.T) {
 			want: filmtv.LocalGrouping{Episode: true, SeriesTitle: "Pioneer One", SeasonNumber: 2, SeasonTitle: "Season 2", EpisodeIndex: 3, EpisodeIndexEnd: 4},
 		},
 		{
+			path: "/media/TV/The IT Crowd/Season 1/1e01-Yesterday's Jam.mkv",
+			want: filmtv.LocalGrouping{Episode: true, SeriesTitle: "The IT Crowd", SeasonNumber: 1, SeasonTitle: "Season 1", EpisodeIndex: 1, EpisodeTitle: "Yesterday's Jam"},
+		},
+		{
+			path: "/media/TV/Synthetic Show/Season 3/3 01 From Hell.mkv",
+			want: filmtv.LocalGrouping{Episode: true, SeriesTitle: "Synthetic Show", SeasonNumber: 3, SeasonTitle: "Season 3", EpisodeIndex: 1, EpisodeTitle: "From Hell"},
+		},
+		{
+			// An absolute-numbered episode groups under season 1.
+			path: "/media/TV/Dealbreakers Talk Show/Dealbreakers Talk Show 0001.mkv",
+			want: filmtv.LocalGrouping{Episode: true, SeriesTitle: "Dealbreakers Talk Show", SeasonNumber: 1, SeasonTitle: "Season 1", EpisodeIndex: 1},
+		},
+		{
 			path: "/media/Movies/Sintel (2010)/Sintel (2010).mkv",
 			want: filmtv.LocalGrouping{},
 		},
@@ -49,6 +62,12 @@ func TestMediaTitleKeepsParsedSeriesTitle(t *testing.T) {
 	}{
 		{"/media/TV/Pioneer One/Season 01/Pioneer One - S01E01 - Earthfall.mkv", "S01E01 · Earthfall", "Pioneer One"},
 		{"/media/TV/Pioneer One/Season 01/Pioneer.One.S01E01.1080p.mkv", "S01E01", "Pioneer One"},
+		// Name forms seen on a real library (CORE-2313): the episode keeps
+		// its code and its own title, apostrophe included, never the raw
+		// filename.
+		{"/media/TV/The IT Crowd/Season 1/1e01-Yesterday's Jam.mkv", "S01E01 · Yesterday's Jam", "The IT Crowd"},
+		{"/media/TV/Synthetic Show/Season 3/3 01 From Hell.mkv", "S03E01 · From Hell", "Synthetic Show"},
+		{"/media/TV/Dealbreakers Talk Show/Dealbreakers Talk Show 0001.mkv", "E01", "Dealbreakers Talk Show"},
 		{"/media/Movies/Sintel (2010)/Sintel (2010).mkv", "", "Sintel"},
 	}
 	for _, tc := range cases {

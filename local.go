@@ -61,8 +61,13 @@ func LocalHydration(path string) LocalGrouping {
 			AirDate:      name.airDate.Format(time.DateOnly),
 		}
 	}
-	// The parser writes Sequence as plain decimal digits (numericText).
+	// The parser writes Sequence as plain decimal digits (numericText). An
+	// absolute-numbered episode has no season of its own; it groups under
+	// season 1 until a provider places it.
 	season := atoi(parsed.Sequence)
+	if parsed.AbsoluteOrdinal > 0 {
+		season = 1
+	}
 	return LocalGrouping{
 		Episode:         true,
 		SeriesTitle:     parsed.Title,
@@ -87,7 +92,7 @@ func seasonTitle(number int) string {
 // for a file (on every card and in the library landing) when it differs from
 // the parsed title. An episode shows its code, then " · " and its own title
 // when the name carries one: "S01E03 · Earthfall", "S01E03-04" for a range,
-// "2023-03-01" for a dated episode. The code is zero-padded and the date ISO,
+// "E01" for an absolute-numbered episode, "2023-03-01" for a dated episode. The code is zero-padded and the date ISO,
 // so a title sort orders one series' episodes. Anything else returns "" and
 // keeps the parsed title. The parsed title stays the series name because it
 // is the provider search query and the scorer's input.
@@ -104,13 +109,17 @@ func (p *Parser) MediaTitle(path string, _ sdk.ParseProbe) string {
 }
 
 // episodeCode is an episode's short display code: its ISO air date when it is
-// a dated episode, otherwise SxxEyy with a "-zz" range end. Numbers are padded
+// a dated episode, Eyy for an absolute-numbered one, otherwise SxxEyy with a
+// "-zz" range end. Numbers are padded
 // to two digits, the common naming, so a season past episode 99 ("E100") sorts
 // ahead of "E11" by title; ordered season lists use the season relation's
 // numeric sort order instead.
 func episodeCode(name nameParse) string {
 	if !name.airDate.IsZero() {
 		return name.airDate.Format(time.DateOnly)
+	}
+	if name.parsed.AbsoluteOrdinal > 0 {
+		return fmt.Sprintf("E%02d", name.parsed.AbsoluteOrdinal)
 	}
 	code := fmt.Sprintf("S%02dE%02d", atoi(name.parsed.Sequence), name.parsed.Index)
 	if name.parsed.IndexEnd > 0 {

@@ -24,6 +24,11 @@ func FuzzParseFilename(f *testing.F) {
 		"Night Harbor (2004) - 2160p HDR.mkv",
 		"Synthetic Daily 2023-03-01.mkv",
 		"Synthetic_Daily_2024_02_29 - Guest Night.mkv",
+		"The IT Crowd/Season 1/1e01-Yesterday's Jam.mkv",
+		"Synthetic Show/Season 3/3 01 From Hell.mkv",
+		"Dealbreakers Talk Show 0001.mkv",
+		"Naruto - 001 [1080p].mkv",
+		"0 0000",
 		"",
 	} {
 		f.Add(seed)
@@ -93,8 +98,11 @@ func FuzzParseFilename(f *testing.F) {
 		if dated && (got.Sequence != "" || got.Index != 0 || got.IndexEnd != 0) {
 			t.Fatalf("Parse(%q) returned ordinals for a dated episode: %+v", path, got)
 		}
-		if got.Class == "episode" && got.Sequence == "" && !dated {
-			t.Fatalf("Parse(%q) returned an episode without a sequence or an air date: %+v", path, got)
+		if got.AbsoluteOrdinal != 0 && (got.Class != "episode" || got.Sequence != "" || got.Index != got.AbsoluteOrdinal || got.AbsoluteOrdinal < 1) {
+			t.Fatalf("Parse(%q) returned an out-of-contract absolute episode: %+v", path, got)
+		}
+		if got.Class == "episode" && got.Sequence == "" && !dated && got.AbsoluteOrdinal == 0 {
+			t.Fatalf("Parse(%q) returned an episode without a sequence, an absolute ordinal or an air date: %+v", path, got)
 		}
 		if title := parser.MediaTitle(path, sdk.ParseProbe{}); (title != "") != (got.Class == "episode") {
 			t.Fatalf("MediaTitle(%q) = %q for class %q", path, title, got.Class)

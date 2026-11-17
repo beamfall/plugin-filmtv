@@ -295,7 +295,7 @@ func Bundle() sdk.Bundle {
 					ArtworkSlot: "poster",
 					Source:      sdk.SourceSpec{Kind: "entity-items", EntityKind: "show"}},
 				{ID: "recently-added", Kind: "shelf",
-					Title:       sdk.LocaleString{"en": "New Movies & Episodes", "fr": "Nouveaux films et épisodes"},
+					Title:       sdk.LocaleString{"en": "Recently Added", "fr": "Ajouts récents"},
 					ArtworkSlot: "poster", Source: sdk.SourceSpec{Kind: "recently-added"}},
 				// The per-genre shelf: catalog feed narrowed to
 				// the Media the named genre entity relates to. "Comedy" is
@@ -340,9 +340,11 @@ func Bundle() sdk.Bundle {
 				// every Media row — movie
 				// and episode class values, never a show-level Entity (a
 				// Movie and an Episode are Media, never Entities, per the
-				// package doc above). The label names exactly that.
+				// package doc above). The layout serves Film and TV
+				// Libraries alike, so the label names no class: a Films
+				// Library must not read "Movies & Episodes" (CORE-2320).
 				{ID: "browse-all", Kind: "grid",
-					Title:       sdk.LocaleString{"en": "All Movies & Episodes", "fr": "Tous les films et épisodes"},
+					Title:       sdk.LocaleString{"en": "All Titles", "fr": "Tous les titres"},
 					ArtworkSlot: "poster", Source: sdk.SourceSpec{Kind: "all-items"}},
 			}},
 			// The Season detail Layout (episode list, thumb + synopsis) —
@@ -577,7 +579,10 @@ func Bundle() sdk.Bundle {
 				// subscriber PIN, so the PIN gates the scraper: no saved PIN,
 				// no TheTVDB. The project key rides beside it — Beamfall's
 				// bundled one in official builds, or the operator's own.
-				AuthRef: "tvdb-subscriber-pin",
+				// TheTVDB is optional: without a PIN, TV identifies through
+				// tmdb-tv on the embedded TMDB key (CORE-2311).
+				AuthRef:      "tvdb-subscriber-pin",
+				OptionalAuth: true,
 				// The Console and setup label the AuthRef field as the PIN it
 				// is and link to the subscription page (CORE-1127).
 				CredentialHelp: &sdk.CredentialHelp{

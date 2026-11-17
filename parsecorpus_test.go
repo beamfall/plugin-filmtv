@@ -408,6 +408,43 @@ func parseCorpus() []parseCase {
 			resolvable: true,
 		},
 
+		// --- TV name forms seen on a real library (CORE-2313). ---
+
+		// Season-by-episode with a bare "e" and no "s": the series name comes
+		// from the folder above the season folder.
+		{
+			name:       "season-e-code-without-s",
+			path:       "The IT Crowd/Season 1/1e01-Yesterday's Jam.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "The IT Crowd", Class: "episode", Sequence: "1", Index: 1},
+			resolvable: true,
+		},
+		// Leading "season episode" numbers, read only in an agreeing season
+		// folder.
+		{
+			name:       "leading-season-episode-numbers",
+			path:       "Synthetic Show/Season 3/3 01 From Hell.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Synthetic Show", Class: "episode", Sequence: "3", Index: 1},
+			resolvable: true,
+		},
+		// A zero-padded four-digit absolute number ends the series name.
+		{
+			name:       "absolute-four-digit-number",
+			path:       "Dealbreakers Talk Show 0001.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Dealbreakers Talk Show", Class: "episode", Index: 1, AbsoluteOrdinal: 1},
+			resolvable: true,
+		},
+		// A zero-padded three-digit absolute number after " - ".
+		{
+			name:       "absolute-anime-dash-number",
+			path:       "Naruto - 001 [1080p].mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Naruto", Class: "episode", Index: 1, AbsoluteOrdinal: 1},
+			resolvable: true,
+		},
+
 		// --- Documented parser gaps: pinned so a fix RAISES the auto-match-rate. ---
 
 		// Daily/date-stamped show: the AIR DATE (2024.01.15) is the episode key.
@@ -420,23 +457,16 @@ func parseCorpus() []parseCase {
 			want:       sdk.ParsedMedia{Title: "The Daily Show", Class: "episode"},
 			resolvable: true,
 		},
-		// Absolute-numbered anime with fansub group + resolution brackets: there
-		// is no SxxEyy/xXYY/year token, so only the bracketed resolution is cut
-		// as release noise and the group + absolute number leak into the title.
-		// Pinned as the current (unusable) parse so a future absolute-numbering
-		// rule shows up as a rising rate.
+		// Absolute-numbered anime with fansub group + resolution brackets: the
+		// number is not zero-padded, and an unpadded number can end a film
+		// title, so only the bracketed resolution is cut as release noise and
+		// the group + absolute number leak into the title. Pinned as the
+		// current (unusable) parse so a future rule shows up as a rising rate.
 		{
 			name:       "absolute-anime-fansub-brackets",
 			path:       "[HorribleSubs] One Piece - 1015 [720p].mkv",
 			wantOK:     true,
 			want:       sdk.ParsedMedia{Title: "[HorribleSubs] One Piece - 1015", Class: "movie"},
-			resolvable: false,
-		},
-		{
-			name:       "absolute-anime-dash-number",
-			path:       "Naruto - 001 [1080p].mkv",
-			wantOK:     true,
-			want:       sdk.ParsedMedia{Title: "Naruto - 001", Class: "movie"},
 			resolvable: false,
 		},
 		// Episode token BEFORE the title, outside a season folder: the xXYY
@@ -465,15 +495,15 @@ func parseCorpus() []parseCase {
 // against this reference corpus: at least this fraction of the corpus must parse
 // into a clean, auto-appliable ParsedMedia (correct title, class, and ordinals).
 //
-// The corpus holds 36 cases; 31 currently resolve cleanly, for an observed rate
-// of 0.86. The target sits at 0.83 — below the current rate so a single new
-// parser regression (dropping to 30/36 = 0.833) still passes but two (29/36 =
-// 0.81) reds this test, and ABOVE it enough that improving the documented gaps
-// (absolute-numbered anime) only ever moves the rate up.
-// It is deliberately not 1.0: five corpus cases are known parser limitations or
+// The corpus holds 52 cases; 48 currently resolve cleanly, for an observed rate
+// of 0.92. The target sits at 0.89 — below the current rate so a single new
+// parser regression (dropping to 47/52 = 0.904) still passes but two (46/52 =
+// 0.885) reds this test, and ABOVE it enough that improving the documented gaps
+// (unpadded absolute-numbered anime) only ever moves the rate up.
+// It is deliberately not 1.0: four corpus cases are known parser limitations or
 // genuinely unresolvable noise, so a 1.0 target would be dishonest. Raising this
 // floor is the acceptance signal for a future parser-coverage improvement.
-const ParseAutoMatchTarget = 0.83
+const ParseAutoMatchTarget = 0.89
 
 // TestParseCorpus is the per-case parser regression gate: every adversarial
 // fixture pins the parser's exact output (or documented refusal), so any change

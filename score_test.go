@@ -193,3 +193,20 @@ func TestNoYearNonExactStillResolves(t *testing.T) {
 			score, filmtv.AutoApplyThreshold)
 	}
 }
+
+// TestApostrophesDoNotSplitTitleWords pins that a release name that drops an
+// apostrophe ("A Mothers Son") scores against the provider's spelling ("A
+// Mother's Son", straight or curly) exactly as against its own (CORE-2313).
+func TestApostrophesDoNotSplitTitleWords(t *testing.T) {
+	scorer := filmtv.NewScorer()
+	parsed := sdk.ParsedMedia{Title: "A Mothers Son", Class: "episode", Sequence: "1", Index: 1}
+	exact := scorer.Score(sdk.Candidate{Title: "A Mothers Son", Year: 2023, Sequence: 1, Index: 1}, parsed)
+	for _, title := range []string{"A Mother's Son", "A Mother’s Son"} {
+		if got := scorer.Score(sdk.Candidate{Title: title, Year: 2023, Sequence: 1, Index: 1}, parsed); got != exact {
+			t.Errorf("Score(%q) = %.4f, want the exact-spelling score %.4f", title, got, exact)
+		}
+	}
+	if exact < filmtv.AutoApplyThreshold {
+		t.Errorf("exact episode score %.4f is below the auto-apply bar %.4f", exact, filmtv.AutoApplyThreshold)
+	}
+}

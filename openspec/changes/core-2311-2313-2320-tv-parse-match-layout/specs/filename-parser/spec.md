@@ -37,17 +37,16 @@ file sits in a season folder and that folder's number, when it carries one, equa
 ### Requirement: Trailing absolute episode number
 
 When the name carries no season/episode token, no air date and no year, the parser SHALL read a
-number ending the title as an absolute episode index when it is zero-padded to four digits
-(`0001`), or zero-padded to three digits and set off by ` - ` (`Naruto - 001`). The title
-SHALL be the text before it, the class `episode`, and no sequence SHALL be invented. The local
-grouping SHALL place such an episode in Season 1 and its display code SHALL be `E` and the index
-padded to two digits.
+non-zero number ending the title as an absolute episode when it is zero-padded to four digits
+(`0001`), or to three digits after ` - ` (`Naruto - 001`). The title SHALL be the text before
+it, the index and the absolute ordinal SHALL carry the number, and no sequence SHALL be invented.
 
 #### Scenario: Talk show numbered from 0001
 
 - **WHEN** the file is `Dealbreakers Talk Show 0001.mkv`
-- **THEN** the title is `Dealbreakers Talk Show`, the class is `episode`, the index is 1, there is no
-  sequence, and the display title is `E01`
+- **THEN** the title is `Dealbreakers Talk Show`, the class is `episode`, the index and the absolute
+  ordinal are 1, there is no sequence, the display title is `E01`, and the local grouping places it
+  in `Season 1`
 
 #### Scenario: Movie with a year and a number
 

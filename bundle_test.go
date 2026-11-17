@@ -352,7 +352,8 @@ func TestCredentialedScrapersDeclareAttribution(t *testing.T) {
 // TestTVDBNeedsSubscriberPIN: TheTVDB's free project key only works with each
 // user's own subscriber PIN, so the PIN is the scraper's AuthRef (no PIN, no
 // TheTVDB) and the project key rides beside it as a second login secret
-// (CORE-1129).
+// (CORE-1129). TheTVDB is optional: without a PIN Core omits the scraper and
+// TV identifies through tmdb-tv on the embedded TMDB key (CORE-2311).
 func TestTVDBNeedsSubscriberPIN(t *testing.T) {
 	for _, scraper := range filmtv.Bundle().Scrapers {
 		if scraper.ID != "tvdb-series" {
@@ -360,6 +361,9 @@ func TestTVDBNeedsSubscriberPIN(t *testing.T) {
 		}
 		if scraper.AuthRef != "tvdb-subscriber-pin" {
 			t.Errorf("tvdb-series AuthRef = %q, want tvdb-subscriber-pin", scraper.AuthRef)
+		}
+		if !scraper.OptionalAuth {
+			t.Error("tvdb-series must be optional-auth so a server without a PIN still identifies TV")
 		}
 		login := scraper.Login
 		if login == nil {
@@ -404,5 +408,34 @@ func TestHomeLeadsWithShowsShelf(t *testing.T) {
 	}
 	if shows != index["next-up"]+1 || shows >= index["recently-added"] {
 		t.Fatalf("browse-shows at %d, want directly after next-up (%d) and before recently-added (%d)", shows, index["next-up"], index["recently-added"])
+	}
+}
+
+// TestHomeRowTitlesNameNoClass pins that the home layout's recently-added and
+// all-items rows carry class-neutral titles: the layout serves Film and TV
+// Libraries alike, so a Films Library must not read "Movies & Episodes"
+// (CORE-2320).
+func TestHomeRowTitlesNameNoClass(t *testing.T) {
+	want := map[string]sdk.LocaleString{
+		"recently-added": {"en": "Recently Added", "fr": "Ajouts récents"},
+		"browse-all":     {"en": "All Titles", "fr": "Tous les titres"},
+	}
+	for _, layout := range filmtv.Bundle().Layouts {
+		if layout.ID != "home" {
+			continue
+		}
+		for _, section := range layout.Sections {
+			title, ok := want[section.ID]
+			if !ok {
+				continue
+			}
+			if !reflect.DeepEqual(section.Title, title) {
+				t.Errorf("home section %s title = %v, want %v", section.ID, section.Title, title)
+			}
+			delete(want, section.ID)
+		}
+	}
+	for id := range want {
+		t.Errorf("home layout has no %s section", id)
 	}
 }

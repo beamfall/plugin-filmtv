@@ -194,8 +194,8 @@ func yearScore(parsedYear, candYear int) float64 {
 	}
 }
 
-// normalizeTitle lower-cases and strips punctuation to spaces, then collapses
-// whitespace — so "The Matrix!" and "the matrix" compare equal.
+// normalizeTitle lower-cases and drops apostrophes, strips other punctuation to
+// spaces, then collapses whitespace — so "The Matrix!" and "the matrix" compare equal.
 func normalizeTitle(s string) string {
 	var b strings.Builder
 	b.Grow(len(s))
@@ -203,6 +203,9 @@ func normalizeTitle(s string) string {
 		switch {
 		case unicode.IsLetter(r) || unicode.IsDigit(r):
 			b.WriteRune(r)
+		case r == '\'' || r == '\u2019':
+			// An apostrophe joins its word: release names drop it ("A Mothers
+			// Son") where the provider keeps it ("A Mother's Son").
 		default:
 			b.WriteRune(' ')
 		}
