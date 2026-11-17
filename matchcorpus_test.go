@@ -36,6 +36,7 @@ func corpusFamilies(t *testing.T) []sdktest.MatchFamily {
 		yearDisambiguationFamily(),
 		falseFriendTitleFamily(),
 		popularityTieBreakFamily(),
+		towerShowTitleFamily(),
 	}
 }
 
@@ -47,10 +48,10 @@ func corpusFamilies(t *testing.T) []sdktest.MatchFamily {
 // wrong ID on a should-match file or any match at all on a should-be-unmatched
 // file (WantID==""). The corpus is verified to resolve every positive correctly
 // (precision 1.0); the target sits just below that so a *single* new mis-resolve
-// among the 18 positive cases (which would drop precision to ~0.94) reds this
+// among the 22 positive cases (which would drop precision to ~0.955) reds this
 // test. It is deliberately not 1.0, so the metric — not an incidental exact
 // count — is what the gate asserts.
-const MatchPrecisionTarget = 0.95
+const MatchPrecisionTarget = 0.96
 
 // TestMatchCorpusPrecision states a corpus-wide precision target and fails below
 // it. It reuses the same fixtures TestMatchCorpus grades per case,
@@ -222,11 +223,18 @@ func sceneNamingFamily() sdktest.MatchFamily {
 			{Name: "xxyy-shorthand", Path: "Some.Show.2x05.Great.Episode.mkv", Candidates: candidates, WantID: "some-show"},
 			{Name: "no-candidate-clears-floor", Path: "Some.Show.2x05.Great.Episode.mkv",
 				Candidates: []sdk.Candidate{{ID: "unrelated", Title: "Totally Unrelated Title"}}, WantID: ""},
-			{Name: "candidate-episode-ordinals-break-same-title-fallback", Path: "Some.Show.S02E05.mkv",
+			// A show-level candidate makes no claim about the episode, so it
+			// scores as an agreeing one: the two tie and fail closed.
+			{Name: "show-level-and-agreeing-episode-candidates-tie", Path: "Some.Show.S02E05.mkv",
 				Candidates: []sdk.Candidate{
 					{ID: "series-level", Title: "Some Show"},
 					{ID: "episode-level", Title: "Some Show", Sequence: 2, Index: 5},
-				}, WantID: "episode-level"},
+				}, WantID: ""},
+			{Name: "wrong-episode-candidate-loses-to-show-level", Path: "Some.Show.S02E05.mkv",
+				Candidates: []sdk.Candidate{
+					{ID: "series-level", Title: "Some Show"},
+					{ID: "episode-level", Title: "Some Show", Sequence: 2, Index: 6},
+				}, WantID: "series-level"},
 		},
 	}
 }
@@ -422,6 +430,31 @@ func popularityTieBreakFamily() sdktest.MatchFamily {
 					{ID: "sintel-a", Title: "Sintel", Year: 2010, Popularity: 10},
 					{ID: "sintel-b", Title: "Sintel", Year: 2010, Popularity: 10},
 				}, WantID: ""},
+		},
+	}
+}
+
+// towerShowTitleFamily holds real library names from the CORE-2311 tower
+// queue, each against TMDB's show-level candidates: no year, no ordinals on
+// the candidate, and a title that differs by an apostrophe, "&" or a country
+// qualifier.
+func towerShowTitleFamily() sdktest.MatchFamily {
+	return sdktest.MatchFamily{
+		Name: "tower-show-titles",
+		Cases: []sdktest.MatchCase{
+			{Name: "country-qualified-show", Path: "TV/The Traitors (UK)/Season 1/The.Traitors.UK.S01E01.mkv",
+				Candidates: []sdk.Candidate{{ID: "traitors", Title: "The Traitors", Year: 2022}}, WantID: "traitors"},
+			{Name: "dropped-apostrophe", Path: "TV/Its Always Sunny in Philadelphia/Season 1/Its.Always.Sunny.in.Philadelphia.S01E01.mkv",
+				Candidates: []sdk.Candidate{{ID: "sunny", Title: "It's Always Sunny in Philadelphia", Year: 2005}}, WantID: "sunny"},
+			{Name: "ampersand-spelled-and", Path: "TV/Key and Peele/Season 1/Key.and.Peele.S01E01.mkv",
+				Candidates: []sdk.Candidate{{ID: "kp", Title: "Key & Peele", Year: 2012}}, WantID: "kp"},
+			{Name: "country-matched-candidate-wins", Path: "TV/The Office (US)/Season 1/The.Office.US.S01E01.mkv",
+				Candidates: []sdk.Candidate{{ID: "office-us", Title: "The Office (US)", Year: 2005}, {ID: "office", Title: "The Office", Year: 2001}}, WantID: "office-us"},
+			// Two national versions under one title tie: fail closed.
+			{Name: "same-title-national-versions-tie", Path: "TV/The Office (UK)/Season 1/The.Office.UK.S01E01.mkv",
+				Candidates: []sdk.Candidate{{ID: "office-a", Title: "The Office", Year: 2001}, {ID: "office-b", Title: "The Office", Year: 2005}}, WantID: ""},
+			{Name: "other-country-version-is-no-match", Path: "TV/The Office (UK)/Season 1/The.Office.UK.S01E01.mkv",
+				Candidates: []sdk.Candidate{{ID: "office-us", Title: "The Office (US)", Year: 2005}}, WantID: ""},
 		},
 	}
 }

@@ -62,11 +62,14 @@ func LocalHydration(path string) LocalGrouping {
 		}
 	}
 	// The parser writes Sequence as plain decimal digits (numericText). An
-	// absolute-numbered episode has no season of its own; it groups under
-	// season 1 until a provider places it.
+	// absolute-numbered episode has no season of its own; it groups under the
+	// season folder holding it, or season 1, until a provider places it.
 	season := atoi(parsed.Sequence)
 	if parsed.AbsoluteOrdinal > 0 {
 		season = 1
+		if number, ok := seasonFolderNumber(path); ok {
+			season = number
+		}
 	}
 	return LocalGrouping{
 		Episode:         true,

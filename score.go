@@ -33,10 +33,17 @@ const AutoApplyThreshold = 0.75
 const noCorroborationPenalty = 0.25
 
 // episodeMissingPenalty is subtracted when the parse carries season/episode
-// ordinals but the candidate does not. It is deliberately tiny: exact
-// title/year still auto-applies, but a candidate that agrees on the ordinals
-// outranks a same-title series-level fallback.
+// ordinals and the candidate carries only one of the two. It is deliberately
+// tiny. A show-level candidate that carries neither (every TV search result)
+// takes no penalty: it makes no claim about the episode to disagree with.
 const episodeMissingPenalty = 0.05
+
+// regionFoldScore is the title similarity of a series title that differs from
+// the candidate's only by a trailing country qualifier ("The Traitors UK" vs
+// "The Traitors"). It needs no year to auto-apply, as an exact title does, but
+// sits more than the ambiguity margin below 1.0, so a candidate whose own
+// title carries the same qualifier outranks it.
+const regionFoldScore = 0.9
 
 // episodeMismatchPenalty is subtracted when the parse and candidate both carry
 // season/episode ordinals and they disagree — a strong wrong-episode signal
@@ -60,22 +67,24 @@ func NewScorer() *Scorer { return &Scorer{} }
 // in [0,1]. The model is deliberately simple for v1:
 //
 //   - Title similarity (weight 0.7) dominates — an exact normalized match scores
-//     1.0, a containment (one title inside the other) 0.85, otherwise a
+//     1.0, an episode's series title equal but for a country qualifier
+//     regionFoldScore, a containment (one title inside the other) 0.85, otherwise a
 //     token-overlap (Jaccard) ratio. A blank parsed or candidate title is a
 //     hard zero — nothing to match on.
 //   - Year agreement (weight 0.3) corroborates: an exact year match adds the
 //     full weight, ±1 (release-vs-air-year drift) adds half, a conflicting year
 //     adds nothing.
 //   - Season/episode agreement breaks same-title episode ambiguity: a matching
-//     pair keeps the title/year score, a candidate with no ordinals takes only a
-//     tiny episodeMissingPenalty, and a disagreeing pair takes the large
+//     pair keeps the title/year score, as does a show-level candidate that
+//     carries no ordinals; a candidate carrying only one takes a tiny
+//     episodeMissingPenalty, and a disagreeing pair takes the large
 //     episodeMismatchPenalty fail-closed hit.
 //   - TMDB popularity is not part of this scalar score. Core's ranking layer
 //     sees the candidate set and uses popularity only to break exact score ties.
 //
 // When the parse carried no year there is nothing to corroborate the title, so
 // the fail-closed asymmetry applies: an *exact* title still scores
-// 1.0 (safe to auto-apply alone), but a *non-exact* title is docked
+// 1.0, and a country-folded series title regionFoldScore (safe to auto-apply alone), but a *non-exact* title is docked
 // noCorroborationPenalty so it cannot clear AutoApplyThreshold on title
 // similarity alone — a mediocre single candidate with no year disambiguation
 // routes to Unmatched rather than auto-applying. A genuine two-identical-title
@@ -84,11 +93,11 @@ func NewScorer() *Scorer { return &Scorer{} }
 // Candidate.Year/Season/Episode are 0 when the candidate carried none, matching
 // the sdk convention.
 func (Scorer) Score(candidate sdk.Candidate, parsed sdk.ParsedMedia) float64 {
-	title := titleScore(parsed.Title, candidate.Title)
+	title, unique := titleScore(parsed, candidate.Title)
 	if title == 0 {
 		return 0
 	}
-	base := baseScore(title, parsed, candidate)
+	base := baseScore(title, unique, parsed, candidate)
 	penalized := base - episodePenalty(parsed, candidate)
 	return clampUnit(penalized)
 }
@@ -96,21 +105,22 @@ func (Scorer) Score(candidate sdk.Candidate, parsed sdk.ParsedMedia) float64 {
 // baseScore is the title+year confidence before the season/episode and
 // popularity adjustments: the no-year fail-closed verdict when the parse
 // carried no year, else the weighted title+year blend.
-func baseScore(title float64, parsed sdk.ParsedMedia, candidate sdk.Candidate) float64 {
+func baseScore(title float64, unique bool, parsed sdk.ParsedMedia, candidate sdk.Candidate) float64 {
 	if parsed.Year == 0 {
-		return noYearScore(title)
+		return noYearScore(title, unique)
 	}
 	const titleWeight, yearWeight = 0.7, 0.3
 	return titleWeight*title + yearWeight*yearScore(parsed.Year, candidate.Year)
 }
 
 // noYearScore is the fail-closed verdict when the filename carried no year: an
-// exact title (1.0) passes through — a unique title needs no corroboration —
-// while any weaker title is docked noCorroborationPenalty (floored at 0) so it
-// falls below AutoApplyThreshold and defers to manual review.
-func noYearScore(title float64) float64 {
-	if title == 1 {
-		return 1
+// exact title (1.0), or a series title equal but for a country qualifier,
+// passes through — a unique title needs no corroboration — while any weaker
+// title is docked noCorroborationPenalty (floored at 0) so it falls below
+// AutoApplyThreshold and defers to manual review.
+func noYearScore(title float64, unique bool) float64 {
+	if title == 1 || unique {
+		return title
 	}
 	if docked := title - noCorroborationPenalty; docked > 0 {
 		return docked
@@ -124,6 +134,11 @@ func noYearScore(title float64) float64 {
 func episodePenalty(parsed sdk.ParsedMedia, candidate sdk.Candidate) float64 {
 	parsedSeason := atoiSequence(parsed.Sequence)
 	if parsedSeason == 0 || parsed.Index == 0 {
+		return 0
+	}
+	carriesSeason := candidate.Sequence != 0 || candidate.SequencePresent
+	carriesEpisode := candidate.Index != 0 || candidate.IndexPresent
+	if !carriesSeason && !carriesEpisode {
 		return 0
 	}
 	if candidate.Sequence == 0 || candidate.Index == 0 {
@@ -161,20 +176,54 @@ func clampUnit(v float64) float64 {
 }
 
 // titleScore is the normalized title similarity in [0,1]: exact match 1.0,
-// containment 0.85, else Jaccard token overlap. Either title blank yields 0.
-func titleScore(parsedTitle, candTitle string) float64 {
-	a := normalizeTitle(parsedTitle)
+// an episode's series title equal but for a country qualifier
+// regionFoldScore, containment 0.85, else Jaccard token overlap. Either title
+// blank yields 0. unique reports a match that needs no year to auto-apply.
+func titleScore(parsed sdk.ParsedMedia, candTitle string) (score float64, unique bool) {
+	a := normalizeTitle(parsed.Title)
 	b := normalizeTitle(candTitle)
 	if a == "" || b == "" {
-		return 0
+		return 0, false
 	}
 	if a == b {
-		return 1
+		return 1, true
+	}
+	if parsed.Class == "episode" {
+		aBase, aRegion := splitRegion(a)
+		bBase, bRegion := splitRegion(b)
+		if aBase == bBase && aRegion == bRegion {
+			return 1, true
+		}
+		if aBase == bBase && (aRegion == "" || bRegion == "") {
+			return regionFoldScore, true
+		}
 	}
 	if strings.Contains(a, b) || strings.Contains(b, a) {
-		return 0.85
+		return 0.85, false
 	}
-	return jaccard(strings.Fields(a), strings.Fields(b))
+	return jaccard(strings.Fields(a), strings.Fields(b)), false
+}
+
+// regionAliases maps the trailing country qualifiers a series title carries
+// to tell national versions apart ("The Office US", "The Traitors (UK)") to
+// one spelling.
+var regionAliases = map[string]string{
+	"us": "us", "usa": "us", "uk": "uk", "gb": "uk", "au": "au", "nz": "nz", "ca": "ca", "ie": "ie",
+}
+
+// splitRegion splits a normalized title into the title before a trailing
+// country qualifier and the qualifier, or returns the title and "" when it
+// carries none. A title that is only the qualifier ("us") keeps it.
+func splitRegion(title string) (string, string) {
+	cut := strings.LastIndexByte(title, ' ')
+	if cut < 0 {
+		return title, ""
+	}
+	region, ok := regionAliases[title[cut+1:]]
+	if !ok {
+		return title, ""
+	}
+	return title[:cut], region
 }
 
 // yearScore corroborates the title: exact 1.0, ±1 year (release-vs-air drift)
@@ -195,22 +244,49 @@ func yearScore(parsedYear, candYear int) float64 {
 }
 
 // normalizeTitle lower-cases and drops apostrophes, strips other punctuation to
-// spaces, then collapses whitespace — so "The Matrix!" and "the matrix" compare equal.
+// spaces, spells "&" as "and", joins a lone "s" to the word before it, then
+// collapses whitespace — so "The Matrix!" and "the matrix" compare equal.
 func normalizeTitle(s string) string {
 	var b strings.Builder
 	b.Grow(len(s))
 	for _, r := range strings.ToLower(s) {
 		switch {
+		case r == '&':
+			// "Key & Peele" and "Key and Peele" are one title.
+			b.WriteString(" and ")
+		case isApostrophe(r):
+			// An apostrophe joins its word: release names drop it ("A Mothers
+			// Son") where the provider keeps it ("A Mother's Son"). Checked
+			// first: the modifier letter apostrophe counts as a letter.
 		case unicode.IsLetter(r) || unicode.IsDigit(r):
 			b.WriteRune(r)
-		case r == '\'' || r == '\u2019':
-			// An apostrophe joins its word: release names drop it ("A Mothers
-			// Son") where the provider keeps it ("A Mother's Son").
 		default:
 			b.WriteRune(' ')
 		}
 	}
-	return strings.Join(strings.Fields(b.String()), " ")
+	// A release name that turned the apostrophe into a separator leaves a
+	// lone "s" ("Ocean_s_Eleven"): it joins the word before it.
+	words := strings.Fields(b.String())
+	joined := words[:0]
+	for _, w := range words {
+		if w == "s" && len(joined) > 0 {
+			joined[len(joined)-1] += w
+			continue
+		}
+		joined = append(joined, w)
+	}
+	return strings.Join(joined, " ")
+}
+
+// isApostrophe reports whether r is one of the marks titles use as an
+// apostrophe: the typewriter and typographic quotes, the modifier letter and
+// the backtick.
+func isApostrophe(r rune) bool {
+	switch r {
+	case '\'', '\u2019', '\u2018', '\u02bc', '`':
+		return true
+	}
+	return false
 }
 
 // jaccard is the token-set overlap ratio |A∩B| / |A∪B| in [0,1].

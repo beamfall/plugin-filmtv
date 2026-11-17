@@ -38,6 +38,11 @@ func TestLocalHydration(t *testing.T) {
 			want: filmtv.LocalGrouping{Episode: true, SeriesTitle: "Dealbreakers Talk Show", SeasonNumber: 1, SeasonTitle: "Season 1", EpisodeIndex: 1},
 		},
 		{
+			// Inside a season folder it groups under that season.
+			path: "/media/TV/Show/Season 2/Show - 001.mkv",
+			want: filmtv.LocalGrouping{Episode: true, SeriesTitle: "Show", SeasonNumber: 2, SeasonTitle: "Season 2", EpisodeIndex: 1},
+		},
+		{
 			path: "/media/Movies/Sintel (2010)/Sintel (2010).mkv",
 			want: filmtv.LocalGrouping{},
 		},

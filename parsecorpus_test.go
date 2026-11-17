@@ -428,18 +428,20 @@ func parseCorpus() []parseCase {
 			want:       sdk.ParsedMedia{Title: "Synthetic Show", Class: "episode", Sequence: "3", Index: 1},
 			resolvable: true,
 		},
-		// A zero-padded four-digit absolute number ends the series name.
+		// A zero-padded four-digit absolute number ends the series name, in a
+		// show folder of that name.
 		{
 			name:       "absolute-four-digit-number",
-			path:       "Dealbreakers Talk Show 0001.mkv",
+			path:       "Dealbreakers Talk Show/Dealbreakers Talk Show 0001.mkv",
 			wantOK:     true,
 			want:       sdk.ParsedMedia{Title: "Dealbreakers Talk Show", Class: "episode", Index: 1, AbsoluteOrdinal: 1},
 			resolvable: true,
 		},
-		// A zero-padded three-digit absolute number after " - ".
+		// A zero-padded three-digit absolute number after " - ", under an
+		// anime folder.
 		{
 			name:       "absolute-anime-dash-number",
-			path:       "Naruto - 001 [1080p].mkv",
+			path:       "Anime/Naruto - 001 [1080p].mkv",
 			wantOK:     true,
 			want:       sdk.ParsedMedia{Title: "Naruto", Class: "episode", Index: 1, AbsoluteOrdinal: 1},
 			resolvable: true,

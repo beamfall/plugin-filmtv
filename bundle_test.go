@@ -363,7 +363,7 @@ func TestTVDBNeedsSubscriberPIN(t *testing.T) {
 			t.Errorf("tvdb-series AuthRef = %q, want tvdb-subscriber-pin", scraper.AuthRef)
 		}
 		if !scraper.OptionalAuth {
-			t.Error("tvdb-series must be optional-auth so a server without a PIN still identifies TV")
+			t.Error("tvdb-series must be optional-auth so a server without a PIN does not list it as a missing key")
 		}
 		login := scraper.Login
 		if login == nil {

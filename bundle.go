@@ -579,8 +579,9 @@ func Bundle() sdk.Bundle {
 				// subscriber PIN, so the PIN gates the scraper: no saved PIN,
 				// no TheTVDB. The project key rides beside it — Beamfall's
 				// bundled one in official builds, or the operator's own.
-				// TheTVDB is optional: without a PIN, TV identifies through
-				// tmdb-tv on the embedded TMDB key (CORE-2311).
+				// TheTVDB is optional: without a PIN it is skipped rather
+				// than shown as a missing required key. It does not change
+				// which scraper identifies TV; tmdb-tv comes first.
 				AuthRef:      "tvdb-subscriber-pin",
 				OptionalAuth: true,
 				// The Console and setup label the AuthRef field as the PIN it

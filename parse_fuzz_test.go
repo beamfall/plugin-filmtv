@@ -29,6 +29,12 @@ func FuzzParseFilename(f *testing.F) {
 		"Dealbreakers Talk Show 0001.mkv",
 		"Naruto - 001 [1080p].mkv",
 		"0 0000",
+		"Show/Show - 001 - Title.mkv",
+		"[Grp] Show - 001 [ABCD1234].mkv",
+		"Show/Specials/1 01 X.mkv",
+		"TV/Movie.1080p.DD5.1e01.mkv",
+		"TV/VID_0001.mp4",
+		"Show/season01-banner.jpg",
 		"",
 	} {
 		f.Add(seed)
