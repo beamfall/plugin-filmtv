@@ -1,6 +1,7 @@
 package filmtv_test
 
 import (
+	"math"
 	"testing"
 
 	sdk "github.com/beamfall/plugin-sdk"
@@ -111,7 +112,7 @@ func TestSeasonEpisodeAgreement(t *testing.T) {
 			wantAutoApply: false,
 		},
 		{
-			name:          "candidate carries no ordinals: no penalty, title+year carry",
+			name:          "candidate carries no ordinals: tiny penalty, title+year carry",
 			cand:          sdk.Candidate{Title: "Some Show", Year: 2010},
 			wantAutoApply: true,
 		},
@@ -130,8 +131,14 @@ func TestSeasonEpisodeAgreement(t *testing.T) {
 	matching := scorer.Score(sdk.Candidate{Title: "Some Show", Year: 2010, Sequence: 2, Index: 5}, parsed)
 	missing := scorer.Score(sdk.Candidate{Title: "Some Show", Year: 2010}, parsed)
 	wrong := scorer.Score(sdk.Candidate{Title: "Some Show", Year: 2010, Sequence: 2, Index: 6}, parsed)
-	if !(matching == missing && missing > wrong) {
-		t.Errorf("ordinal ordering matching %.4f == missing %.4f > wrong %.4f not satisfied", matching, missing, wrong)
+	if !(matching > missing && missing > wrong) {
+		t.Errorf("ordinal ordering matching %.4f > missing %.4f > wrong %.4f not satisfied", matching, missing, wrong)
+	}
+	// A show-level candidate stays an exact title's near-certain match: it
+	// only orders below the candidate whose episode agrees.
+	exactNoYear := sdk.ParsedMedia{Title: "Some Show", Class: "episode", Sequence: "2", Index: 5}
+	if got := scorer.Score(sdk.Candidate{Title: "Some Show"}, exactNoYear); got != 0.99 {
+		t.Errorf("show-level exact title = %.4f, want 0.99", got)
 	}
 }
 
@@ -224,44 +231,75 @@ func TestSeparatorApostropheJoinsItsWord(t *testing.T) {
 	}
 }
 
-// TestTowerShowTitlesAutoApply pins the CORE-2311 root cause: show-level TV
-// candidates for real library names scored below the auto-apply bar because a
-// no-year episode lost 0.25 on any non-exact title and 0.05 more because a
-// show-level candidate carries no ordinals. Each row is the parsed show title
-// from a tower file against the TMDB candidate it should match.
-func TestTowerShowTitlesAutoApply(t *testing.T) {
+// TestTowerShowTitles pins the CORE-2311 root cause and its fail-closed
+// limits. Show-level TV candidates for real library names scored below the
+// auto-apply bar because a no-year episode lost 0.25 on any non-exact title and
+// 0.05 more because a show-level candidate carries no ordinals. Spelling
+// variants now score as the title; a country qualifier on one side only does
+// not, because a candidate carries no origin country to tell "The Office" UK
+// from "The Office" US, so it needs a year (or the same qualifier) to apply.
+func TestTowerShowTitles(t *testing.T) {
 	scorer := filmtv.NewScorer()
 	cases := []struct {
-		parsed, candidate string
-		want              float64
+		parsed    string
+		year      int
+		candidate string
+		candYear  int
+		want      float64
 	}{
-		{"The Traitors UK", "The Traitors", 0.9},
-		{"The Traitors (UK)", "The Traitors", 0.9},
-		{"Its Always Sunny in Philadelphia", "It's Always Sunny in Philadelphia", 1},
-		{"Key and Peele", "Key & Peele", 1},
-		{"The Office (US)", "The Office", 0.9},
-		{"The Office (US)", "The Office (US)", 1},
-		{"The Office USA", "The Office (US)", 1},
+		{"Its Always Sunny in Philadelphia", 0, "It's Always Sunny in Philadelphia", 2005, 0.99},
+		{"Key and Peele", 0, "Key & Peele", 2012, 0.99},
+		{"The Office (US)", 0, "The Office (US)", 2005, 0.99},
+		{"The Office USA", 0, "The Office (US)", 2005, 0.99},
+		{"The Traitors (UK)", 0, "The Traitors (UK)", 2022, 0.99},
+		// One-sided qualifier, no year: both national versions score alike
+		// and neither may auto-apply.
+		{"The Traitors UK", 0, "The Traitors", 2022, 0.64},
+		{"The Traitors UK", 0, "The Traitors", 2023, 0.64},
+		{"The Office UK", 0, "The Office", 2001, 0.64},
+		{"The Office UK", 0, "The Office", 2005, 0.64},
+		{"Shameless", 0, "Shameless (US)", 2011, 0.64},
+		{"Shameless", 0, "Shameless (UK)", 2004, 0.64},
+		// A year tells them apart.
+		{"The Office UK", 2001, "The Office", 2001, 0.92},
+		{"The Office UK", 2001, "The Office", 2005, 0.62},
 	}
 	for _, tc := range cases {
-		parsed := sdk.ParsedMedia{Title: tc.parsed, Class: "episode", Sequence: "1", Index: 1}
-		got := scorer.Score(sdk.Candidate{Title: tc.candidate, Year: 2022}, parsed)
-		if got != tc.want || got < filmtv.AutoApplyThreshold {
-			t.Errorf("Score(%q vs %q) = %.4f, want %.4f (auto-applies)", tc.parsed, tc.candidate, got, tc.want)
+		parsed := sdk.ParsedMedia{Title: tc.parsed, Year: tc.year, Class: "episode", Sequence: "1", Index: 1}
+		got := scorer.Score(sdk.Candidate{Title: tc.candidate, Year: tc.candYear}, parsed)
+		if math.Abs(got-tc.want) > 1e-9 {
+			t.Errorf("Score(%q %d vs %q %d) = %.4f, want %.4f", tc.parsed, tc.year, tc.candidate, tc.candYear, got, tc.want)
 		}
 	}
-	// A different country's version is not the same show, and a film title
-	// keeps its last word ("Among Us" is not "Among").
+	// Not the same show: another country's version, a lower-case word that
+	// only looks like a country ("Us"), and a film title's last word.
 	for _, tc := range []struct {
 		parsed sdk.ParsedMedia
 		cand   string
 	}{
 		{sdk.ParsedMedia{Title: "The Office (UK)", Class: "episode", Sequence: "1", Index: 1}, "The Office (US)"},
+		{sdk.ParsedMedia{Title: "This Is", Class: "episode", Sequence: "1", Index: 1}, "This Is Us"},
+		{sdk.ParsedMedia{Title: "Between", Class: "episode", Sequence: "1", Index: 1}, "Between Us"},
 		{sdk.ParsedMedia{Title: "Among Us", Class: "movie"}, "Among"},
 		{sdk.ParsedMedia{Title: "Crash", Class: "episode", Sequence: "1", Index: 1}, "Crash Landing on You"},
 	} {
 		if got := scorer.Score(sdk.Candidate{Title: tc.cand}, tc.parsed); got >= filmtv.AutoApplyThreshold {
 			t.Errorf("Score(%q vs %q) = %.4f, want below the auto-apply bar", tc.parsed.Title, tc.cand, got)
+		}
+	}
+}
+
+// TestRegionFoldFromFilename pins the reviewer's case end to end: a no-year
+// "The.Office.UK" file must not auto-apply to either "The Office".
+func TestRegionFoldFromFilename(t *testing.T) {
+	parsed, ok := filmtv.New().Parse("/media/TV/The.Office.UK.S01E01.mkv", sdk.ParseProbe{})
+	if !ok || parsed.Title != "The Office UK" {
+		t.Fatalf("Parse = %+v, %v; want title The Office UK", parsed, ok)
+	}
+	scorer := filmtv.NewScorer()
+	for _, year := range []int{2001, 2005} {
+		if got := scorer.Score(sdk.Candidate{Title: "The Office", Year: year}, parsed); got >= filmtv.AutoApplyThreshold {
+			t.Errorf("Score(The Office %d) = %.4f, want below the auto-apply bar", year, got)
 		}
 	}
 }

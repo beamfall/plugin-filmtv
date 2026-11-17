@@ -54,7 +54,20 @@ func TestEpisodeFormsDoNotMisreadFilms(t *testing.T) {
 		{"bare-e-without-context", "Movie 2e10.mkv", sdk.ParsedMedia{Title: "Movie 2e10", Class: "movie"}},
 		{"bare-e-after-channel-layout", "Movie.1080p.DD5.1e01.mkv", sdk.ParsedMedia{Title: "Movie", Class: "movie"}},
 		{"bare-e-after-channel-layout-under-tv", "/media/TV/Movie.1080p.DD5.1e01.mkv", sdk.ParsedMedia{Title: "Movie", Class: "movie"}},
-		{"bare-e-disagrees-with-folder", "/media/TV/Show/Season 2/1e10.mkv", sdk.ParsedMedia{Title: "1e10", Class: "movie"}},
+		// A show folder of the same name is no context for an underscored
+		// counter: a home video folder holds its clips the same way.
+		{"home-video-in-its-folder", "/Home/Wedding/Wedding_0002.mp4", sdk.ParsedMedia{Title: "Wedding 0002", Class: "movie"}},
+		{"drone-clip-in-its-folder", "/Videos/DJI/DJI_0001.MP4", sdk.ParsedMedia{Title: "DJI 0001", Class: "movie"}},
+		{"samsung-clip", "/Videos/SAM_0001.mp4", sdk.ParsedMedia{Title: "SAM 0001", Class: "movie"}},
+		{"casio-clip-under-tv", "/media/TV/CIMG_0001.avi", sdk.ParsedMedia{Title: "CIMG 0001", Class: "movie"}},
+		{"pentax-clip-under-tv", "/media/TV/IMGP_0001.avi", sdk.ParsedMedia{Title: "IMGP 0001", Class: "movie"}},
+		// The nearest library folder decides: a film folder below a TV one
+		// holds films.
+		{"film-folder-below-tv", "/Media/TV/Movies/Bond - 007.mkv", sdk.ParsedMedia{Title: "Bond - 007", Class: "movie"}},
+		// A release bracket alone is no context, and never in a film folder.
+		{"release-bracket-in-film-folder", "/Movies/[YTS] Agent 0011.mkv", sdk.ParsedMedia{Title: "[YTS] Agent 0011", Class: "movie"}},
+		{"release-bracket-alone", "/Downloads/[YTS] Agent 0011.mkv", sdk.ParsedMedia{Title: "[YTS] Agent 0011", Class: "movie"}},
+		{"release-bracket-checksum-in-film-folder", "/Movies/[Grp] Show - 001 [ABCD1234].mkv", sdk.ParsedMedia{Title: "[Grp] Show - 001", Class: "movie"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -84,10 +97,21 @@ func TestEpisodeFormsReadWithContext(t *testing.T) {
 			sdk.ParsedMedia{Title: "Show", Class: "episode", Index: 1, AbsoluteOrdinal: 1}},
 		{"anime-group-and-checksum", "[Grp] Show - 001 [ABCD1234].mkv",
 			sdk.ParsedMedia{Title: "Show", Class: "episode", Index: 1, AbsoluteOrdinal: 1}},
+		// The checksum counts although the title stops before it.
+		{"anime-checksum-only", "/Downloads/Show - 001 [ABCD1234].mkv",
+			sdk.ParsedMedia{Title: "Show", Class: "episode", Index: 1, AbsoluteOrdinal: 1}},
+		{"anime-group-and-dash-number", "/Downloads/[Grp] Show - 001.mkv",
+			sdk.ParsedMedia{Title: "Show", Class: "episode", Index: 1, AbsoluteOrdinal: 1}},
 		{"bare-e-in-season-folder", "/media/Show/Season 1/1e01-Pilot.mkv",
 			sdk.ParsedMedia{Title: "Show", Class: "episode", Sequence: "1", Index: 1}},
 		{"bare-e-under-tv-folder", "/media/TV/Show 1e01.mkv",
 			sdk.ParsedMedia{Title: "Show", Class: "episode", Sequence: "1", Index: 1}},
+		// The code carries its own season: a season folder naming another one
+		// leaves the code's season (matching then decides), not a film.
+		{"bare-e-disagrees-with-folder", "/TV/Show/Season 2/Show 1e01.mkv",
+			sdk.ParsedMedia{Title: "Show", Class: "episode", Sequence: "1", Index: 1}},
+		{"bare-e-alone-disagrees-with-folder", "/media/TV/Show/Season 2/1e10.mkv",
+			sdk.ParsedMedia{Title: "Show", Class: "episode", Sequence: "1", Index: 10}},
 		// "Specials" is season 0: a leading pair or bare-e code there reads as
 		// S00, whatever season number the name gives.
 		{"leading-zero-pair-in-specials", "/media/TV/Synthetic Show/Specials/0 02 Behind the Scenes.mkv",

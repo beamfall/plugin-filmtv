@@ -58,8 +58,9 @@ var (
 	// ("Naruto - 001"). It ends the title, or an episode title follows it after
 	// " - " ("Show - 001 - Title"). The title cut may leave the separator or
 	// bracket that opened the release noise. Read only with episode context
-	// (episodeContext). Groups: the four-digit form, the three-digit form.
-	reAbsoluteEpisode = regexp.MustCompile(`(?:[ ._-](0\d{3})|[ ._]-[ ._](0\d{2}))(?:[ ._\-\[(]*$|[ ._]-[ ._])`)
+	// (episodeContext). Groups: the separator and digits of the four-digit
+	// form, the three-digit form.
+	reAbsoluteEpisode = regexp.MustCompile(`(?:([ ._-])(0\d{3})|[ ._]-[ ._](0\d{2}))(?:[ ._\-\[(]*$|[ ._]-[ ._])`)
 	// A CRC32 checksum bracket an anime release carries ("[ABCD1234]"):
 	// release noise, and a sign the file is an episode.
 	reChecksum = regexp.MustCompile(`\[[0-9a-f]{8}\]`)
@@ -261,7 +262,7 @@ func parseName(path string) (nameParse, bool) {
 	// absolute-numbered episode when the path says it is TV: it carries an
 	// index and an absolute ordinal but no season.
 	if !isEpisode && parsed.Year == 0 {
-		if token, ok := findAbsoluteEpisode(path, name[:cut], lower[:cut]); ok {
+		if token, ok := findAbsoluteEpisode(path, name[:cut], lower[:cut], lower); ok {
 			episode, isEpisode = token, true
 			parsed.Class = "episode"
 			parsed.Index = token.index
@@ -342,35 +343,24 @@ func findEpisode(lower string) (episodeToken, bool) {
 
 // bareSeasonEpisode reads a season-by-episode code with a bare "e" ("1e01")
 // when the path gives episode context. A code that follows a number and a
-// dot is a channel layout ("DD5.1e01"), not a season.
+// dot is a channel layout ("DD5.1e01"), not a season. The code carries its own
+// season, so it stands in a season folder that names another one; only
+// "Specials" overrides it (season 0).
 func bareSeasonEpisode(path, lower string) (episodeToken, bool) {
 	for _, m := range reSeasonE.FindAllStringSubmatchIndex(lower, -1) {
 		if start := m[2]; start >= 2 && lower[start-1] == '.' && lower[start-2] >= '0' && lower[start-2] <= '9' {
 			continue
 		}
-		sequence, ok := folderSeason(path, numericText(lower[m[2]:m[3]]))
-		if !ok || !episodeContext(path, lower, cleanTitle(lower[:m[2]])) {
+		if !episodeContext(path, lower, cleanTitle(lower[:m[2]]), formBareCode) {
 			return episodeToken{}, false
+		}
+		sequence := numericText(lower[m[2]:m[3]])
+		if isSpecialsFolder(path) {
+			sequence = "0"
 		}
 		return episodeToken{start: m[2], end: m[5], sequence: sequence, index: atoi(lower[m[4]:m[5]])}, true
 	}
 	return episodeToken{}, false
-}
-
-// folderSeason checks a season read from a file name against the season
-// folder holding the file. In a numbered season folder the two must agree; in
-// "Specials" the season is 0 whatever the name says. Outside a season folder
-// the name's season stands.
-func folderSeason(path, sequence string) (string, bool) {
-	number, inSeasonFolder := seasonFolderNumber(path)
-	switch {
-	case !inSeasonFolder:
-		return sequence, true
-	case isSpecialsFolder(path):
-		return "0", true
-	default:
-		return sequence, number == atoi(sequence)
-	}
 }
 
 // leadingEpisode reads a leading "season episode" number pair ("3 01 From
@@ -382,11 +372,14 @@ func leadingEpisode(path, lower string) (episodeToken, bool) {
 	if m == nil {
 		return episodeToken{}, false
 	}
-	if _, inSeasonFolder := seasonFolderNumber(path); !inSeasonFolder {
+	number, inSeasonFolder := seasonFolderNumber(path)
+	sequence := numericText(lower[m[2]:m[3]])
+	switch {
+	case !inSeasonFolder:
 		return episodeToken{}, false
-	}
-	sequence, ok := folderSeason(path, numericText(lower[m[2]:m[3]]))
-	if !ok {
+	case isSpecialsFolder(path):
+		sequence = "0"
+	case number != atoi(sequence):
 		return episodeToken{}, false
 	}
 	return episodeToken{start: 0, end: m[5], sequence: sequence, index: atoi(lower[m[4]:m[5]])}, true
@@ -409,63 +402,114 @@ func isSpecialsFolder(path string) bool {
 }
 
 // cameraPrefixes are the stems cameras and phones number their clips with
-// ("VID_0001", "DSC_0012"): never a series name.
+// ("VID_0001", "DSC_0012", "DJI_0001"): never a series name.
 var cameraPrefixes = map[string]bool{
 	"vid": true, "img": true, "dsc": true, "dscf": true, "dscn": true, "mov": true,
-	"mvi": true, "gopr": true, "gp": true, "pxl": true,
+	"mvi": true, "gopr": true, "gp": true, "pxl": true, "dji": true, "sam": true,
+	"cimg": true, "imgp": true,
 }
 
-// tvFolders name a folder that holds series: a file anywhere under one is TV.
-var tvFolders = map[string]bool{
-	"tv": true, "tv shows": true, "television": true, "shows": true, "series": true, "anime": true,
-}
+// tvFolders name a folder that holds series, and filmFolders one that holds
+// films. The nearest such folder above a file says which it is.
+var (
+	tvFolders = map[string]bool{
+		"tv": true, "tv shows": true, "television": true, "shows": true, "series": true, "anime": true,
+	}
+	filmFolders = map[string]bool{"movies": true, "movie": true, "films": true, "film": true}
+)
+
+// weakForm is the shape of a weak episode marker, which sets how much
+// context it needs.
+type weakForm int
+
+const (
+	// formBareCode is a bare-e season/episode code ("1e01").
+	formBareCode weakForm = iota
+	// formNumbered is a four-digit number after a space, dot or dash
+	// ("Show 0001").
+	formNumbered
+	// formUnderscored is a four-digit number after an underscore
+	// ("Wedding_0002"): the counter a camera or a home video carries as often
+	// as an episode number.
+	formUnderscored
+	// formDashed is a three-digit number after " - " ("Naruto - 001"), the
+	// anime release form.
+	formDashed
+)
 
 // episodeContext reports whether path carries evidence beyond the bare
-// numbers in its name that it is an episode of series: a season folder, a
-// show folder named for series, a TV folder above it, or an anime release's
-// group or checksum bracket. A camera clip stem is never a series. The weak
-// episode forms (a bare-e code, an absolute number) are read only with this
-// context, because a film or a home video can end on the same digits
-// ("Agent 0011", "Wedding_0002").
-func episodeContext(path, lower, series string) bool {
+// numbers in its name that it is an episode of series. lower is the whole
+// ASCII-folded name, release noise included. The evidence, strongest first:
+//
+//   - a season folder;
+//   - the nearest TV or film library folder above the file: a film folder
+//     ("Movies") rules the rest out, a TV folder ("TV", "Anime") is context;
+//   - a CRC32 checksum bracket, or a release-group bracket in front of the
+//     anime " - 001" form;
+//   - a show folder named for series, except for an underscored counter.
+//
+// A camera clip stem is never a series. The weak episode forms are read only
+// with this context, because a film or a home video can end on the same
+// digits ("Agent 0011", "Wedding_0002").
+func episodeContext(path, lower, series string, form weakForm) bool {
 	if cameraPrefixes[asciiLower(series)] {
 		return false
-	}
-	if reLeadingGroups.MatchString(lower) || reChecksum.MatchString(lower) {
-		return true
 	}
 	if _, inSeasonFolder := seasonFolderNumber(path); inSeasonFolder {
 		return true
 	}
 	dir := filepath.Dir(path)
-	if folder, _ := seriesFromFolder(filepath.Base(dir)); series != "" && strings.EqualFold(folder, series) {
+	library := nearestLibraryFolder(dir)
+	switch {
+	case library == "film":
+		return false
+	case library == "tv", reChecksum.MatchString(lower):
 		return true
+	case form == formDashed && reLeadingGroups.MatchString(lower):
+		return true
+	case form == formUnderscored || series == "":
+		return false
 	}
-	for _, folder := range strings.Split(filepath.ToSlash(dir), "/") {
-		if tvFolders[asciiLower(folder)] {
-			return true
+	folder, _ := seriesFromFolder(filepath.Base(dir))
+	return strings.EqualFold(folder, series)
+}
+
+// nearestLibraryFolder returns "tv" or "film" for the nearest folder above dir
+// that names a TV or a film library, or "" when none does.
+func nearestLibraryFolder(dir string) string {
+	folders := strings.Split(filepath.ToSlash(dir), "/")
+	for i := len(folders) - 1; i >= 0; i-- {
+		switch name := asciiLower(folders[i]); {
+		case tvFolders[name]:
+			return "tv"
+		case filmFolders[name]:
+			return "film"
 		}
 	}
-	return false
+	return ""
 }
 
 // findAbsoluteEpisode reads an absolute episode number in title, the part of
 // path's name before any year or release noise, and lowerTitle, its
-// ASCII-folded copy. The number must follow a series name of its own, and
-// path must give episode context.
-func findAbsoluteEpisode(path, title, lowerTitle string) (episodeToken, bool) {
+// ASCII-folded copy. lower is the whole folded name, whose checksum bracket
+// counts as context although the title stops before it. The number must
+// follow a series name of its own, and path must give episode context.
+func findAbsoluteEpisode(path, title, lowerTitle, lower string) (episodeToken, bool) {
 	m := reAbsoluteEpisode.FindStringSubmatchIndex(lowerTitle)
 	if m == nil {
 		return episodeToken{}, false
 	}
 	series := title[:m[0]]
 	series = cleanTitle(series[len(reLeadingGroups.FindString(series)):])
-	if series == "" || !episodeContext(path, lowerTitle, series) {
-		return episodeToken{}, false
+	form, digits := formDashed, m[6:8]
+	if m[4] >= 0 {
+		form, digits = formNumbered, m[4:6]
+		if lowerTitle[m[2]] == '_' {
+			form = formUnderscored
+		}
 	}
-	digits := m[4:6]
-	if m[2] >= 0 {
-		digits = m[2:4]
+	if series == "" || !episodeContext(path, lower, series, form) {
+		return episodeToken{}, false
 	}
 	index := atoi(lowerTitle[digits[0]:digits[1]])
 	if index == 0 {

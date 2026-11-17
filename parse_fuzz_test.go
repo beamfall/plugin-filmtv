@@ -34,6 +34,10 @@ func FuzzParseFilename(f *testing.F) {
 		"Show/Specials/1 01 X.mkv",
 		"TV/Movie.1080p.DD5.1e01.mkv",
 		"TV/VID_0001.mp4",
+		"Downloads/Show - 001 [ABCD1234].mkv",
+		"Home/Wedding/Wedding_0002.mp4",
+		"Media/TV/Movies/Bond - 007.mkv",
+		"TV/Show/Season 2/Show 1e01.mkv",
 		"Show/season01-banner.jpg",
 		"",
 	} {

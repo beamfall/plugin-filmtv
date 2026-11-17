@@ -223,8 +223,10 @@ func sceneNamingFamily() sdktest.MatchFamily {
 			{Name: "xxyy-shorthand", Path: "Some.Show.2x05.Great.Episode.mkv", Candidates: candidates, WantID: "some-show"},
 			{Name: "no-candidate-clears-floor", Path: "Some.Show.2x05.Great.Episode.mkv",
 				Candidates: []sdk.Candidate{{ID: "unrelated", Title: "Totally Unrelated Title"}}, WantID: ""},
-			// A show-level candidate makes no claim about the episode, so it
-			// scores as an agreeing one: the two tie and fail closed.
+			// A show-level candidate makes no claim about the episode: it
+			// scores 0.01 below an agreeing one, inside the corpus's 0.05
+			// ambiguity margin, so the corpus reads the pair as a tie. Core
+			// ranks the agreeing candidate first (TestSeasonEpisodeAgreement).
 			{Name: "show-level-and-agreeing-episode-candidates-tie", Path: "Some.Show.S02E05.mkv",
 				Candidates: []sdk.Candidate{
 					{ID: "series-level", Title: "Some Show"},
@@ -437,7 +439,9 @@ func popularityTieBreakFamily() sdktest.MatchFamily {
 // towerShowTitleFamily holds real library names from the CORE-2311 tower
 // queue, each against TMDB's show-level candidates: no year, no ordinals on
 // the candidate, and a title that differs by an apostrophe, "&" or a country
-// qualifier.
+// qualifier. The corpus grades which candidate resolves; whether a one-sided
+// country qualifier may auto-apply is pinned by TestTowerShowTitles (it may
+// not without a year).
 func towerShowTitleFamily() sdktest.MatchFamily {
 	return sdktest.MatchFamily{
 		Name: "tower-show-titles",
@@ -455,6 +459,8 @@ func towerShowTitleFamily() sdktest.MatchFamily {
 				Candidates: []sdk.Candidate{{ID: "office-a", Title: "The Office", Year: 2001}, {ID: "office-b", Title: "The Office", Year: 2005}}, WantID: ""},
 			{Name: "other-country-version-is-no-match", Path: "TV/The Office (UK)/Season 1/The.Office.UK.S01E01.mkv",
 				Candidates: []sdk.Candidate{{ID: "office-us", Title: "The Office (US)", Year: 2005}}, WantID: ""},
+			{Name: "unqualified-title-national-versions-tie", Path: "TV/Shameless/Season 1/Shameless.S01E01.mkv",
+				Candidates: []sdk.Candidate{{ID: "shameless-us", Title: "Shameless (US)", Year: 2011}, {ID: "shameless-uk", Title: "Shameless (UK)", Year: 2004}}, WantID: ""},
 		},
 	}
 }
