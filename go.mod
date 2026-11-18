@@ -3,7 +3,7 @@ module github.com/beamfall/plugin-filmtv
 go 1.27.4
 
 require (
-	github.com/beamfall/plugin-sdk v0.4.3
+	github.com/beamfall/plugin-sdk v0.4.4
 	modernc.org/sqlite v1.53.0
 )
 
