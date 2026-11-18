@@ -70,8 +70,13 @@ var (
 	// in code. Groups: year, month, day.
 	reAirDate = regexp.MustCompile(`(?:^|[^a-z0-9])((?:19|20)\d{2})[-._ ](\d{2})[-._ ](\d{2})(?:$|[^a-z0-9])`)
 	// A folder that holds one season of a series: the series name is then the
-	// folder above it.
-	reSeasonFolder = regexp.MustCompile(`^(?:(?:season|series)[ ._-]*\d{1,4}|s\d{1,2}|specials)$`)
+	// folder above it. The season word may follow the series name ("The IT
+	// Crowd  Series 3"). Groups: the series prefix, the season number of the
+	// worded form, the season number of the "s1" form.
+	reSeasonFolder = regexp.MustCompile(`^(?:(?:(.*?)[ ._-]+)?(?:season|series)[ ._-]*(\d{1,4})|s(\d{1,2})|specials)$`)
+	// An extras label numbered by season but not by episode ("3.x Out Takes",
+	// "3x Set Tour"): never a film. Groups: the season, the label.
+	reSeasonExtra = regexp.MustCompile(`^(\d{1,2})[ ._-]*x[ ._-]+([a-z].*)$`)
 	// Release-group brackets in front of a series name ("[Group] Show - S01E01").
 	reLeadingGroups = regexp.MustCompile(`^(?:\s*\[[^\]]*\])+`)
 	// A video resolution token: 480p, 1080i, 2160p.
@@ -218,6 +223,9 @@ func parseName(path string) (nameParse, bool) {
 	if !isEpisode {
 		episode, isEpisode = leadingEpisode(path, lower)
 	}
+	if !isEpisode {
+		episode, isEpisode = seriesCodeEpisode(path, lower)
+	}
 	episodeCut := -1
 	if isEpisode {
 		parsed.Class = "episode"
@@ -282,15 +290,22 @@ func parseName(path string) (nameParse, bool) {
 	parsed.Title = cleanTitle(rawTitle)
 	if isEpisode && parsed.Title == "" {
 		var folderYear int
-		if parsed.Title, folderYear = seriesFromSeasonFolder(path); folderYear > 0 {
+		if parsed.Title, folderYear = seriesFromFolders(path); folderYear > 0 {
 			parsed.Year = folderYear
 		}
 	}
 
 	// 5. Class fallback: episode signals already set "episode"; otherwise any
-	// useful parse (a year or a clean title) is a movie.
+	// useful parse (a year or a clean title) is a movie, unless the file sits
+	// under a TV library folder. A file there is never a film: it keeps no
+	// class, and a season-numbered extras label ("3.x Out Takes") keeps only
+	// its label as the title.
 	if parsed.Class == "" && (parsed.Year > 0 || parsed.Title != "") {
-		parsed.Class = "movie"
+		if nearestLibraryFolder(filepath.Dir(path)) != "tv" {
+			parsed.Class = "movie"
+		} else if m := reSeasonExtra.FindStringSubmatchIndex(lower[:cut]); m != nil {
+			parsed.Title = cleanTitle(name[m[4]:cut])
+		}
 	}
 
 	// Return ok only when a non-empty Title survived cleanup.
@@ -364,9 +379,10 @@ func bareSeasonEpisode(path, lower string) (episodeToken, bool) {
 }
 
 // leadingEpisode reads a leading "season episode" number pair ("3 01 From
-// Hell") when path sits in a season folder of that season, or in "Specials"
-// (season 0). Outside a season folder two leading numbers are as likely a
-// film title ("3 10 to Yuma"), so they are not read.
+// Hell") when path sits in a season folder of that season, in "Specials"
+// (season 0), or in a show folder under a TV library folder. Elsewhere two
+// leading numbers are as likely a film title ("3 10 to Yuma"), so they are not
+// read.
 func leadingEpisode(path, lower string) (episodeToken, bool) {
 	m := reLeadingNumbers.FindStringSubmatchIndex(lower)
 	if m == nil {
@@ -375,6 +391,8 @@ func leadingEpisode(path, lower string) (episodeToken, bool) {
 	number, inSeasonFolder := seasonFolderNumber(path)
 	sequence := numericText(lower[m[2]:m[3]])
 	switch {
+	case !inSeasonFolder && showFolder(path) != "":
+		// A show folder under a TV library folder holds no films.
 	case !inSeasonFolder:
 		return episodeToken{}, false
 	case isSpecialsFolder(path):
@@ -386,14 +404,80 @@ func leadingEpisode(path, lower string) (episodeToken, bool) {
 }
 
 // seasonFolderNumber reports whether path sits in a season folder and that
-// folder's season number, 0 for "Specials". Every other season folder name
-// reSeasonFolder accepts ends in its number.
+// folder's season number, 0 for "Specials".
 func seasonFolderNumber(path string) (int, bool) {
-	folder := asciiLower(filepath.Base(filepath.Dir(path)))
-	if !reSeasonFolder.MatchString(folder) {
+	m := reSeasonFolder.FindStringSubmatch(asciiLower(filepath.Base(filepath.Dir(path))))
+	if m == nil {
 		return 0, false
 	}
-	return atoi(strings.TrimLeftFunc(folder, func(r rune) bool { return r < '0' || r > '9' })), true
+	return atoi(m[2] + m[3]), true
+}
+
+// showFolder returns the name of the folder path sits in when that folder is
+// a show folder: it is not a season folder or a library folder itself, and
+// the nearest library folder above it names a TV library ("/tv/The Simpsons/
+// …"). It returns "" otherwise.
+func showFolder(path string) string {
+	dir := filepath.Dir(path)
+	folder := filepath.Base(dir)
+	lower := asciiLower(folder)
+	if reSeasonFolder.MatchString(lower) || tvFolders[lower] || filmFolders[lower] {
+		return ""
+	}
+	if nearestLibraryFolder(filepath.Dir(dir)) != "tv" {
+		return ""
+	}
+	return folder
+}
+
+// reSeriesCodeDigits is a three- or four-digit season-and-episode code
+// ("2001": season 20, episode 01) that ends at a non-digit.
+var reSeriesCodeDigits = regexp.MustCompile(`^(\d{1,2})(\d{2})(?:$|[^0-9])`)
+
+// seriesCodeEpisode reads a season-and-episode code glued to the series name
+// ("aaf-simpsons2001" in "The Simpsons"): the show folder's name, folded to
+// letters and digits with a leading "The" optional, followed by the code. It
+// is read only in a show folder under a TV library folder, whose name must be
+// in the file's. The token starts at the beginning of the name, so a release
+// group in front of the series name stays out of the title, which then comes
+// from the folder.
+func seriesCodeEpisode(path, lower string) (episodeToken, bool) {
+	series, _ := seriesFromFolder(showFolder(path))
+	if series == "" {
+		return episodeToken{}, false
+	}
+	key := foldAlnum(asciiLower(series))
+	keys := []string{key}
+	if trimmed := strings.TrimPrefix(key, "the"); trimmed != key && len(trimmed) >= 3 {
+		keys = append(keys, trimmed)
+	}
+	for _, key := range keys {
+		for from := 0; ; {
+			at := strings.Index(lower[from:], key)
+			if at < 0 {
+				break
+			}
+			end := from + at + len(key)
+			if m := reSeriesCodeDigits.FindStringSubmatchIndex(lower[end:]); m != nil {
+				index := atoi(lower[end+m[4] : end+m[5]])
+				if index > 0 {
+					return episodeToken{start: 0, end: end + m[5], sequence: numericText(lower[end+m[2] : end+m[3]]), index: index}, true
+				}
+			}
+			from = end
+		}
+	}
+	return episodeToken{}, false
+}
+
+// foldAlnum keeps only the ASCII letters and digits of s.
+func foldAlnum(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r < 128 && isASCIIAlnum(byte(r)) {
+			return r
+		}
+		return -1
+	}, s)
 }
 
 // isSpecialsFolder reports whether path sits in a "Specials" season folder.
@@ -585,16 +669,23 @@ func episodeTitle(tail, lowerTail string) string {
 	return cleanTitle(tail[:end])
 }
 
-// seriesFromSeasonFolder returns the series name and year carried by the
-// folder above path's season folder ("Pioneer One (2010)/Season 01/…"), or
-// ("", 0) when path does not sit in a season folder. Only that layout is
-// trusted: the parent of a loose file is as likely a library root as a series.
-func seriesFromSeasonFolder(path string) (string, int) {
+// seriesFromFolders returns the series name and year an episode's folders
+// carry: the folder above path's season folder ("Pioneer One (2010)/Season
+// 01/…"), or, when that is a library folder, the series name in front of the
+// season word ("TV/Sherlock Series 3/…"); else the show folder path sits in
+// under a TV library folder ("TV/The Simpsons/…"). It returns ("", 0)
+// otherwise: the parent of a loose file elsewhere is as likely a library root
+// as a series.
+func seriesFromFolders(path string) (string, int) {
 	seasonDir := filepath.Dir(path)
-	if !reSeasonFolder.MatchString(asciiLower(filepath.Base(seasonDir))) {
-		return "", 0
+	if m := reSeasonFolder.FindStringSubmatchIndex(asciiLower(filepath.Base(seasonDir))); m != nil {
+		above := filepath.Base(filepath.Dir(seasonDir))
+		if lower := asciiLower(above); m[2] >= 0 && (tvFolders[lower] || filmFolders[lower]) {
+			return seriesFromFolder(filepath.Base(seasonDir)[m[2]:m[3]])
+		}
+		return seriesFromFolder(above)
 	}
-	return seriesFromFolder(filepath.Base(filepath.Dir(seasonDir)))
+	return seriesFromFolder(showFolder(path))
 }
 
 // seriesFromFolder returns the series name and year a show folder's name

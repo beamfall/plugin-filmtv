@@ -2,6 +2,7 @@ package filmtv
 
 import (
 	"bytes"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -87,7 +88,10 @@ func FuzzParseFilename(f *testing.F) {
 				t.Fatalf("ParseMediaFields(%q) returned an unclean episode title %q", path, field.Text)
 			}
 		}
-		if got.Class != "movie" && got.Class != "episode" {
+		// A file under a TV library folder that is no episode keeps no class:
+		// it is never a film.
+		unclassified := got.Class == "" && nearestLibraryFolder(filepath.Dir(path)) == "tv"
+		if got.Class != "movie" && got.Class != "episode" && !unclassified {
 			t.Fatalf("Parse(%q) returned unknown class %q", path, got.Class)
 		}
 		if got.Year != 0 && (got.Year < 1900 || got.Year > 2099) {

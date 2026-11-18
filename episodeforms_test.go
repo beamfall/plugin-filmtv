@@ -20,13 +20,13 @@ func TestEpisodeFormsDoNotMisreadFilms(t *testing.T) {
 	}{
 		// A checksum tag holds "4E01"; it is release noise, never a code.
 		{"checksum-is-not-a-season-code", "/media/Anime/Show - 01 [4E01A2B3].mkv",
-			sdk.ParsedMedia{Title: "Show - 01", Class: "movie"}},
+			sdk.ParsedMedia{Title: "Show - 01"}},
 		// Two leading numbers outside a season folder are a film title.
 		{"leading-numbers-outside-season-folder", "/media/Movies/3 10 to Yuma.mkv",
 			sdk.ParsedMedia{Title: "3 10 to Yuma", Class: "movie"}},
 		// A season folder that names another season does not agree.
 		{"leading-numbers-disagree-with-folder", "/media/TV/Synthetic Show/Season 2/3 01 From Hell.mkv",
-			sdk.ParsedMedia{Title: "3 01 From Hell", Class: "movie"}},
+			sdk.ParsedMedia{Title: "3 01 From Hell"}},
 		// A trailing year is a year, never an absolute number.
 		{"trailing-year-is-not-absolute", "/media/Movies/Blade Runner 2049.mkv",
 			sdk.ParsedMedia{Title: "Blade Runner", Class: "movie", Year: 2049}},
@@ -35,7 +35,7 @@ func TestEpisodeFormsDoNotMisreadFilms(t *testing.T) {
 			sdk.ParsedMedia{Title: "Agent 007", Class: "movie"}},
 		// Absolute number zero is no episode.
 		{"absolute-zero-is-not-an-episode", "/media/TV/Synthetic Show 0000.mkv",
-			sdk.ParsedMedia{Title: "Synthetic Show 0000", Class: "movie"}},
+			sdk.ParsedMedia{Title: "Synthetic Show 0000"}},
 		// Absolute numbers need episode context: a film or home-video name
 		// with no season, show or TV folder keeps its number.
 		{"four-digits-in-film-name", "Agent 0011.mkv", sdk.ParsedMedia{Title: "Agent 0011", Class: "movie"}},
@@ -48,19 +48,19 @@ func TestEpisodeFormsDoNotMisreadFilms(t *testing.T) {
 		// A camera clip stem is never a series, even under a TV folder.
 		{"camera-clip", "VID_0001.mp4", sdk.ParsedMedia{Title: "VID 0001", Class: "movie"}},
 		{"camera-still-clip", "DSC_0012.mov", sdk.ParsedMedia{Title: "DSC 0012", Class: "movie"}},
-		{"camera-clip-under-tv", "/media/TV/PXL_0003.mp4", sdk.ParsedMedia{Title: "PXL 0003", Class: "movie"}},
+		{"camera-clip-under-tv", "/media/TV/PXL_0003.mp4", sdk.ParsedMedia{Title: "PXL 0003"}},
 		// A bare-e code needs episode context, and a channel layout's ".1e01"
 		// ("DD5.1e01") is never a code.
 		{"bare-e-without-context", "Movie 2e10.mkv", sdk.ParsedMedia{Title: "Movie 2e10", Class: "movie"}},
 		{"bare-e-after-channel-layout", "Movie.1080p.DD5.1e01.mkv", sdk.ParsedMedia{Title: "Movie", Class: "movie"}},
-		{"bare-e-after-channel-layout-under-tv", "/media/TV/Movie.1080p.DD5.1e01.mkv", sdk.ParsedMedia{Title: "Movie", Class: "movie"}},
+		{"bare-e-after-channel-layout-under-tv", "/media/TV/Movie.1080p.DD5.1e01.mkv", sdk.ParsedMedia{Title: "Movie"}},
 		// A show folder of the same name is no context for an underscored
 		// counter: a home video folder holds its clips the same way.
 		{"home-video-in-its-folder", "/Home/Wedding/Wedding_0002.mp4", sdk.ParsedMedia{Title: "Wedding 0002", Class: "movie"}},
 		{"drone-clip-in-its-folder", "/Videos/DJI/DJI_0001.MP4", sdk.ParsedMedia{Title: "DJI 0001", Class: "movie"}},
 		{"samsung-clip", "/Videos/SAM_0001.mp4", sdk.ParsedMedia{Title: "SAM 0001", Class: "movie"}},
-		{"casio-clip-under-tv", "/media/TV/CIMG_0001.avi", sdk.ParsedMedia{Title: "CIMG 0001", Class: "movie"}},
-		{"pentax-clip-under-tv", "/media/TV/IMGP_0001.avi", sdk.ParsedMedia{Title: "IMGP 0001", Class: "movie"}},
+		{"casio-clip-under-tv", "/media/TV/CIMG_0001.avi", sdk.ParsedMedia{Title: "CIMG 0001"}},
+		{"pentax-clip-under-tv", "/media/TV/IMGP_0001.avi", sdk.ParsedMedia{Title: "IMGP 0001"}},
 		// The nearest library folder decides: a film folder below a TV one
 		// holds films.
 		{"film-folder-below-tv", "/Media/TV/Movies/Bond - 007.mkv", sdk.ParsedMedia{Title: "Bond - 007", Class: "movie"}},
