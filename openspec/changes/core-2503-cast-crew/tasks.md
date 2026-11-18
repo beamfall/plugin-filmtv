@@ -1,0 +1,8 @@
+- [ ] Declare `job` on `credited-in`
+- [ ] Map cast `character` and `billing`, ordered by billing, on `tmdb-movie` and `tmdb-tv`
+- [ ] Map key crew jobs with `job` and `department` on `tmdb-movie` and `tmdb-tv`
+- [ ] Tests pinning the maps and their identity across the two scrapers
+- [ ] Bump plugin-sdk to the release carrying relation attribute maps
+- [ ] `script/gate.sh`
+- [ ] Tag a release and repin in core (lander)
+- [ ] `openspec archive core-2503-cast-crew` after landing
