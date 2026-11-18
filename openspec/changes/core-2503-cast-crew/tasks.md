@@ -1,7 +1,7 @@
-- [ ] Declare `job` on `credited-in`
-- [ ] Map cast `character` and `billing`, ordered by billing, on `tmdb-movie` and `tmdb-tv`
-- [ ] Map key crew jobs with `job` and `department` on `tmdb-movie` and `tmdb-tv`
-- [ ] Tests pinning the maps and their identity across the two scrapers
+- [x] Declare `job` on `credited-in`
+- [x] Map cast `character` and `billing`, ordered by billing, on `tmdb-movie` and `tmdb-tv`
+- [x] Map key crew jobs with `job` and `department` on `tmdb-movie` and `tmdb-tv`
+- [x] Tests pinning the maps and their identity across the two scrapers
 - [ ] Bump plugin-sdk to the release carrying relation attribute maps
 - [ ] `script/gate.sh`
 - [ ] Tag a release and repin in core (lander)

@@ -300,6 +300,61 @@ func TestTMDBTVEntityMaps(t *testing.T) {
 	}
 }
 
+// TestTMDBCreditAttributes pins CORE-2503 and CORE-2432: both TMDB scrapers
+// write each cast member's character and billing order on the credited-in row
+// and sort by billing, then import only the key crew jobs, carrying job and
+// department, after every cast credit. The two scrapers' person maps match.
+func TestTMDBCreditAttributes(t *testing.T) {
+	b := filmtv.Bundle()
+	declared := map[string]bool{}
+	for _, k := range b.EntityKinds {
+		for _, r := range k.Relations {
+			if k.Name == "person" && r.Name == "credited-in" {
+				for _, a := range r.Attributes {
+					declared[a] = true
+				}
+			}
+		}
+	}
+	for _, a := range []string{"character", "billing", "job", "department"} {
+		if !declared[a] {
+			t.Errorf("credited-in does not declare attribute %q", a)
+		}
+	}
+
+	personMaps := map[string][]sdk.EntityMap{}
+	for _, scraperID := range []string{"tmdb-movie", "tmdb-tv"} {
+		for _, em := range scraperByID(t, scraperID).EntityMaps {
+			if em.Kind == "person" {
+				personMaps[scraperID] = append(personMaps[scraperID], em)
+			}
+		}
+	}
+	movie := personMaps["tmdb-movie"]
+	if len(movie) != 2 {
+		t.Fatalf("tmdb-movie person maps = %d, want cast and crew", len(movie))
+	}
+	if !reflect.DeepEqual(personMaps["tmdb-tv"], movie) {
+		t.Errorf("tmdb-tv person maps = %+v, want tmdb-movie's %+v", personMaps["tmdb-tv"], movie)
+	}
+
+	cast, crew := movie[0], movie[1]
+	if cast.Path != "credits.cast" || cast.OrdinalField != "billing" || cast.OrdinalOffset != 0 ||
+		!reflect.DeepEqual(cast.RelationAttributeMap, map[string]string{"character": "character", "billing": "order"}) {
+		t.Errorf("cast map = %+v, want character and billing (order) attributes, ordered by billing", cast)
+	}
+	wantJobs := []string{"Director", "Screenplay", "Writer", "Producer", "Original Music Composer", "Director of Photography"}
+	if crew.Path != "credits.crew" || crew.Relation != "credited-in" || crew.NamePath != "name" ||
+		crew.ArtworkPath != "profile_path" || crew.LookupTemplate != "" ||
+		!reflect.DeepEqual(crew.RelationAttributeMap, map[string]string{"job": "job", "department": "department"}) ||
+		!reflect.DeepEqual(crew.ElementFilter, map[string][]string{"job": wantJobs}) {
+		t.Errorf("crew map = %+v, want key jobs with job and department, no lookups", crew)
+	}
+	if crew.OrdinalOffset < 1000 {
+		t.Errorf("crew OrdinalOffset = %d, want every crew credit after the cast", crew.OrdinalOffset)
+	}
+}
+
 // TestTMDBTVContainerHydration pins CORE-2335: tmdb-tv hydrates the show from
 // the series document root and the season from seasons[] by the parsed
 // season, and fetches the episode's own document by season and episode

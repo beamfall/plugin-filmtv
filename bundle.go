@@ -23,6 +23,30 @@ import (
 // top-billed cast rather than an unbounded roster of requests.
 const tmdbMaxCastLookups = 10
 
+// tmdbKeyCrewJobs are the credits.crew jobs imported as Person credits
+// (CORE-2503); the rest of a crew roster is not.
+var tmdbKeyCrewJobs = []string{
+	"Director", "Screenplay", "Writer", "Producer",
+	"Original Music Composer", "Director of Photography",
+}
+
+// tmdbCrewOrdinalOffset sorts every crew credit after the cast: TMDB billing
+// orders stay well under it.
+const tmdbCrewOrdinalOffset = 1000
+
+// tmdbKeyCrewMap hydrates the key crew of a TMDB credits document as
+// credited-in Person credits carrying job and department, in TMDB's listing
+// order after the cast. Crew elements carry the name and headshot; there is
+// no /person lookup, so a crew-only Person stays field-less until a cast
+// credit or another title hydrates it.
+func tmdbKeyCrewMap() sdk.EntityMap {
+	return sdk.EntityMap{Kind: "person", Relation: "credited-in", Path: "credits.crew",
+		NamePath: "name", ArtworkPath: "profile_path",
+		RelationAttributeMap: map[string]string{"job": "job", "department": "department"},
+		ElementFilter:        map[string][]string{"job": tmdbKeyCrewJobs},
+		OrdinalOffset:        tmdbCrewOrdinalOffset}
+}
+
 // Community score fields (CORE-2399): core-conventional Media field names the
 // detail page reads for its score chip.
 const (
@@ -265,7 +289,7 @@ func Bundle() sdk.Bundle {
 					// `credit`'s set so a future Show detail Layout can read
 					// either shape.
 					{Name: "credited-in", ToKind: sdk.MediaKindName,
-						Attributes: []string{"role", "character", "billing", "department"}},
+						Attributes: []string{"role", "character", "billing", "department", "job"}},
 				},
 			},
 			{
@@ -534,7 +558,12 @@ func Bundle() sdk.Bundle {
 							"birthplace": "place_of_birth",
 							"biography":  "biography",
 							"homepage":   "homepage",
-						}},
+						},
+						// The character and TMDB's billing order ride on the
+						// relation row (CORE-2432); credits sort by billing.
+						RelationAttributeMap: map[string]string{"character": "character", "billing": "order"},
+						OrdinalField:         "billing"},
+					tmdbKeyCrewMap(),
 				},
 			},
 			{
@@ -644,7 +673,12 @@ func Bundle() sdk.Bundle {
 							"birthplace": "place_of_birth",
 							"biography":  "biography",
 							"homepage":   "homepage",
-						}},
+						},
+						// The character and TMDB's billing order ride on the
+						// relation row (CORE-2432); credits sort by billing.
+						RelationAttributeMap: map[string]string{"character": "character", "billing": "order"},
+						OrdinalField:         "billing"},
+					tmdbKeyCrewMap(),
 					// Container maps hydrate the show and season the local
 					// mapper built for this episode; they create nothing. The
 					// series document root carries the show's poster and
