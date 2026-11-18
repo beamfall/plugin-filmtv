@@ -444,11 +444,12 @@ var resolutionDigits = map[string]bool{"480": true, "576": true, "720": true, "1
 // ("aaf-simpsons2001" in "The Simpsons"): the show folder's name, folded to
 // letters and digits with a leading "The" optional, followed by the code. It
 // is read only in a show folder under a TV library folder, whose name must be
-// in the file's. The token starts at the beginning of the name, so a release
+// in the file's; the folder's year glued to the name ("doctorwho2005") is not
+// a code. The token starts at the beginning of the name, so a release
 // group in front of the series name stays out of the title, which then comes
 // from the folder.
 func seriesCodeEpisode(path, lower string) (episodeToken, bool) {
-	series, _ := seriesFromFolder(showFolder(path))
+	series, year := seriesFromFolder(showFolder(path))
 	if series == "" {
 		return episodeToken{}, false
 	}
@@ -467,7 +468,8 @@ func seriesCodeEpisode(path, lower string) (episodeToken, bool) {
 				break
 			}
 			end := from + at + len(key)
-			if m := reSeriesCodeDigits.FindStringSubmatchIndex(lower[end:]); m != nil && !resolutionDigits[lower[end:end+m[5]]] {
+			if m := reSeriesCodeDigits.FindStringSubmatchIndex(lower[end:]); m != nil && !resolutionDigits[lower[end:end+m[5]]] &&
+				(year == 0 || lower[end:end+m[5]] != strconv.Itoa(year)) {
 				index := atoi(lower[end+m[4] : end+m[5]])
 				if index > 0 {
 					return episodeToken{start: 0, end: end + m[5], sequence: numericText(lower[end+m[2] : end+m[3]]), index: index}, true

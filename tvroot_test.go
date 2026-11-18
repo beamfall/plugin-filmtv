@@ -49,6 +49,10 @@ func TestTVLibraryFilesNeverBecomeFilms(t *testing.T) {
 			sdk.ParsedMedia{Title: "sherlock1080p"}},
 		{"bare-glued-resolution-in-show-folder", "/media/TV/Sherlock/sherlock 1080.mkv",
 			sdk.ParsedMedia{Title: "sherlock 1080"}},
+		// The show folder's year glued to the name is not a series code
+		// (S20E05); the file stays unclassified, never a film.
+		{"glued-folder-year", "/media/TV/Doctor Who (2005)/doctorwho2005.101.mkv",
+			sdk.ParsedMedia{Title: "doctorwho2005 101"}},
 		// A show folder with no ASCII letters must not loop on an empty key.
 		{"non-ascii-show-folder", "/media/TV/進撃の巨人/Trailer.mkv", sdk.ParsedMedia{Title: "Trailer"}},
 	}
