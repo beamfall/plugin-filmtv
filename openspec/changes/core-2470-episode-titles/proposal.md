@@ -23,6 +23,8 @@ library:
   `hdr10plus`, `hlg`, `sdr`, `ddp`, `avc`, `atvp`, `amzn`, `dsnp`, `hmax` always end a title;
   `dv`, `hdr` and `atmos` end it before more release tags or as the last word, so a real title
   that contains one ("The HDR Story") keeps it.
+- A word-like release tag (`Atmos`, `DV`, `Proper`, `Extended`) never ends a film title at its
+  first word, so a film named `Atmos.1080p.mkv` keeps its name instead of failing to parse.
 - The parser implements Core's optional identified-title hook,
   `IdentifiedMediaTitle(path, probe, fields)`: when an identification's plugin field values carry
   `episode-title` (the `tmdb-tv` item lookup's episode `name`), the display title is the episode
@@ -30,7 +32,7 @@ library:
 
 ## Impact
 
-- Code: `parse.go` (vocabulary), `local.go` (`IdentifiedMediaTitle`).
+- Code: `parse.go` (vocabulary, film-title first-word guard), `local.go` (`IdentifiedMediaTitle`).
 - Core uses the hook once it repins this release and its identification apply path passes the
   identified field values (CORE-2470 core change). Media identified before then keeps its title
   until it is identified again (refresh or Fix match); a backfill is CORE-2026's.

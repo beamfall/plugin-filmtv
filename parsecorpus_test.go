@@ -128,6 +128,29 @@ func parseCorpus() []parseCase {
 			resolvable: true,
 		},
 		{
+			name: "film-named-like-a-release-word",
+			path: "Atmos.1080p.mkv",
+			// A word-like tag never ends a film title it would empty
+			// (CORE-2470 review): the film is named "Atmos".
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Atmos", Class: "movie"},
+			resolvable: true,
+		},
+		{
+			name:       "film-named-like-a-short-tag",
+			path:       "DV.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "DV", Class: "movie"},
+			resolvable: true,
+		},
+		{
+			name:       "film-title-before-dv-tag",
+			path:       "Cool.Movie.DV.2160p.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Cool Movie", Class: "movie"},
+			resolvable: true,
+		},
+		{
 			name: "noise-cut-before-release-group",
 			path: "Cool.Movie.PROPER-GRP.mkv",
 			// A release group hyphenated onto the last tag is not a title
@@ -671,6 +694,9 @@ func TestParseEpisodeTitle(t *testing.T) {
 		{"atmos-codec", "Show.S01E01.Atmos.x265.mkv", ""},
 		{"tag-last-word", "Show.S01E01.HDR.mkv", ""},
 		{"remux", "Show.S01E01.REMUX.mkv", ""},
+		// A short tag before the resolution is taken as a tag even after
+		// title words; identification restores a real "Letter to DV".
+		{"short-tag-before-resolution", "Show.S01E01.Letter.to.DV.1080p.mkv", "Letter to"},
 		{"webrip", "Show.S01E01.WEBRip.mkv", ""},
 
 		{"release-tags-only", "Show.S01E02.PROPER.720p.HDTV.x264-GRP.mkv", ""},

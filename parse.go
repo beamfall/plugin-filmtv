@@ -266,7 +266,7 @@ func parseName(path string) (nameParse, bool) {
 	// Family"), so once a year/episode token has already bounded the title, a
 	// noise token elsewhere in the string must not truncate it further.
 	if cut == len(name) {
-		if noiseStart := firstNoiseToken(lower); noiseStart >= 0 {
+		if noiseStart := firstNoiseToken(lower, true); noiseStart >= 0 {
 			cut = noiseStart
 		}
 		if checksum := reChecksum.FindStringIndex(lower[:cut]); checksum != nil {
@@ -692,7 +692,7 @@ func episodeTitle(tail, lowerTail string) string {
 	if bracket := strings.IndexAny(tail, "[{"); bracket >= 0 {
 		end = bracket
 	}
-	if noiseStart := firstNoiseToken(lowerTail[:end]); noiseStart >= 0 {
+	if noiseStart := firstNoiseToken(lowerTail[:end], false); noiseStart >= 0 {
 		end = noiseStart
 	}
 	return cleanTitle(tail[:end])
@@ -901,7 +901,11 @@ func versionLabel(name string, yearStart int) string {
 // last release word ("Movie.PROPER-GRP") is not a title word, so it is left
 // out of the words endsTitle looks ahead over. A name of two hyphenated words
 // ("Uncut-Gems") keeps both: the first cannot end a title it would empty.
-func firstNoiseToken(lower string) int {
+// With keepFirstWord, a release word that is also an ordinary word never ends
+// the title at its first token either, so a film named "Atmos" or "DV" keeps
+// its name; an episode title passes false, because the episode token already
+// names the file and "S03E08.DV.2160p" has no title of its own.
+func firstNoiseToken(lower string, keepFirstWord bool) int {
 	tokens := tokenSpans(lower)
 	if n := len(tokens); n > 2 && trailingGroup(lower, tokens[n-2], tokens[n-1]) {
 		tokens = tokens[:n-1]
@@ -911,6 +915,9 @@ func firstNoiseToken(lower string) int {
 		words[i] = lower[span[0]:span[1]]
 	}
 	for i := range words {
+		if i == 0 && keepFirstWord && !isTag(words) {
+			continue
+		}
 		if endsTitle(words[i:]) {
 			return tokens[i][0]
 		}
@@ -941,13 +948,10 @@ func trailingGroup(lower string, prev, last [2]int) bool {
 // a resolution ("Charlotte's.Web.1080p"). Said twice in a row
 // ("The.Web.WEB-DL") the first is a title word.
 func endsTitle(words []string) bool {
+	if isTag(words) {
+		return true
+	}
 	word := words[0]
-	if reResolution.MatchString(word) || releaseNoise[word] {
-		return true
-	}
-	if len(words) > 1 && releaseNoise[word+words[1]] {
-		return true
-	}
 	endsName, isWord := releaseWords[word]
 	if !isWord {
 		return false
@@ -962,6 +966,14 @@ func endsTitle(words []string) bool {
 		return endsTitle(words[1:])
 	}
 	return tagFollows(words[1:])
+}
+
+// isTag reports whether words[0] is a resolution or a releaseNoise tag, alone
+// or joined with the next word ("web-dl", "h.264"): never a title word.
+func isTag(words []string) bool {
+	word := words[0]
+	return reResolution.MatchString(word) || releaseNoise[word] ||
+		len(words) > 1 && releaseNoise[word+words[1]]
 }
 
 // tagFollows reports whether words open with a releaseNoise tag, possibly
