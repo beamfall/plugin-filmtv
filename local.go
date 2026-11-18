@@ -3,6 +3,7 @@ package filmtv
 import (
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	sdk "github.com/beamfall/plugin-sdk"
@@ -104,11 +105,37 @@ func (p *Parser) MediaTitle(path string, _ sdk.ParseProbe) string {
 	if !ok || name.parsed.Class != "episode" {
 		return ""
 	}
+	return episodeDisplayTitle(name, name.episodeTitle)
+}
+
+// IdentifiedMediaTitle implements Core's optional identified-title hook: the
+// MediaTitle Core writes when an identification is applied, given the
+// identification's plugin-declared Media field values by field name. An
+// episode whose lookup carries the episode's own name (the EpisodeTitleField
+// the tmdb-tv item lookup maps) shows that name, with its real punctuation,
+// in place of the one read from the filename (CORE-2470): "S03E02 · I Don't
+// Want to Go to Chelsea", "S03E01 · Smells Like Mean Spirit" for a name with
+// none. Without one it is MediaTitle.
+func (p *Parser) IdentifiedMediaTitle(path string, _ sdk.ParseProbe, fields map[string]string) string {
+	name, ok := parseName(path)
+	if !ok || name.parsed.Class != "episode" {
+		return ""
+	}
+	title := strings.Join(strings.Fields(fields[EpisodeTitleField]), " ")
+	if title == "" {
+		title = name.episodeTitle
+	}
+	return episodeDisplayTitle(name, title)
+}
+
+// episodeDisplayTitle is an episode's code, then " · " and title when there
+// is one.
+func episodeDisplayTitle(name nameParse, title string) string {
 	code := episodeCode(name)
-	if name.episodeTitle == "" {
+	if title == "" {
 		return code
 	}
-	return code + " · " + name.episodeTitle
+	return code + " · " + title
 }
 
 // episodeCode is an episode's short display code: its ISO air date when it is

@@ -82,6 +82,22 @@ func parseCorpus() []parseCase {
 			want:       sdk.ParsedMedia{Title: "Sherlock", Class: "episode", Sequence: "2", Index: 1},
 			resolvable: true,
 		},
+		// Real Ted Lasso release names (CORE-2470): a dynamic-range tag right
+		// after the episode token is release noise, never the episode title.
+		{
+			name:       "episode-dv-tag-after-token",
+			path:       "/mnt/user/tv/Ted Lasso/Season 3/ted.lasso.s03e08.dv.2160p.web.h265-ggez.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "ted lasso", Class: "episode", Sequence: "3", Index: 8},
+			resolvable: true,
+		},
+		{
+			name:       "episode-title-before-hdr-and-streaming-tags",
+			path:       "/mnt/user/tv/Ted Lasso/Season 3/Ted.Lasso.S03E02.I.Dont.Want.to.Go.to.Chelsea.2160p.ATVP.WEB-DL.DDP5.1.HDR.H.265-NTb.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Ted Lasso", Class: "episode", Sequence: "3", Index: 2},
+			resolvable: true,
+		},
 		{
 			name: "noise-word-inside-title-with-year",
 			path: "Le.Cercle.Internal.2020.x.mkv",
@@ -636,8 +652,27 @@ func TestParseEpisodeTitle(t *testing.T) {
 		{"after-cross-season-xXYY-chain", "Show.1x01-2x02-2x03.Pilot.mkv", "Pilot"},
 		{"strong-release-word-before-group", "Show.S01E01.Pilot.PROPER-GRP.mkv", "Pilot"},
 		{"title-word-that-starts-like-an-episode-token", "Show.S01E01.E20th.Century.mkv", "E20th Century"},
+		// A real name that is a word some release tags also use stays.
+		{"title-word-not-a-tag", "Show.S01E01.Signs.1080p.WEB.h264-GRP.mkv", "Signs"},
+		{"tag-word-inside-title", "Show.S01E01.The.HDR.Story.1080p.mkv", "The HDR Story"},
+		// Ted Lasso release names (CORE-2470).
+		{"ted-lasso-title-before-tags", "Ted.Lasso.S03E02.I.Dont.Want.to.Go.to.Chelsea.2160p.ATVP.WEB-DL.DDP5.1.HDR.H.265-NTb.mkv", "I Dont Want to Go to Chelsea"},
+		{"ted-lasso-title-before-hdr", "Ted.Lasso.S03E06.Sunflowers.HDR.2160p.WEB.H265-GGEZ.mkv", "Sunflowers"},
 		// No episode title in the name: no field.
 		{"token-only", "Pioneer One S01E01.mkv", ""},
+		// Release and quality tags right after the token are never the title
+		// (CORE-2470).
+		{"ted-lasso-dv", "ted.lasso.s03e08.dv.2160p.web.h265-ggez.mkv", ""},
+		{"ted-lasso-hdr", "ted.lasso.s03e09.hdr.2160p.web.h265-ggez.mkv", ""},
+		{"dv-hdr-stack", "Show.S01E01.DV.HDR.2160p.WEB-DL.mkv", ""},
+		{"dovi", "Show.S01E01.DoVi.2160p.mkv", ""},
+		{"hdr10-plus", "Show.S01E01.HDR10+.2160p.mkv", ""},
+		{"sdr-web", "Show.S01E01.SDR.WEB.mkv", ""},
+		{"atmos-codec", "Show.S01E01.Atmos.x265.mkv", ""},
+		{"tag-last-word", "Show.S01E01.HDR.mkv", ""},
+		{"remux", "Show.S01E01.REMUX.mkv", ""},
+		{"webrip", "Show.S01E01.WEBRip.mkv", ""},
+
 		{"release-tags-only", "Show.S01E02.PROPER.720p.HDTV.x264-GRP.mkv", ""},
 		{"long-form-token", "Some.Show.Season 2 Episode 5.mkv", ""},
 		// Not an episode, or refused: no field.

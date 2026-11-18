@@ -73,6 +73,8 @@ func TestMediaTitleKeepsParsedSeriesTitle(t *testing.T) {
 		{"/media/TV/The IT Crowd/Season 1/1e01-Yesterday's Jam.mkv", "S01E01 · Yesterday's Jam", "The IT Crowd"},
 		{"/media/TV/Synthetic Show/Season 3/3 01 From Hell.mkv", "S03E01 · From Hell", "Synthetic Show"},
 		{"/media/TV/Dealbreakers Talk Show/Dealbreakers Talk Show 0001.mkv", "E01", "Dealbreakers Talk Show"},
+		// A release tag is never the episode's title (CORE-2470).
+		{"/mnt/user/tv/Ted Lasso/Season 3/ted.lasso.s03e08.dv.2160p.web.h265-ggez.mkv", "S03E08", "ted lasso"},
 		{"/media/Movies/Sintel (2010)/Sintel (2010).mkv", "", "Sintel"},
 	}
 	for _, tc := range cases {
@@ -85,6 +87,45 @@ func TestMediaTitleKeepsParsedSeriesTitle(t *testing.T) {
 				t.Errorf("Parse(%q).Title = %q (ok=%v), want %q", tc.path, parsed.Title, ok, tc.wantParsed)
 			}
 		})
+	}
+}
+
+// TestIdentifiedMediaTitleUsesTheIdentifiedEpisodeName pins CORE-2470: when
+// an identification carries the episode's own name, the display title uses it,
+// punctuation included, in place of the filename's title, a release tag or a
+// bare code; without one it is MediaTitle.
+func TestIdentifiedMediaTitleUsesTheIdentifiedEpisodeName(t *testing.T) {
+	p := &filmtv.Parser{}
+	const dir = "/mnt/user/tv/Ted Lasso/Season 3/"
+	cases := []struct {
+		name, path, identified, want string
+	}{
+		{"replaces-filename-title", dir + "Ted.Lasso.S03E02.I.Dont.Want.to.Go.to.Chelsea.2160p.ATVP.WEB-DL.DDP5.1.HDR.H.265-NTb.mkv",
+			"I Don't Want to Go to Chelsea", "S03E02 · I Don't Want to Go to Chelsea"},
+		{"names-a-bare-code", dir + "Ted.Lasso.S03E01.2160p.WEB.H265-GGEZ.mkv",
+			"Smells Like Mean Spirit", "S03E01 · Smells Like Mean Spirit"},
+		{"replaces-a-release-tag", dir + "ted.lasso.s03e08.dv.2160p.web.h265-ggez.mkv",
+			"We'll Never Have Paris", "S03E08 · We'll Never Have Paris"},
+		{"keeps-a-tag-like-real-name", dir + "Ted.Lasso.S03E05.2160p.WEB.H265-GGEZ.mkv",
+			"HDR", "S03E05 · HDR"},
+		{"whitespace-collapsed", dir + "Ted.Lasso.S03E01.2160p.WEB.H265-GGEZ.mkv",
+			"  Smells  Like Mean Spirit ", "S03E01 · Smells Like Mean Spirit"},
+		{"none-keeps-filename-title", dir + "Ted.Lasso.S03E06.Sunflowers.HDR.2160p.WEB.H265-GGEZ.mkv",
+			"", "S03E06 · Sunflowers"},
+		{"none-keeps-bare-code", dir + "ted.lasso.s03e09.hdr.2160p.web.h265-ggez.mkv",
+			" ", "S03E09"},
+		{"not-an-episode", "/media/Movies/Sintel (2010)/Sintel (2010).mkv", "Sintel", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fields := map[string]string{filmtv.EpisodeTitleField: tc.identified, "network": "Apple TV+"}
+			if got := p.IdentifiedMediaTitle(tc.path, sdk.ParseProbe{}, fields); got != tc.want {
+				t.Errorf("IdentifiedMediaTitle(%q, %q) = %q, want %q", tc.path, tc.identified, got, tc.want)
+			}
+		})
+	}
+	if got, want := p.IdentifiedMediaTitle(dir+"Ted.Lasso.S03E06.Sunflowers.HDR.2160p.WEB.H265-GGEZ.mkv", sdk.ParseProbe{}, nil), "S03E06 · Sunflowers"; got != want {
+		t.Errorf("IdentifiedMediaTitle with no fields = %q, want %q", got, want)
 	}
 }
 

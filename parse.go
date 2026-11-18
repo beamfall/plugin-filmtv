@@ -122,6 +122,12 @@ var releaseNoise = map[string]bool{
 	"xvid": true, "divx": true, "av1": true, "10bit": true,
 	"aac": true, "aac2": true, "ac3": true, "eac3": true, "dts": true,
 	"dd5": true, "ddp5": true, "truehd": true, "hdr10": true,
+	// Dynamic-range, audio and streaming-source tags that are not words
+	// (CORE-2470: "Ted.Lasso.S03E08.DV.2160p" must not be titled "DV"). A
+	// "+" is not a token separator, so "HDR10+" is looked up whole.
+	"dovi": true, "hdr10+": true, "hdr10plus": true, "hlg": true, "sdr": true,
+	"ddp": true, "avc": true,
+	"atvp": true, "amzn": true, "dsnp": true, "hmax": true,
 }
 
 // releaseWords are release tags that are also ordinary words, so one can sit
@@ -132,6 +138,9 @@ var releaseNoise = map[string]bool{
 var releaseWords = map[string]bool{
 	"proper": true, "repack": true, "rerip": true, "extended": true,
 	"unrated": true, "internal": true, "uncut": true, "remastered": true,
+	// Short tags that can still be words or initials in a real title
+	// ("The HDR Story"): noise only before more release tags or at the end.
+	"dv": true, "hdr": true, "atmos": true,
 	"web": false, "multi": false, "dubbed": false, "subbed": false,
 }
 
