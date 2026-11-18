@@ -42,6 +42,15 @@ func TestTVLibraryFilesNeverBecomeFilms(t *testing.T) {
 			sdk.ParsedMedia{Title: "3 10 to Yuma", Class: "movie"}},
 		{"series-code-outside-tv", "/media/Movies/Space Odyssey/space odyssey2001.mkv",
 			sdk.ParsedMedia{Title: "space odyssey2001", Class: "movie"}},
+		{"named-series-folder-under-movies", "/media/Movies/Anthology Series 3/3 10 to Yuma.mkv",
+			sdk.ParsedMedia{Title: "3 10 to Yuma", Class: "movie"}},
+		// A resolution glued to the show name is not a series code.
+		{"glued-resolution-in-show-folder", "/media/TV/Sherlock/sherlock1080p.mkv",
+			sdk.ParsedMedia{Title: "sherlock1080p"}},
+		{"bare-glued-resolution-in-show-folder", "/media/TV/Sherlock/sherlock 1080.mkv",
+			sdk.ParsedMedia{Title: "sherlock 1080"}},
+		// A show folder with no ASCII letters must not loop on an empty key.
+		{"non-ascii-show-folder", "/media/TV/進撃の巨人/Trailer.mkv", sdk.ParsedMedia{Title: "Trailer"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

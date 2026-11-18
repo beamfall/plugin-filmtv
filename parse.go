@@ -406,8 +406,9 @@ func leadingEpisode(path, lower string) (episodeToken, bool) {
 // seasonFolderNumber reports whether path sits in a season folder and that
 // folder's season number, 0 for "Specials".
 func seasonFolderNumber(path string) (int, bool) {
-	m := reSeasonFolder.FindStringSubmatch(asciiLower(filepath.Base(filepath.Dir(path))))
-	if m == nil {
+	dir := filepath.Dir(path)
+	m := reSeasonFolder.FindStringSubmatch(asciiLower(filepath.Base(dir)))
+	if m == nil || (m[1] != "" && nearestLibraryFolder(dir) != "tv") {
 		return 0, false
 	}
 	return atoi(m[2] + m[3]), true
@@ -421,7 +422,7 @@ func showFolder(path string) string {
 	dir := filepath.Dir(path)
 	folder := filepath.Base(dir)
 	lower := asciiLower(folder)
-	if reSeasonFolder.MatchString(lower) || tvFolders[lower] || filmFolders[lower] {
+	if isSeasonFolder(dir) || tvFolders[lower] || filmFolders[lower] {
 		return ""
 	}
 	if nearestLibraryFolder(filepath.Dir(dir)) != "tv" {
@@ -431,8 +432,13 @@ func showFolder(path string) string {
 }
 
 // reSeriesCodeDigits is a three- or four-digit season-and-episode code
-// ("2001": season 20, episode 01) that ends at a non-digit.
-var reSeriesCodeDigits = regexp.MustCompile(`^(\d{1,2})(\d{2})(?:$|[^0-9])`)
+// ("2001": season 20, episode 01) that ends the name or a token, so a
+// resolution glued to the name ("sherlock1080p") is not one.
+var reSeriesCodeDigits = regexp.MustCompile(`^(\d{1,2})(\d{2})(?:$|[^a-z0-9])`)
+
+// resolutionDigits are the line counts a bare resolution names: never a
+// season-and-episode code glued to a series name.
+var resolutionDigits = map[string]bool{"480": true, "576": true, "720": true, "1080": true, "2160": true}
 
 // seriesCodeEpisode reads a season-and-episode code glued to the series name
 // ("aaf-simpsons2001" in "The Simpsons"): the show folder's name, folded to
@@ -447,7 +453,10 @@ func seriesCodeEpisode(path, lower string) (episodeToken, bool) {
 		return episodeToken{}, false
 	}
 	key := foldAlnum(asciiLower(series))
-	keys := []string{key}
+	var keys []string
+	if len(key) >= 3 {
+		keys = append(keys, key)
+	}
 	if trimmed := strings.TrimPrefix(key, "the"); trimmed != key && len(trimmed) >= 3 {
 		keys = append(keys, trimmed)
 	}
@@ -458,7 +467,7 @@ func seriesCodeEpisode(path, lower string) (episodeToken, bool) {
 				break
 			}
 			end := from + at + len(key)
-			if m := reSeriesCodeDigits.FindStringSubmatchIndex(lower[end:]); m != nil {
+			if m := reSeriesCodeDigits.FindStringSubmatchIndex(lower[end:]); m != nil && !resolutionDigits[lower[end:end+m[5]]] {
 				index := atoi(lower[end+m[4] : end+m[5]])
 				if index > 0 {
 					return episodeToken{start: 0, end: end + m[5], sequence: numericText(lower[end+m[2] : end+m[3]]), index: index}, true
@@ -478,6 +487,15 @@ func foldAlnum(s string) string {
 		}
 		return -1
 	}, s)
+}
+
+// isSeasonFolder reports whether dir is a season folder. The form with a
+// series name in front of the season word ("Sherlock Series 3") counts only
+// under a TV library folder: elsewhere it is as likely a film collection
+// ("Movies/Anthology Series 3").
+func isSeasonFolder(dir string) bool {
+	_, ok := seasonFolderNumber(filepath.Join(dir, "x"))
+	return ok
 }
 
 // isSpecialsFolder reports whether path sits in a "Specials" season folder.
@@ -678,7 +696,7 @@ func episodeTitle(tail, lowerTail string) string {
 // as a series.
 func seriesFromFolders(path string) (string, int) {
 	seasonDir := filepath.Dir(path)
-	if m := reSeasonFolder.FindStringSubmatchIndex(asciiLower(filepath.Base(seasonDir))); m != nil {
+	if m := reSeasonFolder.FindStringSubmatchIndex(asciiLower(filepath.Base(seasonDir))); m != nil && (m[2] < 0 || nearestLibraryFolder(seasonDir) == "tv") {
 		above := filepath.Base(filepath.Dir(seasonDir))
 		if lower := asciiLower(above); m[2] >= 0 && (tvFolders[lower] || filmFolders[lower]) {
 			return seriesFromFolder(filepath.Base(seasonDir)[m[2]:m[3]])
