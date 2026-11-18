@@ -222,14 +222,18 @@ func TestAnimeEntityMaps(t *testing.T) {
 // a recorded series document (CORE-2514, CORE-2513): the show's details,
 // poster and backdrop, the TMDB title with its apostrophes and accents in
 // place of the folder spelling, and links to the genres and the cast with a
-// person id, in billing order. The season map's {sequence} path has no
+// person id, in billing order, named by their /person/{id} documents. The season map's {sequence} path has no
 // offline value, so it emits nothing here.
 func TestTMDBTVShowContainerTrace(t *testing.T) {
 	const image = "https://image.tmdb.org/t/p/original"
 	sdktest.RunScraperTraceConformance(t, []sdktest.ScraperTraceVector{{
-		Name:  "tmdb-tv show container",
-		Spec:  scraperByID(t, "tmdb-tv"),
-		Input: sdktest.TraceInput{ID: "4242", LookupDoc: loadFixture(t, "tmdb-tv-series.json")},
+		Name: "tmdb-tv show container",
+		Spec: scraperByID(t, "tmdb-tv"),
+		Input: sdktest.TraceInput{ID: "4242", LookupDoc: loadFixture(t, "tmdb-tv-series.json"),
+			EntityDocs: map[string]map[string]any{
+				"/person/101": {"name": "Ada Lovelace-Byron"},
+				"/person/102": {"name": "Zoë O'Brien"},
+			}},
 		Want: sdktest.ScraperTrace{
 			Requests: []sdktest.TraceRequest{{Role: "lookup", Method: "GET",
 				URL:  "https://api.themoviedb.org/3/tv/4242?append_to_response=credits,content_ratings",
