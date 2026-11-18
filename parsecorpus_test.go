@@ -482,7 +482,21 @@ func parseCorpus() []parseCase {
 			want:       sdk.ParsedMedia{Title: "Gavin & Stacey", Class: "episode", Sequence: "1", Index: 2},
 			resolvable: true,
 		},
+		{
+			name:       "compact-season-code-in-year-tagged-show-folder",
+			path:       "Gavin & Stacey (2007)/Gavin.&.Stacey.(2007).S0101.1080p.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Gavin & Stacey", Class: "episode", Year: 2007, Sequence: "1", Index: 1},
+			resolvable: true,
+		},
 		// Without folder context the same shape is a film's name.
+		{
+			name:       "compact-season-shape-with-checksum-only",
+			path:       "Agent S0101 [ABCD1234].mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Agent S0101", Class: "movie"},
+			resolvable: true,
+		},
 		{
 			name:       "compact-season-shape-in-film-name",
 			path:       "Agent S0101.mkv",

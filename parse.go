@@ -397,8 +397,9 @@ func bareSeasonEpisode(path, lower string) (episodeToken, bool) {
 }
 
 // compactSeasonEpisode reads a compact "S0101" code (season 1, episode 1)
-// when the path gives episode context: a season folder, a TV library folder,
-// or a show folder named for the series in front of the code. Like the bare-e
+// only with folder context: a season folder, a TV library folder, or a show
+// folder named for the series in front of the code. A checksum bracket alone
+// is not enough ("Agent S0101 [ABCD1234]" stays a film). Like the bare-e
 // code it carries its own season; only "Specials" overrides it (season 0).
 func compactSeasonEpisode(path, lower string) (episodeToken, bool) {
 	m := reCompactSeason.FindStringSubmatchIndex(lower)
@@ -406,7 +407,10 @@ func compactSeasonEpisode(path, lower string) (episodeToken, bool) {
 		return episodeToken{}, false
 	}
 	start := m[2] - 1 // the "s"
-	if !episodeContext(path, lower, cleanTitle(lower[:start]), formBareCode) {
+	// The series in front of the code is normalized as a show folder's name
+	// is, so a year in both ("Show (2007)/Show.(2007).S0101") still matches.
+	series, _ := seriesFromFolder(lower[:start])
+	if !episodeContext(path, lower, series, formCompactCode) {
 		return episodeToken{}, false
 	}
 	sequence := numericText(lower[m[2]:m[3]])
@@ -581,6 +585,9 @@ const (
 	// formDashed is a three-digit number after " - " ("Naruto - 001"), the
 	// anime release form.
 	formDashed
+	// formCompactCode is a compact season-and-episode code ("S0101"): only a
+	// folder gives it context, never a checksum bracket.
+	formCompactCode
 )
 
 // episodeContext reports whether path carries evidence beyond the bare
@@ -609,7 +616,7 @@ func episodeContext(path, lower, series string, form weakForm) bool {
 	switch {
 	case library == "film":
 		return false
-	case library == "tv", reChecksum.MatchString(lower):
+	case library == "tv", form != formCompactCode && reChecksum.MatchString(lower):
 		return true
 	case form == formDashed && reLeadingGroups.MatchString(lower):
 		return true
