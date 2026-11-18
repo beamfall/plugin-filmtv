@@ -1,0 +1,6 @@
+- [x] Declare `community-rating` and `community-rating-votes`
+- [x] Map TMDB score, votes and US certification on `tmdb-movie`, `tmdb-tv` and the episode lookup
+- [x] Tests pinning templates, declarations and mappings
+- [ ] `script/gate.sh`
+- [ ] Tag a release and repin in core (lander)
+- [ ] `openspec archive core-2399-media-ratings` after landing

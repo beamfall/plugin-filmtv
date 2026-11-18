@@ -52,8 +52,8 @@ func sourceKey(source sdk.SourceSpec) string {
 
 func TestProviderIDLookupTemplates(t *testing.T) {
 	want := map[string]map[string]string{
-		"tmdb-movie":  {"tmdb": "/movie/{id}?append_to_response=credits"},
-		"tmdb-tv":     {"tmdb": "/tv/{id}?append_to_response=credits"},
+		"tmdb-movie":  {"tmdb": "/movie/{id}?append_to_response=credits,release_dates"},
+		"tmdb-tv":     {"tmdb": "/tv/{id}?append_to_response=credits,content_ratings"},
 		"tvdb-series": {"tvdb": "/series/{id}/extended?meta=translations", "imdb": "/search/remoteid/{id}", "tmdb": "/search/remoteid/{id}"},
 		"tvmaze-show": {"tvdb": "/lookup/shows?thetvdb={id}", "imdb": "/lookup/shows?imdb={id}"},
 	}
@@ -512,5 +512,65 @@ func TestBundleMediaSubtitle(t *testing.T) {
 	}
 	if got := sdk.RenderMediaSubtitle(segments, "en", lookup(nil)); got != "" {
 		t.Errorf("movie subtitle = %q, want empty", got)
+	}
+}
+
+// TestTMDBRatingMappings pins the ratings slice (CORE-2399): the community
+// score fields are declared as numbers, both TMDB scrapers map score and
+// votes, movies map the US certification onto the policy and display fields,
+// and series map their US TV rating onto the display field only, because TV
+// ratings sit outside the MPAA scale that orders Profile ceilings.
+func TestTMDBRatingMappings(t *testing.T) {
+	b := filmtv.Bundle()
+	declared := map[string]string{}
+	for _, field := range b.MediaFields {
+		declared[field.Name] = field.Type
+	}
+	for name, typ := range map[string]string{
+		filmtv.CommunityRatingField:      "number",
+		filmtv.CommunityRatingVotesField: "number",
+		"certification":                  "text",
+		"certification-display":          "text",
+	} {
+		if declared[name] != typ {
+			t.Errorf("MediaField %q type = %q, want %q", name, declared[name], typ)
+		}
+	}
+
+	const usMovie = "release_dates.results[iso_3166_1=US].release_dates[type=3].certification" +
+		"||release_dates.results[iso_3166_1=US].release_dates[type=4].certification" +
+		"||release_dates.results[iso_3166_1=US].release_dates.0.certification"
+	score := sdk.MediaFieldKeyPrefix + filmtv.CommunityRatingField
+	votes := sdk.MediaFieldKeyPrefix + filmtv.CommunityRatingVotesField
+	want := map[string]map[string]string{
+		"tmdb-movie": {score: "vote_average", votes: "vote_count",
+			"media.certification": usMovie, "media.certification-display": usMovie},
+		"tmdb-tv": {score: "vote_average", votes: "vote_count",
+			"media.certification-display": "content_ratings.results[iso_3166_1=US].rating"},
+	}
+	for _, s := range b.Scrapers {
+		pins, ok := want[s.ID]
+		if !ok {
+			continue
+		}
+		for key, path := range pins {
+			if got := s.FieldMap[key]; got != path {
+				t.Errorf("%s FieldMap[%q] = %q, want %q", s.ID, key, got, path)
+			}
+		}
+		if s.ID == "tmdb-tv" {
+			if got, ok := s.FieldMap["media.certification"]; ok {
+				t.Errorf("tmdb-tv maps media.certification = %q; TV ratings must stay display-only", got)
+			}
+			for key, path := range map[string]string{score: "vote_average", votes: "vote_count"} {
+				if got := s.ItemFieldMap[key]; got != path {
+					t.Errorf("tmdb-tv ItemFieldMap[%q] = %q, want %q", key, got, path)
+				}
+			}
+		}
+		delete(want, s.ID)
+	}
+	if len(want) > 0 {
+		t.Errorf("missing scrapers: %v", want)
 	}
 }

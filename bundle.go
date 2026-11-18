@@ -23,6 +23,29 @@ import (
 // top-billed cast rather than an unbounded roster of requests.
 const tmdbMaxCastLookups = 10
 
+// Community score fields (CORE-2399): core-conventional Media field names the
+// detail page reads for its score chip.
+const (
+	CommunityRatingField      = "community-rating"
+	CommunityRatingVotesField = "community-rating-votes"
+)
+
+// TMDB lookups with the documents that carry ratings folded on: credits for
+// the credited-in maps, release_dates (movies) and content_ratings (series)
+// for the certification fields.
+const (
+	tmdbMovieLookup = "/movie/{id}?append_to_response=credits,release_dates"
+	tmdbTVLookup    = "/tv/{id}?append_to_response=credits,content_ratings"
+)
+
+// tmdbMovieUSCertification picks the US theatrical (type 3) certification,
+// else the digital (type 4) one, else the first US release's. Blank values
+// fall through to the next alternative and a blank result is never stored, so
+// a title with no US certification stays unrated.
+const tmdbMovieUSCertification = "release_dates.results[iso_3166_1=US].release_dates[type=3].certification" +
+	"||release_dates.results[iso_3166_1=US].release_dates[type=4].certification" +
+	"||release_dates.results[iso_3166_1=US].release_dates.0.certification"
+
 // Bundle returns the complete declarative Film & TV contribution.
 func Bundle() sdk.Bundle {
 	return sdk.Bundle{
@@ -95,6 +118,14 @@ func Bundle() sdk.Bundle {
 			// no network — the field stays absent there.
 			{Name: "network", Type: "text", Filterable: true,
 				Label: sdk.LocaleString{"en": "Network", "fr": "Chaîne"}},
+			// Community score (CORE-2399): the provider's 0-10 user score
+			// and its vote count, display-only and never a policy value.
+			// Core reads these core-conventional names for the detail
+			// page's score chip; the label names the source.
+			{Name: CommunityRatingField, Type: "number", Sortable: true,
+				Label: sdk.LocaleString{"en": "TMDB rating", "fr": "Note TMDB"}},
+			{Name: CommunityRatingVotesField, Type: "number",
+				Label: sdk.LocaleString{"en": "TMDB votes", "fr": "Votes TMDB"}},
 		},
 		MediaClassLabels: map[string]sdk.LocaleString{
 			"movie":   {"en": "Movie", "fr": "Film"},
@@ -437,9 +468,11 @@ func Bundle() sdk.Bundle {
 				// cast/crew list onto this same document
 				// rather than a separate /movie/{id}/credits request — the
 				// credited-in EntityMap below resolves credits.cast against it.
-				LookupTemplate: "/movie/{id}?append_to_response=credits",
+				// release_dates (CORE-2399) folds the per-region release
+				// certifications on too, for the certification fields below.
+				LookupTemplate: tmdbMovieLookup,
 				LookupByIDTemplate: map[string]string{
-					"tmdb": "/movie/{id}?append_to_response=credits",
+					"tmdb": tmdbMovieLookup,
 				},
 				FieldMap: map[string]string{
 					"title":   "title",
@@ -458,6 +491,12 @@ func Bundle() sdk.Bundle {
 					"media.tagline":           "tagline",
 					"media.release-date":      "release_date",
 					"media.production-status": "status",
+					// Ratings (CORE-2399): TMDB's community score and the US
+					// MPAA certification, which feeds the Profile ceiling.
+					sdk.MediaFieldKeyPrefix + CommunityRatingField:      "vote_average",
+					sdk.MediaFieldKeyPrefix + CommunityRatingVotesField: "vote_count",
+					"media.certification":                               tmdbMovieUSCertification,
+					"media.certification-display":                       tmdbMovieUSCertification,
 				},
 				Transforms: map[string]string{"year": "year-from-date"},
 				// poster_path / backdrop_path are site-relative ("/abc.jpg");
@@ -515,9 +554,11 @@ func Bundle() sdk.Bundle {
 				// append_to_response=credits folds the cast/crew list onto
 				// this document, matching tmdb-movie —
 				// the credited-in EntityMap below resolves credits.cast.
-				LookupTemplate: "/tv/{id}?append_to_response=credits",
+				// content_ratings (CORE-2399) folds the per-region TV
+				// ratings on for media.certification-display below.
+				LookupTemplate: tmdbTVLookup,
 				LookupByIDTemplate: map[string]string{
-					"tmdb": "/tv/{id}?append_to_response=credits",
+					"tmdb": tmdbTVLookup,
 				},
 				FieldMap: map[string]string{
 					"title":   "name",
@@ -542,6 +583,12 @@ func Bundle() sdk.Bundle {
 					// distinction, separate from production_companies. The
 					// first element is the primary network.
 					"media.network": "networks.0.name",
+					// Ratings (CORE-2399). US TV ratings (TV-MA, TV-14) sit
+					// outside the MPAA scale that orders Profile ceilings, so
+					// they are display-only: certification stays unset.
+					sdk.MediaFieldKeyPrefix + CommunityRatingField:      "vote_average",
+					sdk.MediaFieldKeyPrefix + CommunityRatingVotesField: "vote_count",
+					"media.certification-display":                       "content_ratings.results[iso_3166_1=US].rating",
 				},
 				Transforms:     map[string]string{"year": "year-from-date"},
 				ArtworkBaseURL: "https://image.tmdb.org/t/p/original",
@@ -569,6 +616,9 @@ func Bundle() sdk.Bundle {
 					// The episode's own name, so a filename without one
 					// still renders a subtitle title (CORE-1226).
 					sdk.MediaFieldKeyPrefix + EpisodeTitleField: "name",
+					// The episode's own community score (CORE-2399).
+					sdk.MediaFieldKeyPrefix + CommunityRatingField:      "vote_average",
+					sdk.MediaFieldKeyPrefix + CommunityRatingVotesField: "vote_count",
 				},
 				ItemArtworkMap: map[string]string{"thumb": "still_path"},
 				// A TV-shaped identification means the file is an episode.
