@@ -49,6 +49,12 @@ var (
 	// or digit, so a checksum tag ("[4E01A2B3]") never matches. Read only with
 	// episode context (bareSeasonEpisode). Groups: the season, the episode.
 	reSeasonE = regexp.MustCompile(`(?:^|[ ._-])(\d{1,2})e(\d{2,3})(?:$|[^a-z0-9])`)
+	// A compact season-and-episode code with no "e" ("S0101": season 01,
+	// episode 01), after a separator and not followed by a letter or digit.
+	// A film can carry the same shape ("Agent S0101"), so it is read only with
+	// episode context (compactSeasonEpisode, CORE-2554). Groups: the season,
+	// the episode.
+	reCompactSeason = regexp.MustCompile(`(?:^|[ ._-])s(\d{2})(\d{2})(?:$|[^a-z0-9])`)
 	// A leading "season episode" number pair ("3 01 From Hell"). Only read in
 	// a season folder (leadingEpisode): a film name can start with two numbers
 	// too ("3 10 to Yuma"). Groups: season, episode.
@@ -230,6 +236,9 @@ func parseName(path string) (nameParse, bool) {
 		episode, isEpisode = bareSeasonEpisode(path, lower)
 	}
 	if !isEpisode {
+		episode, isEpisode = compactSeasonEpisode(path, lower)
+	}
+	if !isEpisode {
 		episode, isEpisode = leadingEpisode(path, lower)
 	}
 	if !isEpisode {
@@ -385,6 +394,30 @@ func bareSeasonEpisode(path, lower string) (episodeToken, bool) {
 		return episodeToken{start: m[2], end: m[5], sequence: sequence, index: atoi(lower[m[4]:m[5]])}, true
 	}
 	return episodeToken{}, false
+}
+
+// compactSeasonEpisode reads a compact "S0101" code (season 1, episode 1)
+// when the path gives episode context: a season folder, a TV library folder,
+// or a show folder named for the series in front of the code. Like the bare-e
+// code it carries its own season; only "Specials" overrides it (season 0).
+func compactSeasonEpisode(path, lower string) (episodeToken, bool) {
+	m := reCompactSeason.FindStringSubmatchIndex(lower)
+	if m == nil {
+		return episodeToken{}, false
+	}
+	start := m[2] - 1 // the "s"
+	if !episodeContext(path, lower, cleanTitle(lower[:start]), formBareCode) {
+		return episodeToken{}, false
+	}
+	sequence := numericText(lower[m[2]:m[3]])
+	if isSpecialsFolder(path) {
+		sequence = "0"
+	}
+	index := atoi(lower[m[4]:m[5]])
+	if index == 0 {
+		return episodeToken{}, false
+	}
+	return episodeToken{start: start, end: m[5], sequence: sequence, index: index}, true
 }
 
 // leadingEpisode reads a leading "season episode" number pair ("3 01 From

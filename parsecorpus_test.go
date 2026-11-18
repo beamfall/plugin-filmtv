@@ -458,6 +458,59 @@ func parseCorpus() []parseCase {
 			want:       sdk.ParsedMedia{Title: "The IT Crowd", Class: "episode", Sequence: "1", Index: 1},
 			resolvable: true,
 		},
+		// A compact "S0101" code (season 01, episode 01) is read only with
+		// folder context: a show folder named for the series, a TV library
+		// folder or a season folder (CORE-2554).
+		{
+			name:       "compact-season-code-in-show-folder",
+			path:       "Gavin & Stacey/Gavin.&.Stacey.S0101.1080p.WEB-DL.AAC2.0.H.264.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Gavin & Stacey", Class: "episode", Sequence: "1", Index: 1},
+			resolvable: true,
+		},
+		{
+			name:       "compact-season-code-in-tv-folder",
+			path:       "TV/Gavin.&.Stacey.S0101.1080p.WEB-DL.AAC2.0.H.264.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Gavin & Stacey", Class: "episode", Sequence: "1", Index: 1},
+			resolvable: true,
+		},
+		{
+			name:       "compact-season-code-in-season-folder",
+			path:       "Gavin & Stacey/Series 1/Gavin.&.Stacey.S0102.1080p.WEB-DL.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Gavin & Stacey", Class: "episode", Sequence: "1", Index: 2},
+			resolvable: true,
+		},
+		// Without folder context the same shape is a film's name.
+		{
+			name:       "compact-season-shape-in-film-name",
+			path:       "Agent S0101.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Agent S0101", Class: "movie"},
+			resolvable: true,
+		},
+		{
+			name:       "compact-season-shape-in-film-folder",
+			path:       "Movies/Agent S0101 (2019).mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Agent S0101", Class: "movie", Year: 2019},
+			resolvable: true,
+		},
+		{
+			name:       "compact-season-shape-in-other-show-folder",
+			path:       "Other Show/Agent.S0101.1080p.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Agent S0101", Class: "movie"},
+			resolvable: true,
+		},
+		{
+			name:       "compact-season-shape-in-tv-film-folder",
+			path:       "Media/TV/Movies/Agent S0101.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Agent S0101", Class: "movie"},
+			resolvable: true,
+		},
 		// Leading "season episode" numbers, read only in an agreeing season
 		// folder.
 		{
