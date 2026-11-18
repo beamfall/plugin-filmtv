@@ -408,8 +408,10 @@ func compactSeasonEpisode(path, lower string) (episodeToken, bool) {
 	}
 	start := m[2] - 1 // the "s"
 	// The series in front of the code is normalized as a show folder's name
-	// is, so a year in both ("Show (2007)/Show.(2007).S0101") still matches.
-	series, _ := seriesFromFolder(lower[:start])
+	// is, so a year in both ("Show (2007)/Show.(2007).S0101") still matches,
+	// and a leading release-group bracket is not part of it.
+	prefix := lower[:start]
+	series, _ := seriesFromFolder(prefix[len(reLeadingGroups.FindString(prefix)):])
 	if !episodeContext(path, lower, series, formCompactCode) {
 		return episodeToken{}, false
 	}
