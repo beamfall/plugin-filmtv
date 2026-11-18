@@ -369,8 +369,8 @@ func TestTMDBTVContainerHydration(t *testing.T) {
 	}
 	show, season := containers["show"], containers["season"]
 	if !show.Container || show.Path != "" || show.ArtworkPath != "poster_path" ||
-		show.FieldMap["overview"] != "overview" || show.FieldMap["first-air-date"] != "first_air_date" {
-		t.Errorf("show container map = %+v, want root poster_path, overview and first_air_date", show)
+		show.FieldMap["summary"] != "overview" || show.FieldMap["first-air-date"] != "first_air_date" {
+		t.Errorf("show container map = %+v, want root poster_path, summary and first_air_date", show)
 	}
 	if !season.Container || season.Path != "seasons[season_number={sequence}]" || season.ArtworkPath != "poster_path" ||
 		season.FieldMap["overview"] != "overview" || season.FieldMap["air-date"] != "air_date" {

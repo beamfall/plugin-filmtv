@@ -187,13 +187,27 @@ func Bundle() sdk.Bundle {
 				Fields: []sdk.FieldSpec{
 					{Name: "first-air-date", Type: "date", Sortable: true,
 						Label: sdk.LocaleString{"en": "First Air Date", "fr": "Première diffusion"}},
+					{Name: "last-air-date", Type: "date", Sortable: true,
+						Label: sdk.LocaleString{"en": "Last Air Date", "fr": "Dernière diffusion"}},
 					{Name: "status", Type: "text", Filterable: true,
 						Label: sdk.LocaleString{"en": "Status", "fr": "Statut"}},
+					{Name: "network", Type: "text", Filterable: true,
+						Label: sdk.LocaleString{"en": "Network", "fr": "Chaîne"}},
 					{Name: "certification", Type: "text",
 						Label: sdk.LocaleString{"en": "Certification", "fr": "Classification"}},
+					// The display rating and community score core's detail
+					// hero reads as chips, as on Media (CORE-2399, CORE-2514).
+					{Name: "certification-display", Type: "text",
+						Label: sdk.LocaleString{"en": "Rating", "fr": "Classification affichée"}},
+					{Name: CommunityRatingField, Type: "number", Sortable: true,
+						Label: sdk.LocaleString{"en": "TMDB rating", "fr": "Note TMDB"}},
+					{Name: CommunityRatingVotesField, Type: "number",
+						Label: sdk.LocaleString{"en": "TMDB votes", "fr": "Votes TMDB"}},
 					{Name: "tmdb-id", Type: "text",
 						Label: sdk.LocaleString{"en": "TMDB ID", "fr": "Identifiant TMDB"}},
-					{Name: "overview", Type: "text",
+					// summary, not overview: core's detail hero renders the
+					// summary field as the overview (CORE-2514).
+					{Name: "summary", Type: "text",
 						Label: sdk.LocaleString{"en": "Overview", "fr": "Synopsis"}},
 				},
 				Relations: []sdk.RelationSpec{
@@ -682,11 +696,27 @@ func Bundle() sdk.Bundle {
 					// Container maps hydrate the show and season the local
 					// mapper built for this episode; they create nothing. The
 					// series document root carries the show's poster and
-					// overview, and seasons[] each season's (CORE-2335).
+					// overview, and seasons[] each season's (CORE-2335). The
+					// show also takes its details and backdrop, the TMDB title
+					// in place of the folder spelling (kept when name is
+					// absent), and links to the genres and cast the maps above
+					// hydrate from the same document (CORE-2514, CORE-2513).
 					{Kind: "show", Container: true, ArtworkPath: "poster_path",
+						ArtworkMap: map[string]string{"backdrop": "backdrop_path"},
+						TitlePath:  "name",
 						FieldMap: map[string]string{
-							"overview":       "overview",
-							"first-air-date": "first_air_date",
+							"summary":                 "overview",
+							"first-air-date":          "first_air_date",
+							"last-air-date":           "last_air_date",
+							"status":                  "status",
+							"network":                 "networks.0.name",
+							"certification-display":   "content_ratings.results[iso_3166_1=US].rating",
+							CommunityRatingField:      "vote_average",
+							CommunityRatingVotesField: "vote_count",
+						},
+						ContainerRelations: map[string]string{
+							"in-genre": "genre-of",
+							"credit":   "credited-in",
 						}},
 					{Kind: "season", Container: true, Path: "seasons[season_number={sequence}]",
 						ArtworkPath: "poster_path",

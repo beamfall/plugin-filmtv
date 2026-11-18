@@ -217,3 +217,63 @@ func TestAnimeEntityMaps(t *testing.T) {
 		}
 	}
 }
+
+// TestTMDBTVShowContainerTrace freezes the tmdb-tv show container output for
+// a recorded series document (CORE-2514, CORE-2513): the show's details,
+// poster and backdrop, the TMDB title with its apostrophes and accents in
+// place of the folder spelling, and links to the genres and the cast with a
+// person id, in billing order. The season map's {sequence} path has no
+// offline value, so it emits nothing here.
+func TestTMDBTVShowContainerTrace(t *testing.T) {
+	const image = "https://image.tmdb.org/t/p/original"
+	sdktest.RunScraperTraceConformance(t, []sdktest.ScraperTraceVector{{
+		Name:  "tmdb-tv show container",
+		Spec:  scraperByID(t, "tmdb-tv"),
+		Input: sdktest.TraceInput{ID: "4242", LookupDoc: loadFixture(t, "tmdb-tv-series.json")},
+		Want: sdktest.ScraperTrace{
+			Requests: []sdktest.TraceRequest{{Role: "lookup", Method: "GET",
+				URL:  "https://api.themoviedb.org/3/tv/4242?append_to_response=credits,content_ratings",
+				Auth: sdktest.AuthPlacement{Location: "query", Name: "api_key", InURL: true}}},
+			Fields: map[string]string{
+				"title":                        "L'Été d'Amélie",
+				"summary":                      "A synthetic series document in the TMDB /tv/{id} shape.",
+				"year":                         "2024",
+				"media.original-title":         "L'Été d'Amélie",
+				"media.production-status":      "Returning Series",
+				"media.tagline":                "",
+				"media.network":                "Netflix",
+				"media.certification-display":  "TV-MA",
+				"media.community-rating":       "7.5",
+				"media.community-rating-votes": "1210",
+			},
+			Artwork: map[string]string{
+				"poster":   image + "/series-poster.jpg",
+				"backdrop": image + "/series-backdrop.jpg",
+			},
+			Containers: []sdktest.TraceContainer{{
+				Kind:  "show",
+				Title: "L'Été d'Amélie",
+				Fields: map[string]string{
+					"summary":                        "A synthetic series document in the TMDB /tv/{id} shape.",
+					"first-air-date":                 "2024-03-21",
+					"last-air-date":                  "2024-03-21",
+					"status":                         "Returning Series",
+					"network":                        "Netflix",
+					"certification-display":          "TV-MA",
+					filmtv.CommunityRatingField:      "7.5",
+					filmtv.CommunityRatingVotesField: "1210",
+				},
+				Artwork: map[string]string{
+					"poster":   image + "/series-poster.jpg",
+					"backdrop": image + "/series-backdrop.jpg",
+				},
+				Links: []sdktest.TraceLink{
+					{Relation: "credit", Kind: "person", Name: "Ada Lovelace-Byron"},
+					{Relation: "credit", Kind: "person", Name: "Zoë O'Brien"},
+					{Relation: "in-genre", Kind: "genre", Name: "Drama"},
+					{Relation: "in-genre", Kind: "genre", Name: "Sci-Fi & Fantasy"},
+				},
+			}},
+		},
+	}})
+}
