@@ -629,3 +629,24 @@ func TestTMDBRatingMappings(t *testing.T) {
 		t.Errorf("missing scrapers: %v", want)
 	}
 }
+
+// CORE-2535: this layout also serves TV Libraries, including unmatched files
+// that default to movie. Only deliberate catalog browsing should offer that split.
+func TestHomeHasNoMovieOnlyRail(t *testing.T) {
+	home, ok := filmtv.Bundle().BrowseLayout()
+	if !ok {
+		t.Fatal("missing browse layout")
+	}
+	all := false
+	for _, section := range home.Sections {
+		if section.Kind != "filter-bar" && section.Source.FieldFilters["class"] == "movie" {
+			t.Errorf("movie-only home section %q promotes unmatched files in TV Libraries", section.ID)
+		}
+		if section.ID == "browse-all" && section.Source.Kind == "all-items" && len(section.Source.FieldFilters) == 0 {
+			all = true
+		}
+	}
+	if !all {
+		t.Error("loose Media lost their deliberate All Titles browse")
+	}
+}

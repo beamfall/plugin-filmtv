@@ -336,9 +336,10 @@ func Bundle() sdk.Bundle {
 				},
 			},
 		},
-		// The Library home. The class-split "Movies" / "Episodes" browse
-		// grids are the mixed-Library split, expressed as the Source
-		// contract's declarative FieldFilters over the `class` keystone.
+		// The Library home is shared by Film and TV Libraries. A fixed
+		// movie-only rail would promote unmatched movie-class files in a
+		// TV Library (CORE-2535); deliberate class browsing stays in the
+		// filter bar and All Titles grid.
 		// The genre shelves are the Source contract's EntityFilter: "Media related to the genre entity
 		// named N in this Library" (the Comedy shelf below proves it; more
 		// shelves are a curation pass, not new vocabulary). The catch-all
@@ -389,11 +390,6 @@ func Bundle() sdk.Bundle {
 					ArtworkSlot: "poster",
 					Source: sdk.SourceSpec{Kind: "all-items",
 						EntityFilter: &sdk.EntityFilter{Kind: "genre", Name: "Comedy"}}},
-				{ID: "browse-movies", Kind: "grid",
-					Title:       sdk.LocaleString{"en": "Movies", "fr": "Films"},
-					ArtworkSlot: "poster",
-					Source: sdk.SourceSpec{Kind: "all-items",
-						FieldFilters: map[string]any{"class": "movie"}}},
 				{ID: "browse-episodes", Kind: "grid",
 					Title:       sdk.LocaleString{"en": "Episodes", "fr": "Épisodes"},
 					ArtworkSlot: "poster",
