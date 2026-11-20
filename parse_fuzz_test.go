@@ -69,6 +69,8 @@ func FuzzParseFilename(f *testing.F) {
 		"Show/season01-banner.jpg",
 		"Голубая волна | Blue Crush (2002) DVDRip.mkv",
 		"千と千尋の神隠し (Spirited Away) 2001.mkv",
+		"Космическая одиссея | 2001 A Space Odyssey 1968.mkv",
+		"千と千尋の神隠し（Spirited Away） (2001).mkv",
 		"",
 	} {
 		f.Add(seed)
@@ -109,10 +111,15 @@ func FuzzParseFilename(f *testing.F) {
 		if got.IndexEnd != 0 && got.IndexEnd <= got.Index {
 			t.Fatalf("Parse(%q) returned an index end that is not after the index: %+v", path, got)
 		}
+		names := map[string]bool{}
 		for _, field := range fields {
+			if names[field.Name] {
+				t.Fatalf("ParseMediaFields(%q) repeats field %q: %+v", path, field.Name, fields)
+			}
+			names[field.Name] = true
 			if field.Name == AlternateTitleField {
 				// The searched title of a dual-titled name is the Latin one.
-				if !latinOnly(got.Title) || !hasOtherScript(field.Text) {
+				if !latinOnly(got.Title) || !otherScriptOnly(field.Text) {
 					t.Fatalf("Parse(%q) = %q with alternate title %q", path, got.Title, field.Text)
 				}
 			} else if got.Class != "episode" || field.Name != EpisodeTitleField {
@@ -133,7 +140,12 @@ func FuzzParseFilename(f *testing.F) {
 		}
 		typed := parser.ParseTypedMediaFields(path, sdk.ParseProbe{})
 		dated := false
+		typedNames := map[string]bool{}
 		for _, field := range typed {
+			if typedNames[field.Name] {
+				t.Fatalf("ParseTypedMediaFields(%q) repeats field %q: %+v", path, field.Name, typed)
+			}
+			typedNames[field.Name] = true
 			switch {
 			case field.Name == AlternateTitleField && field.Date.IsZero() && field.Text != "" && field.Text == cleanTitle(field.Text):
 			case got.Class != "episode":

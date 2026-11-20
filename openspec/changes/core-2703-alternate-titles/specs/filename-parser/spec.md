@@ -2,10 +2,11 @@
 
 ### Requirement: A dual-script title parses to its Latin title
 
-When a parsed title is two titles, one only in Latin script and one with letters of another
-script, split by `|`, `／` or `｜`, or with one in parentheses at the end of the other, the title
-SHALL be the Latin one and the other SHALL be the `alternate-title` Media field. Any other title
-SHALL stay whole and carry no alternate title.
+When a parsed title is two titles, one with letters only in Latin script and one with letters
+only in another script (letters common to all scripts count as neither), split by `|`, `／` or
+`｜`, or with one in ASCII or full-width parentheses at the end of the other, the title SHALL be
+the Latin one and the other SHALL be the `alternate-title` Media field. Any other title SHALL
+stay whole and carry no alternate title.
 
 #### Scenario: Bar-separated titles
 
@@ -26,3 +27,18 @@ SHALL stay whole and carry no alternate title.
 
 - **WHEN** a file is `/movies/Star Wars (Special Edition) 1977.mkv`
 - **THEN** it parses to title `Star Wars (Special Edition)`, with no alternate title
+
+### Requirement: A qualifier or a leading year is not a title split
+
+A region or edition qualifier in parentheses SHALL NOT be taken as a second title, and a year
+directly after a title bar SHALL start the second title rather than end the first.
+
+#### Scenario: Qualifier in parentheses
+
+- **WHEN** a file is `/movies/Бразилия (Director's Cut) (1985).mkv`
+- **THEN** it parses to title `Бразилия (Director's Cut)`, year 1985, with no alternate title
+
+#### Scenario: Year starting the Latin title
+
+- **WHEN** a file is `/movies/Космическая одиссея | 2001 A Space Odyssey 1968.mkv`
+- **THEN** it parses to title `2001 A Space Odyssey`, year 1968, alternate title `Космическая одиссея`

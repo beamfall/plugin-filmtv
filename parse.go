@@ -447,60 +447,106 @@ func parseName(path string) (nameParse, bool) {
 // written on disk as a bar or a full-width slash or bar.
 const alternateTitleBars = "|／｜"
 
+// alternateTitleParens are the parentheses, ASCII and full-width, that can
+// hold the second title of a dual-titled name.
+const alternateTitleParens = "()（）"
+
 // splitAlternateTitle splits a dual-titled name into the title to search by
-// and the alternate title (CORE-2703): when title is two titles, one only in
-// Latin script and the other with letters of another script, split by one
-// alternateTitleBars rune or with one in parentheses at the end of the other,
-// the Latin one is the title. Any other title stays whole, with no alternate.
+// and the alternate title (CORE-2703). The two titles are split by one
+// alternateTitleBars rune ("Голубая волна | Blue Crush"), or the second is in
+// parentheses at the end of the first ("О мышах и людях (Of Mice and Men)").
+// When one title is in Latin script only and the other in another script
+// only, the Latin one is the title. Any other title stays whole, with no
+// alternate.
 func splitAlternateTitle(title string) (string, string) {
 	if i := strings.IndexAny(title, alternateTitleBars); i >= 0 {
 		_, size := utf8.DecodeRuneInString(title[i:])
-		return latinTitleFirst(title, cleanTitle(title[:i]), cleanTitle(title[i+size:]))
-	}
-	if inner, ok := strings.CutSuffix(title, ")"); ok {
-		if open := strings.LastIndexByte(inner, '('); open > 0 {
-			return latinTitleFirst(title, cleanTitle(inner[:open]), cleanTitle(inner[open+1:]))
+		a, b := cleanTitle(title[:i]), cleanTitle(title[i+size:])
+		if strings.ContainsAny(a+b, alternateTitleBars) {
+			return title, "" // three titles or more
 		}
+		return latinTitleFirst(title, a, b)
 	}
-	return title, ""
+	last, size := utf8.DecodeLastRuneInString(title)
+	if last != ')' && last != '）' {
+		return title, ""
+	}
+	inner := title[:len(title)-size]
+	open := strings.LastIndexAny(inner, "(（")
+	if open <= 0 {
+		return title, ""
+	}
+	_, openSize := utf8.DecodeRuneInString(inner[open:])
+	a, b := cleanTitle(inner[:open]), cleanTitle(inner[open+openSize:])
+	// Nested parentheses, or a region or edition qualifier ("Офис (US)",
+	// "Бразилия (Director's Cut)"), are no second title.
+	if strings.ContainsAny(a+b, alternateTitleParens) || isTitleQualifier(b) {
+		return title, ""
+	}
+	return latinTitleFirst(title, a, b)
 }
 
 // latinTitleFirst returns the Latin one of the two titles a and b and the
-// other, or title whole when they are not one Latin title and one title in
-// another script. A part that still holds a bar or a parenthesis is not one
-// title, so title stays whole.
+// other, or title whole when they are not one title in Latin script only and
+// one in another script only.
 func latinTitleFirst(title, a, b string) (string, string) {
-	if strings.ContainsAny(a+b, alternateTitleBars+"()") {
-		return title, ""
-	}
 	switch {
-	case latinOnly(a) && hasOtherScript(b):
+	case latinOnly(a) && otherScriptOnly(b):
 		return a, b
-	case latinOnly(b) && hasOtherScript(a):
+	case latinOnly(b) && otherScriptOnly(a):
 		return b, a
 	}
 	return title, ""
 }
 
-// latinOnly reports whether s has letters and every one is Latin script.
-func latinOnly(s string) bool {
-	letters := false
-	for _, r := range s {
-		if unicode.IsLetter(r) {
-			if !unicode.Is(unicode.Latin, r) {
-				return false
-			}
-			letters = true
-		}
+// editionWords end an edition qualifier ("Director's Cut", "Special
+// Edition").
+var editionWords = map[string]bool{"cut": true, "edition": true, "version": true, "remaster": true}
+
+// isTitleQualifier reports whether s, the text in parentheses at the end of
+// a title, is a region ("US") or edition ("Director's Cut", "Extended")
+// qualifier rather than a title.
+func isTitleQualifier(s string) bool {
+	lower := strings.ToLower(s)
+	if _, ok := regionAliases[lower]; ok {
+		return true
 	}
-	return letters
+	if _, ok := releaseWords[lower]; ok {
+		return true
+	}
+	words := strings.Fields(lower)
+	return len(words) > 0 && editionWords[words[len(words)-1]]
 }
 
-// hasOtherScript reports whether s has a letter that is not Latin script.
-func hasOtherScript(s string) bool {
-	return strings.ContainsFunc(s, func(r rune) bool {
-		return unicode.IsLetter(r) && !unicode.Is(unicode.Latin, r)
-	})
+// letterScripts reports whether s has a Latin letter and whether it has a
+// letter of another script. Letters common to all scripts, such as the
+// modifier apostrophe of "LʼAvventura" or the Japanese long-vowel mark, are
+// neither.
+func letterScripts(s string) (latin, other bool) {
+	for _, r := range s {
+		switch {
+		case !unicode.IsLetter(r) || unicode.In(r, unicode.Common, unicode.Inherited):
+		case unicode.Is(unicode.Latin, r):
+			latin = true
+		default:
+			other = true
+		}
+	}
+	return latin, other
+}
+
+// latinOnly reports whether s has Latin letters and no letter of another
+// script.
+func latinOnly(s string) bool {
+	latin, other := letterScripts(s)
+	return latin && !other
+}
+
+// otherScriptOnly reports whether s has letters of a script other than Latin
+// and no Latin letter.
+func otherScriptOnly(s string) bool {
+	latin, other := letterScripts(s)
+	return other && !latin
 }
 
 // episodeToken is one recognised season/episode marker: its byte span in the
@@ -1304,7 +1350,10 @@ func findYear(name, lower string, episodeCut int) yearToken {
 				continue
 			}
 		}
-		if hasTitleText(name[:c.start]) {
+		// After a title bar, a year starts the second title ("Космическая
+		// одиссея | 2001 A Space Odyssey 1968"), so the title text before
+		// it is only that after the bar.
+		if hasTitleText(afterTitleBar(name[:c.start])) {
 			return c
 		}
 		if !bracketed.found() && groupsEnd > 0 && episodeCut < 0 {
@@ -1441,6 +1490,17 @@ func isChannelCount(tag, word string) bool {
 // blankChecksums replaces each checksum bracket in s with spaces of its width.
 func blankChecksums(s string) string {
 	return reChecksum.ReplaceAllStringFunc(s, func(c string) string { return strings.Repeat(" ", len(c)) })
+}
+
+// afterTitleBar returns the text of s after its last alternateTitleBars
+// rune, or s when it has none.
+func afterTitleBar(s string) string {
+	i := strings.LastIndexAny(s, alternateTitleBars)
+	if i < 0 {
+		return s
+	}
+	_, size := utf8.DecodeRuneInString(s[i:])
+	return s[i+size:]
 }
 
 // hasTitleText reports whether s, the text before a year, holds any title:
