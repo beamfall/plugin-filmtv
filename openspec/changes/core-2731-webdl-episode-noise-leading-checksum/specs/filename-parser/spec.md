@@ -24,7 +24,7 @@ end of a title, not a tag followed by a hyphenated release group.
 
 When only release noise (scene tags, release tags, checksums) stands between a bare leading
 parenthesized year and an episode marker, the episode SHALL have no series name of its own and
-SHALL take it from the show folder. A release word that can be a title (`ReMastered`) SHALL stay
+SHALL take it, and its year, from the show folder, as an episode with no name does. A release word that can be a title (`ReMastered`) SHALL stay
 the series name, and so SHALL any text that is not release noise throughout (`[1080p] Fringe`).
 
 #### Scenario: Scene noise before an episode marker
@@ -58,8 +58,8 @@ the series name, and so SHALL any text that is not release noise throughout (`[1
 Checksum brackets that open a name, up to its first other bracket or word, SHALL NOT be
 release-group brackets or title words: a year-named title after them SHALL be the title, not the
 year, and they SHALL NOT end the title. They SHALL still count as episode context. Checksums on
-either side of a leading parenthesized year SHALL be read the same way. A release group hyphenated
-directly onto them SHALL leave the name with no title.
+either side of a leading parenthesized year SHALL be read the same way. Checksums with a release
+group hyphenated directly onto them (`[DEADBEEF]-YIFY`) SHALL NOT be read this way.
 
 #### Scenario: Leading checksum before a year-named title
 

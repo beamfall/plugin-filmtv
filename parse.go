@@ -1162,8 +1162,8 @@ func opensWithSceneTag(lower string) bool {
 // Zodiac and "[DEADBEEF] Naruto - 001" an episode of Naruto.
 func blankLeadingChecksums(name string) string {
 	n := len(reLeadingChecksums.FindString(name))
-	if n < len(name) && name[n] == '-' {
-		return name // "[DEADBEEF]-YIFY": a group, and no title, follows
+	if n < len(name) && name[n] == '-' && name[n-1] == ']' {
+		return name // "[DEADBEEF]-YIFY": a group, not a title, follows
 	}
 	return blankChecksums(name[:n]) + name[n:]
 }
@@ -1192,7 +1192,7 @@ func episodeNoiseOnly(lower string, start, end int) bool {
 		case sceneTags[word]:
 		case endsTitle(words[i:]):
 			tagged = tagged || isTag(words[i:])
-			if i+1 < len(tokens) && releaseNoise[word+words[i+1]] {
+			if i+1 < len(tokens) && tokens[i+1][0] == tokens[i][1]+1 && span[tokens[i][1]] == '-' && releaseNoise[word+words[i+1]] {
 				i++ // one tag split in two ("WEB-DL")
 			}
 		case joined && span[tokens[i][0]-1] == '.' && isChannelCount(words[i-1], word):
@@ -1207,7 +1207,7 @@ func episodeNoiseOnly(lower string, start, end int) bool {
 }
 
 // isChannelCount reports whether word is the single digit after the dot of
-// the audio tag before it ("DD5.1", "DDP7.1"), not of a resolution or a title.
+// the audio tag before it ("DD5.1", "DDP5.1"), not of a resolution or a title.
 func isChannelCount(tag, word string) bool {
 	return len(word) == 1 && word[0] >= '0' && word[0] <= '9' && releaseNoise[tag] && tag[len(tag)-1] >= '0' && tag[len(tag)-1] <= '9'
 }
