@@ -24,7 +24,8 @@ dashed-year episode forms it does not read:
 - A bare year directly before a four-digit absolute number is part of the series name, given the
   episode context the number already needs.
 - Leading release-group brackets may be separated by spaces, dots, underscores or hyphens.
-- A film's title drops its leading release-group brackets when title text remains after them.
+- A film's title drops its leading release-group brackets when only a year-named title follows them
+  (`[Group] 2012`); a bracketed title before other text stays (`[REC] 2`, `[YTS] Agent 0011`).
 - A checksum bracket is never title text.
 - After a leading parenthesized year, a scene tag (`PROPER`, `REPACK`, `RERIP`) followed only by a
   checksum is release noise; other release words there stay the title (`DV [DEADBEEF]`).

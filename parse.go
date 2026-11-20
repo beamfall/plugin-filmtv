@@ -71,8 +71,8 @@ var (
 	// form, the digits of the dashed form.
 	reAbsoluteEpisode = regexp.MustCompile(`(?:([ ._-])(0\d{3})|[ ._]-[ ._](\d{2,4})(?:v\d{1,2})?)(?:[ ._\-\[(]*$|[ ._]-[ ._])`)
 	// A CRC32 checksum bracket an anime release carries ("[ABCD1234]"):
-	// release noise, and a sign the file is an episode.
-	reChecksum = regexp.MustCompile(`\[[0-9a-f]{8}\]`)
+	// release noise, never title text, and a sign the file is an episode.
+	reChecksum = regexp.MustCompile(`(?i)\[[0-9a-f]{8}\]`)
 	// An air date naming a dated (daily) episode: YYYY-MM-DD, also with ".",
 	// "_" or " " separators, not inside a longer run of letters or digits
 	// (an underscore still separates it, unlike a \b boundary). Calendar-checked
@@ -86,8 +86,9 @@ var (
 	// An extras label numbered by season but not by episode ("3.x Out Takes",
 	// "3x Set Tour"): never a film. Groups: the season, the label.
 	reSeasonExtra = regexp.MustCompile(`^(\d{1,2})[ ._-]*x[ ._-]+([a-z].*)$`)
-	// Release-group brackets in front of a series name ("[Group] Show - S01E01").
-	reLeadingGroups = regexp.MustCompile(`^(?:\s*\[[^\]]*\])+`)
+	// Release-group brackets in front of a series name ("[Group] Show - S01E01"),
+	// adjacent or separated ("[Fansub].[Group]").
+	reLeadingGroups = regexp.MustCompile(`^(?:[\s._-]*\[[^\]]*\])+`)
 	// A video resolution token: 480p, 1080i, 2160p.
 	reResolution = regexp.MustCompile(`^\d{3,4}[pi]$`)
 	// A 4-digit year, optionally parenthesized; range-guarded to 1900–2099 in
@@ -266,7 +267,7 @@ func parseName(path string) (nameParse, bool) {
 	// 2. Year (see findYear). The title ends at the year, or starts after a
 	// leading parenthesized one ("(2000) Title").
 	titleStart := 0
-	if year := findYear(name, lower, episodeCut); year.found() {
+	if year := findYear(name, lower, episodeCut); year.found() && !episode.seriesYear {
 		parsed.Year = year.year
 		switch {
 		case year.leading:
@@ -298,9 +299,11 @@ func parseName(path string) (nameParse, bool) {
 	// For an episode this is the series name: a release-group bracket in front
 	// of it is dropped, and a file that carries no series name of its own
 	// ("S01E01 - Earthfall") takes the one of the folder above its season folder.
-	rawTitle := name[titleStart:cut]
-	if isEpisode {
-		rawTitle = rawTitle[len(reLeadingGroups.FindString(rawTitle)):]
+	// A film keeps a bracketed title ("[REC] 2") unless only a year-named
+	// title follows it ("[Group] 2012 (2009)"). A checksum is never title text.
+	rawTitle := reChecksum.ReplaceAllString(name[titleStart:cut], " ")
+	if groups := len(reLeadingGroups.FindString(rawTitle)); isEpisode || isYearNumber(cleanTitle(rawTitle[groups:])) {
+		rawTitle = rawTitle[groups:]
 	}
 	parsed.Title = cleanTitle(rawTitle)
 	if isEpisode && parsed.Year == 0 && isYearNumber(parsed.Title) {
@@ -355,6 +358,9 @@ type episodeToken struct {
 	// episode, which then has no sequence; 0 otherwise.
 	absolute int
 	airDate  time.Time
+	// seriesYear reports that the series name ends in a bare year ("Space
+	// 1999 0001"), which is then no release year.
+	seriesYear bool
 }
 
 // findEpisode locates the season/episode marker in the ASCII-folded name. The
@@ -685,13 +691,24 @@ func absoluteEpisode(path, name, lower string) (episodeToken, bool) {
 
 func findAbsoluteEpisode(path, title, lowerTitle, lower string) (episodeToken, bool) {
 	m := reAbsoluteEpisode.FindStringSubmatchIndex(lowerTitle)
+	// A dashed four-digit number in the year range is a year ("Show - 2015"),
+	// and an episode number may follow it ("Show - 2011 - 12").
+	for m != nil && m[6] >= 0 && isYearNumber(lowerTitle[m[6]:m[7]]) {
+		yearEnd := m[7]
+		if m = reAbsoluteEpisode.FindStringSubmatchIndex(lowerTitle[yearEnd:]); m != nil {
+			for i := range m {
+				if m[i] >= 0 {
+					m[i] += yearEnd
+				}
+			}
+		}
+	}
 	if m == nil {
 		return episodeToken{}, false
 	}
 	series := title[:m[0]]
 	series = series[len(reLeadingGroups.FindString(series)):]
 	year := findYear(series, asciiLower(series), -1)
-	series = cleanTitle(year.title(series))
 	form, digits := formDashed, m[6:8]
 	if m[4] >= 0 {
 		form, digits = formNumbered, m[4:6]
@@ -699,22 +716,33 @@ func findAbsoluteEpisode(path, title, lowerTitle, lower string) (episodeToken, b
 			form = formUnderscored
 		}
 	}
+	seriesYear := false
 	if year.found() && !year.leading {
-		// After a year only the dashed anime form reads as an episode.
-		if form != formDashed {
+		switch {
+		case form == formDashed:
+			form = formDashedYear
+		case series[year.start] != '(' && onlySeparators(series[year.end:]):
+			// "Space 1999 0001": a bare year right before the number names
+			// the series.
+			seriesYear = true
+		default:
+			// After any other year only the dashed anime form reads as an
+			// episode.
 			return episodeToken{}, false
 		}
-		form = formDashedYear
 	}
+	if !seriesYear {
+		series = year.title(series)
+	}
+	series = cleanTitle(series)
 	if series == "" || !episodeContext(path, lower, series, form) {
 		return episodeToken{}, false
 	}
 	index := atoi(lowerTitle[digits[0]:digits[1]])
-	if index == 0 || (form == formDashed || form == formDashedYear) && digits[1]-digits[0] == 4 && index >= 1900 && index <= 2099 {
-		// A dashed four-digit number in the year range is a year ("Show - 2015").
+	if index == 0 {
 		return episodeToken{}, false
 	}
-	return episodeToken{start: m[0], end: m[1], index: index}, true
+	return episodeToken{start: m[0], end: m[1], index: index, seriesYear: seriesYear}, true
 }
 
 // findAirDate locates the first calendar-valid air date in the ASCII-folded
@@ -925,7 +953,8 @@ func findYear(name, lower string, episodeCut int) yearToken {
 	groupsEnd := len(reLeadingGroups.FindString(name))
 	var candidates []yearToken
 	var parens []bool
-	for _, m := range reYear.FindAllStringSubmatchIndex(lower, -1) {
+	// An underscore bounds a year like a space ("Heat_1995_1080p").
+	for _, m := range reYear.FindAllStringSubmatchIndex(strings.ReplaceAll(lower, "_", " "), -1) {
 		digitsStart, digitsEnd := m[2], m[3]
 		year := atoi(lower[digitsStart:digitsEnd])
 		if year < 1900 || year > 2099 || digitsStart < groupsEnd {
@@ -996,14 +1025,22 @@ func findYear(name, lower string, episodeCut int) yearToken {
 // year, holds no title: nothing, or release noise from its first word on
 // ("PROPER.1080p"); a checksum is not a title. Noise is read against the
 // whole rest of the name, so a release word that is the title ("ReMastered
-// S01E01", "DV [DEADBEEF]") stays a title.
+// S01E01", "DV [DEADBEEF]") stays a title, but a scene tag before only
+// checksums ("PROPER.[DEADBEEF]") is noise.
 func onlyNoiseAfter(name, lower string, start, end int) bool {
 	if cleanTitle(reChecksum.ReplaceAllString(lower[min(start, end):end], "")) == "" {
 		return true
 	}
-	noise := firstNoiseToken(lower[start:], false)
+	rest := lower[start:]
+	if words := tokenSpans(rest); len(words) > 0 && sceneTags[rest[words[0][0]:words[0][1]]] {
+		rest = reChecksum.ReplaceAllStringFunc(rest, func(c string) string { return strings.Repeat(" ", len(c)) })
+	}
+	noise := firstNoiseToken(rest, false)
 	return noise >= 0 && cleanTitle(name[start:start+noise]) == ""
 }
+
+// sceneTags are the release words only a scene release uses, never a title.
+var sceneTags = map[string]bool{"proper": true, "repack": true, "rerip": true}
 
 // hasTitleText reports whether s, the text before a year, holds any title:
 // anything that survives title cleanup outside the leading release-group

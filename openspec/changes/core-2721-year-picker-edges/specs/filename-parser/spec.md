@@ -35,7 +35,8 @@ as the release year. Without that context the name SHALL parse as before.
 
 Leading release-group brackets MAY be separated by spaces, dots, underscores or hyphens, and years
 inside any of them SHALL NOT count. A film title SHALL drop its leading release-group brackets when
-title text remains after them. A CRC32 checksum bracket SHALL NOT be title text.
+only a year-named title follows them, and SHALL keep them otherwise (`[REC] 2`). A CRC32 checksum
+bracket SHALL NOT be title text.
 
 #### Scenario: Separated groups
 

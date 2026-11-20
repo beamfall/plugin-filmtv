@@ -600,6 +600,30 @@ func parseCorpus() []parseCase {
 			want:       sdk.ParsedMedia{Title: "Movie - 12", Class: "movie"},
 			resolvable: true,
 		},
+		// An underscore bounds a year (CORE-2721), and a series year before an
+		// absolute number stays in the series name.
+		{
+			name:       "underscore-year-title",
+			path:       "/movies/2012_2009_1080p.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "2012", Class: "movie", Year: 2009},
+			resolvable: true,
+		},
+		{
+			name:       "series-year-before-absolute-number",
+			path:       "/tv/Space 1999/Season 01/Space.1999.0001.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Space 1999", Class: "episode", Index: 1, AbsoluteOrdinal: 1},
+			resolvable: true,
+		},
+		// A dashed episode after a dashed series year (CORE-2717).
+		{
+			name:       "dashed-episode-after-dashed-year",
+			path:       "/tv/Show - 2011 - 12.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Show", Class: "episode", Year: 2011, Index: 12, AbsoluteOrdinal: 12},
+			resolvable: true,
+		},
 		// A film named after a year (CORE-2701): the leading year is title
 		// text and the later one is the release year; a leading parenthesized
 		// year is the year, with the title after it.
