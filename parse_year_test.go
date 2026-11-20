@@ -40,6 +40,9 @@ func TestYearPickerKeepsYearNamedTitles(t *testing.T) {
 		{"/movies/$ (1971).mkv", sdk.ParsedMedia{Title: "$", Class: "movie", Year: 1971}, true},
 		{"/movies/[REC].2007.mkv", sdk.ParsedMedia{Title: "[REC]", Class: "movie", Year: 2007}, true},
 		{"/movies/[REC] (2007) PROPER.1080p.mkv", sdk.ParsedMedia{Title: "[REC]", Class: "movie", Year: 2007}, true},
+		{"/movies/[REC] (2007) PROPER.[DEADBEEF].mkv", sdk.ParsedMedia{Title: "[REC]", Class: "movie", Year: 2007}, true},
+		{"/movies/[REC] 2007-2008-2009.mkv", sdk.ParsedMedia{Title: "[REC]", Class: "movie", Year: 2007}, true},
+		{"/tv/[REC] (2007) PROPER.1080p/Season 01/S01E01.mkv", sdk.ParsedMedia{Title: "[REC]", Class: "episode", Year: 2007, Sequence: "1", Index: 1}, true},
 		{"/movies/– (2000) The Emperor.mkv", sdk.ParsedMedia{Title: "The Emperor", Class: "movie", Year: 2000}, true},
 		{"/movies/[Group (1999)] (2000) The Emperor's New Groove.avi", sdk.ParsedMedia{Title: "The Emperor's New Groove", Class: "movie", Year: 2000}, true},
 		// A tight rising range is a run of years.

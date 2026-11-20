@@ -266,8 +266,7 @@ func parseName(path string) (nameParse, bool) {
 	// 2. Year (see findYear). The title ends at the year, or starts after a
 	// leading parenthesized one ("(2000) Title").
 	titleStart := 0
-	year := findYear(name, lower, episodeCut)
-	if year.found() {
+	if year := findYear(name, lower, episodeCut); year.found() {
 		parsed.Year = year.year
 		switch {
 		case year.leading:
@@ -294,14 +293,6 @@ func parseName(path string) (nameParse, bool) {
 		}
 	}
 	titleStart = min(titleStart, cut)
-	if year.leading && onlyNoiseAfter(name, lower, year.end, cut) && cleanTitle(name[:year.start]) != "" {
-		// Nothing but noise follows a leading year ("[REC] (2007) 1080p"), so the
-		// bracket before it is the title and the year ends it.
-		titleStart, cut = 0, year.start
-		if !isEpisode {
-			parsed.VersionLabel = versionLabel(name, year.start)
-		}
-	}
 
 	// 4. Title cleanup: take everything before the cut, normalise separators.
 	// For an episode this is the series name: a release-group bracket in front
@@ -910,7 +901,7 @@ func (y yearToken) title(s string) string {
 	switch {
 	case !y.found():
 		return s
-	case y.leading && !onlySeparators(s[y.end:]):
+	case y.leading:
 		return s[y.end:]
 	default:
 		return s[:y.start]
@@ -922,7 +913,8 @@ func (y yearToken) title(s string) string {
 // brackets, and a token at or after episodeCut (part of an SxxEyy match). A
 // parenthesized year with title text before it wins ("1917 (2019)");
 // otherwise a parenthesized year with none before it leads the name ("(2000)
-// Title"). Otherwise the year is the first standalone one with title text
+// Title"), unless only release noise follows it, when it ends the bracketed
+// title before it ("[REC] (2007) 1080p"). Otherwise the year is the first standalone one with title text
 // before it that is not directly followed by another year: "2012.2009" and
 // "Blade.Runner.2049.2017" keep their first number as title text, and a lone
 // leading year ("2012") is no year at all. A tight rising range ("Fringe
@@ -955,6 +947,10 @@ func findYear(name, lower string, episodeCut int) yearToken {
 		candidates = append(candidates, yearToken{year: year, start: start, end: m[1]})
 		parens = append(parens, paren)
 	}
+	end := len(name)
+	if episodeCut >= 0 {
+		end = episodeCut
+	}
 	leading := yearToken{}
 	for i, c := range candidates {
 		if !parens[i] {
@@ -965,18 +961,18 @@ func findYear(name, lower string, episodeCut int) yearToken {
 		}
 		if !leading.found() {
 			leading = c
-			leading.leading = true
+			// "[REC] (2007) 1080p": with only noise after it, the year ends the
+			// bracketed title before it rather than leading the name.
+			leading.leading = cleanTitle(name[:c.start]) == "" || !onlyNoiseAfter(name, lower, c.end, end)
 		}
 	}
 	if leading.found() {
 		return leading
 	}
 	bracketed := yearToken{}
-	rangeEnd := false
 	for i, c := range candidates {
-		if rangeEnd {
-			rangeEnd = false
-			continue
+		if i > 0 && !parens[i] && name[candidates[i-1].end:c.start] == "-" && c.year > candidates[i-1].year {
+			continue // the later year of a range ("2008-2013")
 		}
 		if i+1 < len(candidates) && !parens[i+1] {
 			next := candidates[i+1]
@@ -984,7 +980,6 @@ func findYear(name, lower string, episodeCut int) yearToken {
 			if onlySeparators(between) && (between != "-" || next.year <= c.year) {
 				continue
 			}
-			rangeEnd = between == "-" && next.year > c.year
 		}
 		if hasTitleText(name[:c.start]) {
 			return c
@@ -997,14 +992,22 @@ func findYear(name, lower string, episodeCut int) yearToken {
 	return bracketed
 }
 
-// onlyNoiseAfter reports whether name[end:cut], the text after a leading year,
-// holds no title: nothing, or release noise from its first word on ("PROPER").
-func onlyNoiseAfter(name, lower string, end, cut int) bool {
-	if cleanTitle(name[min(end, cut):cut]) == "" {
+// onlyNoiseAfter reports whether name[start:end], the text after a leading
+// year, holds no title: nothing, or release noise from its first word on
+// ("PROPER.1080p"), up to any checksum.
+func onlyNoiseAfter(name, lower string, start, end int) bool {
+	if start >= end {
 		return true
 	}
-	noise := firstNoiseToken(lower[end:], false)
-	return noise >= 0 && cleanTitle(name[end:end+noise]) == ""
+	rest := lower[start:end]
+	if checksum := reChecksum.FindStringIndex(rest); checksum != nil {
+		rest = rest[:checksum[0]]
+	}
+	title := len(rest)
+	if noise := firstNoiseToken(rest, false); noise >= 0 {
+		title = noise
+	}
+	return cleanTitle(name[start:start+title]) == ""
 }
 
 // hasTitleText reports whether s, the text before a year, holds any title:
