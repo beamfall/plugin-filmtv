@@ -375,6 +375,95 @@ func parseCorpus() []parseCase {
 			resolvable: false,
 		},
 
+		// --- Edition, language and site words around a title (CORE-2704). An
+		// edition or language tag before the year ends the title as a
+		// resolution would; a scene tag that is also a word, or a word that
+		// is noise only before a release tag, stays. ---
+		{
+			name:       "edition-tag-before-year",
+			path:       "Jurassic.World.Dominion.EXTENDED.2022.2160p.UHD.BluRay.REMUX.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Jurassic World Dominion", Class: "movie", Year: 2022},
+			resolvable: true,
+		},
+		{
+			name:       "edition-and-language-tags-no-year",
+			path:       "Color.Of.Night.Unrated.DC.VostFR.BRrip.x264.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Color Of Night", Class: "movie"},
+			resolvable: true,
+		},
+		{
+			name:       "language-tags-before-resolution",
+			path:       "La.Vita.E.Bella.iTA.ENG.1080p.BluRay.x264.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "La Vita E Bella", Class: "movie"},
+			resolvable: true,
+		},
+		{
+			name:       "nordic-tag-before-resolution",
+			path:       "Jagten.NORDiC.1080p.BluRay.x264.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Jagten", Class: "movie"},
+			resolvable: true,
+		},
+		{
+			name:       "language-tag-before-year",
+			path:       "Les.Intouchables.TRUEFRENCH.2011.1080p.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Les Intouchables", Class: "movie", Year: 2011},
+			resolvable: true,
+		},
+		{
+			name:       "site-prefix-spaced-hyphen",
+			path:       "www.Torrenting.com - Anatomy Of A Fall (2023).mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Anatomy Of A Fall", Class: "movie", Year: 2023},
+			resolvable: true,
+		},
+		{
+			name:       "site-prefix-bracketed",
+			path:       "[www.Torrenting.com] Anatomy Of A Fall (2023).mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Anatomy Of A Fall", Class: "movie", Year: 2023},
+			resolvable: true,
+		},
+		{
+			name:       "edition-word-starts-title-before-year",
+			path:       "Extended.Family.2023.1080p.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Extended Family", Class: "movie", Year: 2023},
+			resolvable: true,
+		},
+		{
+			name:       "release-word-starts-title-paren-year",
+			path:       "Internal.Affairs.(2002).mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Internal Affairs", Class: "movie", Year: 2002},
+			resolvable: true,
+		},
+		{
+			name:       "tag-only-word-before-year",
+			path:       "Charlotte's.Web.2006.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Charlotte's Web", Class: "movie", Year: 2006},
+			resolvable: true,
+		},
+		{
+			name:       "language-word-in-title-before-year",
+			path:       "The.French.Connection.1971.1080p.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "The French Connection", Class: "movie", Year: 1971},
+			resolvable: true,
+		},
+		{
+			name:       "dc-in-title-before-year",
+			path:       "Washington.DC.2009.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Washington DC", Class: "movie", Year: 2009},
+			resolvable: true,
+		},
+
 		// --- A release tag that is also a word ends a title only in front of
 		// another release tag, or (for the unambiguous ones) as the last word. ---
 		{

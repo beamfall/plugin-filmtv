@@ -125,6 +125,10 @@ var (
 	// Release-group brackets in front of a series name ("[Group] Show - S01E01"),
 	// adjacent or separated ("[Fansub].[Group]").
 	reLeadingGroups = regexp.MustCompile(`^(?:[\s._-]*\[[^\]]*\])+`)
+	// reSitePrefix matches a torrent site's name in front of a release: a
+	// "www." host followed by a spaced hyphen ("www.Site.com - "), or in
+	// brackets ("[www.Site.com] ") (CORE-2704).
+	reSitePrefix = regexp.MustCompile(`(?i)^\s*(?:[\[(]\s*www\.[a-z0-9-]+(?:\.[a-z0-9-]+)+\s*[\])]|www\.[a-z0-9-]+(?:\.[a-z0-9-]+)+\s+-)\s*`)
 	// reLeadingChecksums matches the checksum brackets and parenthesized
 	// year that open a name, up to its first other bracket or word.
 	reLeadingChecksums = regexp.MustCompile(`(?i)^(?:[\s._-]*(?:\[[0-9a-f]{8}\]|\((?:19|20)\d\d\)))+`)
@@ -182,6 +186,9 @@ var releaseNoise = map[string]bool{
 	"dovi": true, "hdr10+": true, "hdr10plus": true, "hlg": true, "sdr": true,
 	"ddp": true, "avc": true,
 	"atvp": true, "amzn": true, "dsnp": true, "hmax": true,
+	// French and Scandinavian language and subtitle tags (CORE-2704).
+	"vostfr": true, "truefrench": true, "subfrench": true,
+	"vff": true, "vfq": true, "vf2": true, "swesub": true,
 }
 
 // releaseWords are release tags that are also ordinary words, so one can sit
@@ -195,7 +202,10 @@ var releaseWords = map[string]bool{
 	// Short tags that can still be words or initials in a real title
 	// ("The HDR Story"): noise only before more release tags or at the end.
 	"dv": true, "hdr": true, "atmos": true,
+	"imax": true, "nordic": true, "ita": true, "eng": true,
 	"web": false, "multi": false, "dubbed": false, "subbed": false,
+	// "Washington DC", "The French Connection": noise only before a tag.
+	"dc": false, "french": false, "german": false,
 }
 
 // Parse derives a best-guess ParsedMedia from a path and its local NFO evidence.
@@ -283,7 +293,7 @@ func parseName(path string) (nameParse, bool) {
 		return nameParse{}, false
 	}
 	name := strings.TrimSuffix(base, filepath.Ext(base))
-	name = blankLeadingChecksums(removeProviderIDTags(name))
+	name = blankLeadingChecksums(removeProviderIDTags(stripSitePrefix(name)))
 	lower := asciiLower(name)
 
 	var parsed sdk.ParsedMedia
@@ -366,6 +376,9 @@ func parseName(path string) (nameParse, bool) {
 			}
 		case year.start < cut:
 			cut = year.start
+			if !isEpisode {
+				cut = titleStart + noiseBeforeYear(lower[titleStart:cut])
+			}
 		}
 		if !isEpisode && !year.leading {
 			parsed.VersionLabel = versionLabel(name, year.start)
@@ -1589,6 +1602,40 @@ func versionLabel(name string, yearStart int) string {
 		return ""
 	}
 	return label
+}
+
+// beforeYearWords are the release words that a year ends a film title after,
+// as an edition or language tag set in front of it
+// ("Jurassic.World.Dominion.EXTENDED.2022"). Scene tags that are also words
+// ("Le.Cercle.Internal.2020") stay title text there (CORE-2704).
+var beforeYearWords = map[string]bool{
+	"extended": true, "unrated": true, "uncut": true, "remastered": true,
+	"imax": true, "nordic": true, "ita": true, "eng": true,
+}
+
+// noiseBeforeYear returns where the film title in lower, the text before its
+// year, ends: before a trailing run of beforeYearWords and release tags, or
+// at the end of lower. The first word always stays ("Extended.2020").
+func noiseBeforeYear(lower string) int {
+	tokens := tokenSpans(lower)
+	end := len(lower)
+	for i := len(tokens) - 1; i > 0; i-- {
+		word := lower[tokens[i][0]:tokens[i][1]]
+		if !beforeYearWords[word] && !isTag([]string{word}) {
+			break
+		}
+		end = tokens[i][0]
+	}
+	return end
+}
+
+// stripSitePrefix drops a torrent site's name from the front of name
+// ("www.Torrenting.com - Anatomy Of A Fall (2023)"), unless nothing follows it.
+func stripSitePrefix(name string) string {
+	if n := len(reSitePrefix.FindString(name)); n > 0 && n < len(name) {
+		return name[n:]
+	}
+	return name
 }
 
 // firstNoiseToken returns the start index in lower of the first token that
