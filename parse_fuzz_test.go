@@ -26,6 +26,7 @@ func FuzzParseFilename(f *testing.F) {
 		"Show.Episode.1.02.Bits.and.Pieces.mkv",
 		"Show.E14.Episode.14 - The Cap 3 Heist.mkv",
 		"Star.Wars.Episode.1.24-bit.FLAC.mkv",
+		"Show.Episode.1.16v2.Bit.by.Bit.mkv",
 		"Naruto - 014 - Episode 1.14 - The Bridge.mkv",
 		"Show/Season 1/Show Épisode 4.mkv",
 		"Season 2/MosGaz.(08.seriya).2012.mkv",

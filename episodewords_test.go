@@ -90,6 +90,8 @@ func TestEpisodeMarkerWords(t *testing.T) {
 		{"/tv/Show/Season 2/Show Episode 1.10-bit - Episode 2.04.mkv", sdk.ParsedMedia{Title: "Show Episode 1 10-bit", Class: "episode", Sequence: "2", Index: 4}, true},
 		{"/tv/Show/Season 1/Show - Episode 14 - 1x14-1x15 - Finale.mkv", sdk.ParsedMedia{Title: "Show - Episode 14", Class: "episode", Sequence: "1", Index: 14, IndexEnd: 15}, true},
 		{"/movies/Star.Wars.Episode.1.24-bit.FLAC.mkv", sdk.ParsedMedia{Title: "Star Wars Episode 1 24-bit FLAC", Class: "movie"}, true},
+		{"/tv/Show/Season 1/Show.Episode.1.16v2.Bit.by.Bit.mkv", sdk.ParsedMedia{Title: "Show", Class: "episode", Sequence: "1", Index: 16}, true},
+		{"/downloads/Show.Episode.1.16v2.Bit.by.Bit.mkv", sdk.ParsedMedia{Title: "Show", Class: "episode", Sequence: "1", Index: 16}, true},
 		{"/downloads/Contemp 2 Ep 3.mkv", sdk.ParsedMedia{Title: "Contemp 2 Ep 3", Class: "movie"}, true},
 		// Episode zero is no episode.
 		{"/tv/Show/Season 1/Show Ep 0.mkv", sdk.ParsedMedia{Title: "Show Ep 0"}, true},

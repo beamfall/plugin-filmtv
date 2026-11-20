@@ -490,7 +490,7 @@ func packedEpisode(word, digits string, season int) int {
 // anywhere. A bit depth after it ("Episode.1.10-bit") is no episode number.
 func dottedEpisode(lower string) (episodeToken, bool) {
 	for _, m := range reEpisodeDotted.FindAllStringSubmatchIndex(lower, -1) {
-		if !isBitDepth(lower[m[6]:m[7]], lower[m[3]:]) {
+		if !isBitDepth(lower[m[6]:m[7]], lower[m[7]:]) {
 			return episodeToken{start: m[2], end: m[3], sequence: numericText(lower[m[4]:m[5]]), index: atoi(lower[m[6]:m[7]])}, true
 		}
 	}
@@ -499,8 +499,8 @@ func dottedEpisode(lower string) (episodeToken, bool) {
 
 // isBitDepth reports that an "Episode S.EE" code's episode digits are a
 // bit depth: 8, 10, 12, 16, 24 or 32 followed by "bit" ("Episode.1.10-bit",
-// "Episode.1.24-bit.FLAC"). An episode title that starts with "Bits" follows
-// any other number.
+// "Episode.1.24-bit.FLAC"), with nothing between; an episode title that starts
+// with "Bits" follows any other number or a revision ("1.16v2.Bit.by.Bit").
 func isBitDepth(digits, rest string) bool {
 	switch atoi(digits) {
 	case 8, 10, 12, 16, 24, 32:
