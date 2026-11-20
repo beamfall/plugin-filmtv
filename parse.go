@@ -70,6 +70,9 @@ var (
 	// (seasonFolderEpisode). Groups: the token, the episode word, its
 	// number, the bare-e number, the seriya number.
 	reEpisodeOnly = regexp.MustCompile(`(?:^|[^\pL\pN])((` + episodeWords + `)[ ._-]*(\d{1,4})(?:v\d{1,2})?|e(\d{2,3})(?:v\d{1,2})?|(\d{1,3})[ ._-]*seriya)(?:$|[^\pL\pN])`)
+	// reEpisodeWord is the episode-word alternative of reEpisodeOnly alone, with
+	// the same first three groups, so a bare "E14" cannot hide a later word.
+	reEpisodeWord = regexp.MustCompile(`(?:^|[^\pL\pN])((` + episodeWords + `)[ ._-]*(\d{1,4})(?:v\d{1,2})?)(?:$|[^\pL\pN])`)
 	// XxYY shorthand (e.g. 3x07); guarded so a resolution like 1920x1080 never
 	// matches (those numbers are far larger than a season/episode). A range
 	// ("1x01-1x02-1x03") is read by episodeChain with reSeasonXChainLink.
@@ -272,7 +275,6 @@ func parseName(path string) (nameParse, bool) {
 	// string (the earliest of any episode/year/noise token start).
 	cut := len(name)
 	episode, isEpisode := findEpisode(lower)
-	unambiguous := isEpisode
 	if !isEpisode {
 		episode, isEpisode = findShorthandEpisode(lower)
 	}
@@ -288,28 +290,24 @@ func parseName(path string) (nameParse, bool) {
 	if !isEpisode {
 		episode, isEpisode = seriesCodeEpisode(path, lower)
 	}
+	fromAbsolute := false
 	if !isEpisode {
 		episode, isEpisode = absoluteEpisode(path, name, lower)
+		fromAbsolute = isEpisode
 	}
+	// An "Episode S.EE" code anywhere, or an episode word in a season folder
+	// ("Episode 14"), is read when no other marker is, and otherwise only
+	// against an absolute number, which may be part of the title: the first
+	// of the two wins ("Naruto - 014 - Episode 1.14", "Show - Episode 14 -
+	// 316"). A marker the parser already reads (XxYY, an air date) stands.
 	dotted, hasDotted := dottedEpisode(lower)
-	if !unambiguous {
-		// A marker led by an episode word, an "Episode S.EE" code anywhere or
-		// "Episode 14" in a season folder, can share a name with an XxYY
-		// code, an air date or an absolute number ("Naruto - 014 - Episode
-		// 1.14", "Show - Episode 14 - 316"): the first one is the episode.
-		worded, hasWorded := seasonFolderEpisode(path, lower, true)
-		if hasDotted || hasWorded {
-			if absolute, ok := absoluteEpisode(path, name, lower); ok && (!isEpisode || absolute.start < episode.start) {
-				episode, isEpisode = absolute, true
-			}
+	if !isEpisode || fromAbsolute {
+		marked, hasMarked := dotted, hasDotted
+		if !hasMarked {
+			marked, hasMarked = seasonFolderEpisode(path, lower, true)
 		}
-		for _, marked := range []struct {
-			token episodeToken
-			ok    bool
-		}{{dotted, hasDotted}, {worded, hasWorded}} {
-			if marked.ok && (!isEpisode || marked.token.start < episode.start) {
-				episode, isEpisode = marked.token, true
-			}
+		if hasMarked && (!isEpisode || marked.start < episode.start) {
+			episode, isEpisode = marked, true
 		}
 	}
 	if !isEpisode {
@@ -500,11 +498,12 @@ func dottedEpisode(lower string) (episodeToken, bool) {
 }
 
 // isBitDepth reports that an "Episode S.EE" code's episode digits are a
-// video bit depth: 8, 10 or 12 followed by "bit" ("Episode.1.10-bit"). An
-// episode title that starts with "Bits" follows any other number.
+// bit depth: 8, 10, 12, 16, 24 or 32 followed by "bit" ("Episode.1.10-bit",
+// "Episode.1.24-bit.FLAC"). An episode title that starts with "Bits" follows
+// any other number.
 func isBitDepth(digits, rest string) bool {
 	switch atoi(digits) {
-	case 8, 10, 12:
+	case 8, 10, 12, 16, 24, 32:
 		return reBitDepth.MatchString(rest)
 	}
 	return false
@@ -519,13 +518,11 @@ func seasonFolderEpisode(path, lower string, wordsOnly bool) (episodeToken, bool
 	if !inSeasonFolder {
 		return episodeToken{}, false
 	}
-	var m []int
-	for _, candidate := range reEpisodeOnly.FindAllStringSubmatchIndex(lower, -1) {
-		if !wordsOnly || candidate[4] >= 0 {
-			m = candidate
-			break
-		}
+	re := reEpisodeOnly
+	if wordsOnly {
+		re = reEpisodeWord
 	}
+	m := re.FindStringSubmatchIndex(lower)
 	if m == nil || !episodeContext(path, lower, cleanTitle(lower[:m[2]]), formBareCode) {
 		return episodeToken{}, false
 	}

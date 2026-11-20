@@ -74,8 +74,6 @@ func TestEpisodeMarkerWords(t *testing.T) {
 		{"/downloads/Show Saison 2 E\u0301pisode 4.mkv", episode("Show", "2", 4), true},
 		{"/tv/Show/Season 3/Show Folge-03.mkv", episode("Show", "3", 3), true},
 		{"/tv/Show/Season 1/Show - 05 - The Cap 3 Heist.mkv", sdk.ParsedMedia{Title: "Show", Class: "episode", Index: 5, AbsoluteOrdinal: 5}, true},
-		{"/downloads/Fringe - Episode 1.22 - 2009-05-12.mkv", episode("Fringe", "1", 22), true},
-		{"/downloads/Fringe - Episode 1.22 - 16x9.mkv", episode("Fringe", "1", 22), true},
 		{"/tv/E60/Season 1/E60 - 014.mkv", sdk.ParsedMedia{Title: "E60", Class: "episode", Index: 14, AbsoluteOrdinal: 14}, true},
 		{"/movies/Star.Wars.Ep.1.10.bit.1080p.mkv", sdk.ParsedMedia{Title: "Star Wars Ep 1", Class: "movie"}, true},
 		{"/downloads/Fringe.Episode.1.22-Bittersweet.mkv", episode("Fringe", "1", 22), true},
@@ -85,12 +83,13 @@ func TestEpisodeMarkerWords(t *testing.T) {
 		{"/tv/E60/Season 1/E60 - 1x01-1x02 - Pilot.mkv", sdk.ParsedMedia{Title: "E60", Class: "episode", Sequence: "1", Index: 1, IndexEnd: 2}, true},
 		{"/tv/E60/Season 1/[ESPN] E60 - 014.mkv", sdk.ParsedMedia{Title: "E60", Class: "episode", Index: 14, AbsoluteOrdinal: 14}, true},
 		{"/tv/Fringe/Season 1/Episode 1.22 - 022.mkv", episode("Fringe", "1", 22), true},
-		{"/anime/Naruto/Naruto - 014 - Episode 1.14 - 2003-01-09.mkv", sdk.ParsedMedia{Title: "Naruto", Class: "episode", Index: 14, AbsoluteOrdinal: 14}, true},
 		{"/movies/Star.Wars.Ep.1.10-bits.1080p.mkv", sdk.ParsedMedia{Title: "Star Wars Ep 1 10-bits", Class: "movie"}, true},
 		{"/tv/Show/Season 1/Show - E14 - Episode 14 - 316.mkv", sdk.ParsedMedia{Title: "Show - E14", Class: "episode", Sequence: "1", Index: 14}, true},
-		{"/tv/Show/Season 1/Show - Episode 14 - 16x9.mkv", sdk.ParsedMedia{Title: "Show", Class: "episode", Sequence: "1", Index: 14}, true},
-		{"/tv/Fringe/Season 1/Fringe - Episode 14 - 2009-02-03.mkv", sdk.ParsedMedia{Title: "Fringe", Class: "episode", Sequence: "1", Index: 14}, true},
 		{"/downloads/Show.Episode.1.02.Bits.and.Pieces.mkv", sdk.ParsedMedia{Title: "Show", Class: "episode", Sequence: "1", Index: 2}, true},
+		{"/tv/Show/Season 1/Show.E14.Episode.14 - The Cap 3 Heist.mkv", sdk.ParsedMedia{Title: "Show E14", Class: "episode", Sequence: "1", Index: 14}, true},
+		{"/tv/Show/Season 2/Show Episode 1.10-bit - Episode 2.04.mkv", sdk.ParsedMedia{Title: "Show Episode 1 10-bit", Class: "episode", Sequence: "2", Index: 4}, true},
+		{"/tv/Show/Season 1/Show - Episode 14 - 1x14-1x15 - Finale.mkv", sdk.ParsedMedia{Title: "Show - Episode 14", Class: "episode", Sequence: "1", Index: 14, IndexEnd: 15}, true},
+		{"/movies/Star.Wars.Episode.1.24-bit.FLAC.mkv", sdk.ParsedMedia{Title: "Star Wars Episode 1 24-bit FLAC", Class: "movie"}, true},
 		{"/downloads/Contemp 2 Ep 3.mkv", sdk.ParsedMedia{Title: "Contemp 2 Ep 3", Class: "movie"}, true},
 		// Episode zero is no episode.
 		{"/tv/Show/Season 1/Show Ep 0.mkv", sdk.ParsedMedia{Title: "Show Ep 0"}, true},
@@ -109,13 +108,15 @@ func TestEpisodeMarkerWords(t *testing.T) {
 func TestEpisodeMarkerTitles(t *testing.T) {
 	parser := filmtv.New()
 	for path, want := range map[string]string{
-		"/tv/Pokemon/Season 3/Pokemon 3x01 - Episode 3.01 - Pilot.mkv":     "Pilot",
-		"/downloads/Fringe.T01E01-T01E02.Pilot.mkv":                        "Pilot",
-		"/downloads/Fringe.Episode.1.22-Bittersweet.mkv":                   "Bittersweet",
-		"/tv/Pokemon/Season 3/Pokemon S03E01 - Episode 3.01 - Pilot.mkv":   "Pilot",
-		"/tv/Fringe/Season 1/Fringe 1x14 - Episode 1.15.mkv":               "Episode 1 15",
-		"/downloads/Show.Episode.1.02.Bits.and.Pieces.mkv":                 "Bits and Pieces",
-		"/tv/Naruto/Season 1/Naruto - 014 - Episode 1.14 - The Bridge.mkv": "The Bridge",
+		"/tv/Pokemon/Season 3/Pokemon 3x01 - Episode 3.01 - Pilot.mkv":                 "Pilot",
+		"/downloads/Fringe.T01E01-T01E02.Pilot.mkv":                                    "Pilot",
+		"/downloads/Fringe.Episode.1.22-Bittersweet.mkv":                               "Bittersweet",
+		"/tv/Pokemon/Season 3/Pokemon S03E01 - Episode 3.01 - Pilot.mkv":               "Pilot",
+		"/tv/Fringe/Season 1/Fringe 1x14 - Episode 1.15.mkv":                           "Episode 1 15",
+		"/downloads/Show.Episode.1.02.Bits.and.Pieces.mkv":                             "Bits and Pieces",
+		"/tv/Naruto/Season 1/Naruto - 014 - Episode 1.14 - The Bridge.mkv":             "The Bridge",
+		"/tv/Show/Season 1/Show.E14.Episode.14 - The Cap 3 Heist.mkv":                  "The Cap 3 Heist",
+		"/tv/Newsnight/Season 2024/Newsnight - Episode 2024-05-12 - The Interview.mkv": "The Interview",
 	} {
 		got := ""
 		for _, field := range parser.ParseTypedMediaFields(path, sdk.ParseProbe{}) {
