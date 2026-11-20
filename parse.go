@@ -707,11 +707,10 @@ func findAbsoluteEpisode(path, title, lowerTitle, lower string) (episodeToken, b
 		// later metadata ("Show - 2011 - [Disc - 12]").
 		if m = reAbsoluteEpisode.FindStringSubmatchIndex(lowerTitle[yearEnd:]); m != nil && m[0] > 0 {
 			m = nil
-		} else if m != nil {
-			for i := range m {
-				if m[i] >= 0 {
-					m[i] += yearEnd
-				}
+		}
+		for i := range m {
+			if m[i] >= 0 {
+				m[i] += yearEnd
 			}
 		}
 	}
@@ -732,14 +731,12 @@ func findAbsoluteEpisode(path, title, lowerTitle, lower string) (episodeToken, b
 	// series, whichever year the series name holds first.
 	seriesYear := form != formDashed && endsInBareYear(series)
 	if year.found() && !year.leading && !seriesYear {
-		switch {
-		case form == formDashed:
-			form = formDashedYear
-		default:
+		if form != formDashed {
 			// After any other year only the dashed anime form reads as an
 			// episode.
 			return episodeToken{}, false
 		}
+		form = formDashedYear
 	}
 	if !seriesYear {
 		series = year.title(series)
