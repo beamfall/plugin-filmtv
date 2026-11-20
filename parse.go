@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode"
 	"unicode/utf8"
 
 	"github.com/beamfall/plugin-filmtv/internal/mediaimport"
@@ -776,14 +775,13 @@ func endsInBareYear(series string) bool {
 	return hasTitleText(before)
 }
 
-// endsInYearWord reports whether s ends in a year number that no letter or
-// digit runs into ("X2000" and "Café1999" do not).
+// endsInYearWord reports whether s ends in a year number that no ASCII letter
+// or digit runs into ("X2000" does not), the word boundary findYear uses.
 func endsInYearWord(s string) bool {
 	if len(s) < 4 || !isYearNumber(s[len(s)-4:]) {
 		return false
 	}
-	r, _ := utf8.DecodeLastRuneInString(s[:len(s)-4])
-	return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+	return len(s) == 4 || !isASCIIAlnum(s[len(s)-5])
 }
 
 // findAirDate locates the first calendar-valid air date in the ASCII-folded

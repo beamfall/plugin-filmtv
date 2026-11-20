@@ -95,11 +95,11 @@ func TestYearPickerKeepsYearNamedTitles(t *testing.T) {
 		{"/tv/(1975) Space 1999 0001.mkv", sdk.ParsedMedia{Title: "Space 1999", Class: "episode", Year: 1975, Index: 1, AbsoluteOrdinal: 1}, true},
 		{"/tv/Space:1999 0001.mkv", sdk.ParsedMedia{Title: "Space:1999", Class: "episode", Index: 1, AbsoluteOrdinal: 1}, true},
 		{"/tv/Fringe 2008-2013 0001.mkv", sdk.ParsedMedia{Title: "Fringe", Year: 2008}, true},
-		// Review round 3: an en dash run, digits inside a title word, a
-		// non-ASCII letter before a year.
+		// Review round 3: an en dash run, digits inside a title word. A year
+		// after a non-ASCII letter is a year, as findYear reads it (CORE-2726).
 		{"/tv/Fringe 2008–2013 0001.mkv", sdk.ParsedMedia{Title: "Fringe", Year: 2008}, true},
 		{"/tv/Project X2000 1999 0001.mkv", sdk.ParsedMedia{Title: "Project X2000 1999", Class: "episode", Index: 1, AbsoluteOrdinal: 1}, true},
-		{"/tv/Show (2011) Café1999 0001.mkv", sdk.ParsedMedia{Title: "Show", Year: 2011}, true},
+		{"/tv/Café1999 0001.mkv", sdk.ParsedMedia{Title: "Café1999", Class: "episode", Index: 1, AbsoluteOrdinal: 1}, true},
 		// Controls: a title before the year keeps the old reading.
 		{"/movies/1917 (2019).mkv", sdk.ParsedMedia{Title: "1917", Class: "movie", Year: 2019}, true},
 		{"/movies/2001 A Space Odyssey (1968).mkv", sdk.ParsedMedia{Title: "2001 A Space Odyssey", Class: "movie", Year: 1968}, true},
