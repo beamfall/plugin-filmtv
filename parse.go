@@ -294,7 +294,7 @@ func parseName(path string) (nameParse, bool) {
 		}
 	}
 	titleStart = min(titleStart, cut)
-	if year.leading && cleanTitle(name[titleStart:cut]) == "" && cleanTitle(name[:year.start]) != "" {
+	if year.leading && onlyNoiseAfter(name, lower, year.end, cut) && cleanTitle(name[:year.start]) != "" {
 		// Nothing but noise follows a leading year ("[REC] (2007) 1080p"), so the
 		// bracket before it is the title and the year ends it.
 		titleStart, cut = 0, year.start
@@ -910,7 +910,7 @@ func (y yearToken) title(s string) string {
 	switch {
 	case !y.found():
 		return s
-	case y.leading:
+	case y.leading && !onlySeparators(s[y.end:]):
 		return s[y.end:]
 	default:
 		return s[:y.start]
@@ -931,12 +931,9 @@ func (y yearToken) title(s string) string {
 // release-group brackets is the year ("[REC].2007").
 func findYear(name, lower string, episodeCut int) yearToken {
 	groupsEnd := len(reLeadingGroups.FindString(name))
-	// "_" is a separator, but a word character to \b: blank it for the scan.
-	// The replacement keeps every byte offset.
-	scan := strings.ReplaceAll(lower, "_", " ")
 	var candidates []yearToken
 	var parens []bool
-	for _, m := range reYear.FindAllStringSubmatchIndex(scan, -1) {
+	for _, m := range reYear.FindAllStringSubmatchIndex(lower, -1) {
 		digitsStart, digitsEnd := m[2], m[3]
 		year := atoi(lower[digitsStart:digitsEnd])
 		if year < 1900 || year > 2099 || digitsStart < groupsEnd {
@@ -975,28 +972,46 @@ func findYear(name, lower string, episodeCut int) yearToken {
 		return leading
 	}
 	bracketed := yearToken{}
+	rangeEnd := false
 	for i, c := range candidates {
+		if rangeEnd {
+			rangeEnd = false
+			continue
+		}
 		if i+1 < len(candidates) && !parens[i+1] {
 			next := candidates[i+1]
 			between := name[c.end:next.start]
 			if onlySeparators(between) && (between != "-" || next.year <= c.year) {
 				continue
 			}
+			rangeEnd = between == "-" && next.year > c.year
 		}
 		if hasTitleText(name[:c.start]) {
 			return c
 		}
-		if !bracketed.found() && groupsEnd > 0 {
+		if !bracketed.found() && groupsEnd > 0 && episodeCut < 0 {
+			// An episode drops its leading brackets, so they are never its title.
 			bracketed = c
 		}
 	}
 	return bracketed
 }
 
+// onlyNoiseAfter reports whether name[end:cut], the text after a leading year,
+// holds no title: nothing, or release noise from its first word on ("PROPER").
+func onlyNoiseAfter(name, lower string, end, cut int) bool {
+	if cleanTitle(name[min(end, cut):cut]) == "" {
+		return true
+	}
+	noise := firstNoiseToken(lower[end:], false)
+	return noise >= 0 && cleanTitle(name[end:end+noise]) == ""
+}
+
 // hasTitleText reports whether s, the text before a year, holds any title:
-// anything but separators outside the leading release-group brackets.
+// anything that survives title cleanup outside the leading release-group
+// brackets ("$", not "–").
 func hasTitleText(s string) bool {
-	return !onlySeparators(s[len(reLeadingGroups.FindString(s)):])
+	return cleanTitle(s[len(reLeadingGroups.FindString(s)):]) != ""
 }
 
 // isYearNumber reports whether s is a four-digit number from 1900 to 2099.

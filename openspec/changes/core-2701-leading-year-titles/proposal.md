@@ -27,8 +27,8 @@ A title ending in a number followed by the year in dotted form (`Blade.Runner.20
   the year; a leading year that leaves no title falls back to the text before it (`[REC] (2007)`,
   `[REC].2007`, `$ (1971)`); an episode whose series name is a bare year takes a show folder that
   carries the same year (`Doctor Who (2005)/Season 01/2005.S01E01`).
-- Underscores separate years like dots, and years inside the leading release-group brackets do not
-  count.
+- Years inside the leading release-group brackets do not count, and the second year of a range is
+  never the year.
 
 ## Impact
 
