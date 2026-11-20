@@ -20,6 +20,20 @@ func TestBundleValid(t *testing.T) {
 	}
 }
 
+func TestPlexImporterDeclaresSourceCategories(t *testing.T) {
+	for _, importer := range filmtv.Bundle().Importers {
+		if importer.ID != "plex" {
+			continue
+		}
+		want := filmtv.NewPlexSource("plex.db").Categories()
+		if !reflect.DeepEqual(importer.Categories, want) {
+			t.Errorf("Plex importer categories = %v, want %v", importer.Categories, want)
+		}
+		return
+	}
+	t.Fatal("bundle is missing the Plex importer")
+}
+
 // TestLayoutSectionsDoNotShareSource pins that no home Layout repeats itself:
 // two Sections on the same Layout that read the identical Source (same
 // Kind, EntityKind, Value, FieldFilters, and EntityFilter) render the same

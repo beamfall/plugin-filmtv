@@ -85,7 +85,19 @@ func TestImporterStreamingCancellationAndCheckpoint(t *testing.T) {
 		t.Fatalf("parse NFO-tree fixture: %v", err)
 	}
 	vectors := []sdktest.ImporterVector{
-		{Name: "plex", Source: dbWatchSource{read: reader, stream: streamer}, WantCategories: []string{sdk.CategoryWatchState}, WantItems: watchItems},
+		{
+			Name:           "plex",
+			Source:         NewPlexSource(seedPlexWatchDatabase(t)),
+			WantCategories: []string{sdk.CategoryWatchState, sdk.CategoryRatings, sdk.CategoryCollections},
+			WantItems: []sdk.ForeignItem{
+				{Path: "/a.mkv", WatchState: sdk.WatchState{
+					Present: true, PositionSeconds: 12, DurationSeconds: 90, Watched: true, OccurredAt: rows[0].LastPlayed.UTC(),
+				}},
+				{Path: "/z.mkv", WatchState: sdk.WatchState{
+					Present: true, PositionSeconds: 12, DurationSeconds: 90, Watched: true, OccurredAt: rows[0].LastPlayed.UTC(),
+				}},
+			},
+		},
 		{Name: "emby", Source: dbWatchSource{read: reader, stream: streamer}, WantCategories: []string{sdk.CategoryWatchState}, WantItems: watchItems},
 		{Name: "jellyfin", Source: dbWatchSource{read: reader, stream: streamer}, WantCategories: []string{sdk.CategoryWatchState}, WantItems: watchItems},
 		{Name: "nfo", Source: nfoSource, WantCategories: []string{sdk.CategoryCollections}, WantItems: nfoItems},
@@ -125,19 +137,7 @@ func collectFilmTVStream(source sdk.Source) ([]sdk.ForeignItem, error) { //nolin
 
 func TestDatabaseImporterStreamsMatchCompatibilityItems(t *testing.T) {
 	t.Run("plex", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "plex.db")
-		seedFilmTVDatabase(t, path, []string{
-			`CREATE TABLE media_parts (id INTEGER PRIMARY KEY, media_item_id INTEGER, file TEXT)`,
-			`CREATE TABLE media_items (id INTEGER PRIMARY KEY, metadata_item_id INTEGER, duration INTEGER)`,
-			`CREATE TABLE metadata_items (id INTEGER PRIMARY KEY, guid TEXT)`,
-			`CREATE TABLE metadata_item_settings (guid TEXT, view_offset INTEGER, view_count INTEGER, last_viewed_at INTEGER)`,
-			`INSERT INTO media_items VALUES (1, 1, 90000)`,
-			`INSERT INTO metadata_items VALUES (1, 'guid-1')`,
-			`INSERT INTO metadata_item_settings VALUES ('guid-1', 12000, 1, 1700000000)`,
-			`INSERT INTO media_parts VALUES (2, 1, '/z.mkv')`,
-			`INSERT INTO media_parts VALUES (1, 1, '/a.mkv')`,
-		})
-		assertFilmTVStreamMatchesItems(t, NewPlexSource(path))
+		assertFilmTVStreamMatchesItems(t, NewPlexSource(seedPlexWatchDatabase(t)))
 	})
 
 	for _, dialect := range []struct {
@@ -161,38 +161,36 @@ func TestDatabaseImporterStreamsMatchCompatibilityItems(t *testing.T) {
 	}
 }
 
-func TestPlexSourceItemsBySourceUser(t *testing.T) {
+func seedPlexWatchDatabase(t *testing.T) string {
+	t.Helper()
 	path := filepath.Join(t.TempDir(), "plex.db")
 	seedFilmTVDatabase(t, path, []string{
 		`CREATE TABLE media_parts (id INTEGER PRIMARY KEY, media_item_id INTEGER, file TEXT)`,
 		`CREATE TABLE media_items (id INTEGER PRIMARY KEY, metadata_item_id INTEGER, duration INTEGER)`,
 		`CREATE TABLE metadata_items (id INTEGER PRIMARY KEY, guid TEXT)`,
-		`CREATE TABLE metadata_item_settings (account_id INTEGER, guid TEXT, view_offset INTEGER, view_count INTEGER, last_viewed_at INTEGER, rating REAL)`,
-		`CREATE TABLE accounts (id INTEGER PRIMARY KEY, name TEXT)`,
-		`CREATE TABLE tags (id INTEGER PRIMARY KEY, tag TEXT, tag_type INTEGER)`,
-		`CREATE TABLE taggings (metadata_item_id INTEGER, tag_id INTEGER, "index" INTEGER)`,
-		`INSERT INTO accounts VALUES (1, 'Alice'), (2, 'Bob'), (3, 'Empty')`,
-		`INSERT INTO metadata_items VALUES (1, 'shared'), (2, 'rated'), (3, NULL), (4, 'collection-only')`,
-		`INSERT INTO media_items VALUES (1, 1, 90000), (2, 1, 91000), (3, 2, 120000), (4, 3, 120000), (5, 4, 120000)`,
-		`INSERT INTO media_parts VALUES (1, 1, '/movie.mkv'), (2, 1, '/part2.mkv'), (3, 2, '/version.mkv'),
-			(4, 3, '/zero-rated.mkv'), (5, 4, '/ignore.mkv'), (6, 5, '/collection-only.mkv')`,
-		`INSERT INTO metadata_item_settings VALUES (1, 'shared', 0, 2, 1700000000, 8.5),
-			(2, 'shared', 12500, 0, 1700000010, NULL), (1, 'rated', NULL, 0, NULL, 0),
-			(1, NULL, 89000, 1, 1700000030, 10), (99, 'shared', 18000, 0, 1700000020, 10)`,
-		`INSERT INTO tags VALUES (1, 'Favorites', 2), (2, 'Weekend', 2), (3, 'Genre', 1)`,
-		`INSERT INTO taggings VALUES (1, 1, 3), (1, 2, 0), (1, 3, 4), (4, 2, 7)`,
+		`CREATE TABLE metadata_item_settings (guid TEXT, view_offset INTEGER, view_count INTEGER, last_viewed_at INTEGER)`,
+		`INSERT INTO media_items VALUES (1, 1, 90000)`,
+		`INSERT INTO metadata_items VALUES (1, 'guid-1')`,
+		`INSERT INTO metadata_item_settings VALUES ('guid-1', 12000, 1, 1700000000)`,
+		`INSERT INTO media_parts VALUES (2, 1, '/z.mkv')`,
+		`INSERT INTO media_parts VALUES (1, 1, '/a.mkv')`,
 	})
-	source := NewPlexSource(path)
+	return path
+}
+
+func TestPlexSourceItemsBySourceUser(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "plex.db")
+	schema, err := os.ReadFile("internal/foreignimport/testdata/plex-accounts.sql")
+	if err != nil {
+		t.Fatalf("read Plex fixture: %v", err)
+	}
+	seedFilmTVDatabase(t, path, []string{string(schema)})
 	wantCategories := []string{sdk.CategoryWatchState, sdk.CategoryRatings, sdk.CategoryCollections}
+	source := NewPlexSourceForCategories(path, wantCategories)
 	if got := source.Categories(); !reflect.DeepEqual(got, wantCategories) {
 		t.Fatalf("Plex source categories = %v, want %v", got, wantCategories)
 	}
-	bySourceUser, ok := source.(interface {
-		ItemsBySourceUser(context.Context) (map[string][]sdk.ForeignItem, error)
-	})
-	if !ok {
-		t.Fatal("Plex source does not implement ItemsBySourceUser")
-	}
+	bySourceUser := requireSourceUserItems(t, source)
 	got, err := bySourceUser.ItemsBySourceUser(context.Background())
 	if err != nil {
 		t.Fatalf("ItemsBySourceUser: %v", err)
@@ -242,12 +240,91 @@ func TestPlexSourceItemsBySourceUser(t *testing.T) {
 			t.Errorf("items for %s = %#v, want %#v", account, got[account], items)
 		}
 	}
+
+	t.Run("watch-state", func(t *testing.T) {
+		watchSources := map[string]sdk.Source{ //nolint:staticcheck // deliberate SDK 0.x compatibility assertion
+			"legacy factory": NewPlexSource(path),
+			"requested":      NewPlexSourceForCategories(path, []string{sdk.CategoryWatchState}),
+		}
+		for name, source := range watchSources {
+			t.Run(name, func(t *testing.T) {
+				items, err := requireSourceUserItems(t, source).ItemsBySourceUser(context.Background())
+				if err != nil {
+					t.Fatal(err)
+				}
+				for _, account := range []string{"Alice#1", "Bob#2"} {
+					var wantWatch []sdk.ForeignItem
+					for _, item := range want[account] {
+						if item.WatchState.Present {
+							wantWatch = append(wantWatch, sdk.ForeignItem{Path: item.Path, WatchState: item.WatchState})
+						}
+					}
+					if !reflect.DeepEqual(items[account], wantWatch) {
+						t.Errorf("watch-state items for %s = %#v, want %#v", account, items[account], wantWatch)
+					}
+				}
+				if empty, ok := items["Empty#3"]; !ok || len(empty) != 0 {
+					t.Errorf("watch-state items for Empty#3 = %#v, present = %t", empty, ok)
+				}
+			})
+		}
+	})
+
+	t.Run("collections", func(t *testing.T) {
+		source := NewPlexSourceForCategories(path, []string{sdk.CategoryCollections})
+		if got := source.Categories(); !reflect.DeepEqual(got, []string{sdk.CategoryCollections}) {
+			t.Errorf("collections-only source categories = %v", got)
+		}
+		items, err := requireSourceUserItems(t, source).ItemsBySourceUser(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		for account := range want {
+			if !reflect.DeepEqual(items[account], collections) {
+				t.Errorf("collection items for %s = %#v, want %#v", account, items[account], collections)
+			}
+		}
+		if legacy, err := collectFilmTVStream(source); err != nil || len(legacy) != 0 {
+			t.Errorf("legacy stream on collections-only source = %#v, %v", legacy, err)
+		}
+	})
+
+	t.Run("ratings", func(t *testing.T) {
+		source := NewPlexSourceForCategories(path, []string{sdk.CategoryRatings})
+		items, err := requireSourceUserItems(t, source).ItemsBySourceUser(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		var wantRatings []sdk.ForeignItem
+		for _, item := range want["Alice#1"] {
+			if item.Rating.Present {
+				wantRatings = append(wantRatings, sdk.ForeignItem{Path: item.Path, Rating: item.Rating})
+			}
+		}
+		if !reflect.DeepEqual(items["Alice#1"], wantRatings) || len(items["Bob#2"]) != 0 || len(items["Empty#3"]) != 0 {
+			t.Errorf("ratings-only items = %#v, want only Alice#1's ratings %#v", items, wantRatings)
+		}
+	})
+
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	if _, err := bySourceUser.ItemsBySourceUser(ctx); !errors.Is(err, context.Canceled) {
 		t.Fatalf("canceled ItemsBySourceUser error = %v, want context.Canceled", err)
 	}
 	assertFilmTVStreamMatchesItems(t, source)
+}
+
+type sourceUserItems interface {
+	ItemsBySourceUser(context.Context) (map[string][]sdk.ForeignItem, error)
+}
+
+func requireSourceUserItems(t *testing.T, source sdk.Source) sourceUserItems { //nolint:staticcheck // deliberate SDK 0.x compatibility assertion
+	t.Helper()
+	bySourceUser, ok := source.(sourceUserItems)
+	if !ok {
+		t.Fatal("Plex source does not implement ItemsBySourceUser")
+	}
+	return bySourceUser
 }
 
 func seedFilmTVDatabase(t *testing.T, path string, statements []string) {

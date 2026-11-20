@@ -180,17 +180,27 @@ type PlexCollectionMember struct {
 	Position int
 }
 
+// PlexReadOptions selects the account state and collection data to read.
+type PlexReadOptions struct {
+	WatchState  bool
+	Ratings     bool
+	Collections bool
+}
+
 // ReadPlexByAccount returns account settings keyed by source-user ID and the
 // collections shared by those accounts. Accounts with no settings are included.
-func ReadPlexByAccount(ctx context.Context, path string) (map[string][]PlexAccountItem, []PlexCollectionMember, error) {
+func ReadPlexByAccount(ctx context.Context, path string, options PlexReadOptions) (map[string][]PlexAccountItem, []PlexCollectionMember, error) {
 	db, err := openReadOnly(path)
 	if err != nil {
 		return nil, nil, err
 	}
 	defer func() { _ = db.Close() }()
-	accounts, err := readPlexAccountItems(ctx, db)
+	accounts, err := readPlexAccountItems(ctx, db, options)
 	if err != nil {
 		return nil, nil, err
+	}
+	if !options.Collections {
+		return accounts, nil, nil
 	}
 	collections, err := readPlexCollectionMembers(ctx, db)
 	if err != nil {
@@ -199,24 +209,28 @@ func ReadPlexByAccount(ctx context.Context, path string) (map[string][]PlexAccou
 	return accounts, collections, nil
 }
 
-func readPlexAccountItems(ctx context.Context, db *sql.DB) (map[string][]PlexAccountItem, error) {
+func readPlexAccountItems(ctx context.Context, db *sql.DB, options PlexReadOptions) (map[string][]PlexAccountItem, error) {
 	rows, err := db.QueryContext(ctx, `
 		WITH account_files AS (
-			SELECT mis.account_id, mp.file, mis.view_offset, mis.view_count,
-			       mis.last_viewed_at, mi.duration, mis.rating
+			SELECT mis.account_id, mp.file,
+			       CASE WHEN ?1 THEN mis.view_offset END AS view_offset,
+			       CASE WHEN ?1 THEN mis.view_count END AS view_count,
+			       CASE WHEN ?1 THEN mis.last_viewed_at END AS last_viewed_at,
+			       CASE WHEN ?1 THEN mi.duration END AS duration,
+			       CASE WHEN ?2 THEN mis.rating END AS rating
 			FROM metadata_item_settings mis
 			JOIN metadata_items md ON md.guid = mis.guid
 			JOIN media_items mi ON mi.metadata_item_id = md.id
 			JOIN media_parts mp ON mp.media_item_id = mi.id
 			WHERE mp.file <> ''
-			  AND (mis.view_offset > 0 OR mis.view_count > 0 OR mis.rating IS NOT NULL)
+			  AND ((?1 AND (mis.view_offset > 0 OR mis.view_count > 0)) OR (?2 AND mis.rating IS NOT NULL))
 		)
 		SELECT COALESCE(a.name, '') || '#' || a.id, COALESCE(f.file, ''),
 		       COALESCE(f.view_offset, 0), COALESCE(f.view_count, 0),
 		       COALESCE(f.last_viewed_at, 0), COALESCE(f.duration, 0), f.rating
 		FROM accounts a
 		LEFT JOIN account_files f ON f.account_id = a.id
-		ORDER BY a.id, f.file COLLATE BINARY`)
+		ORDER BY a.id, f.file COLLATE BINARY`, options.WatchState, options.Ratings)
 	if err != nil {
 		return nil, fmt.Errorf("query plex account settings: %w", err)
 	}

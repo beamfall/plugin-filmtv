@@ -933,28 +933,25 @@ func Bundle() sdk.Bundle {
 			{Label: "romance", Tag: "romance"},
 			{Label: "science fiction", Tag: "science-fiction"},
 		},
-		// Migration Wizard importers: the four Film & TV sources a user
-		// switching from another media server most often carries history
-		// from. These are declarations only — the matching compiled
-		// sdk.Source implementations live in sources.go, and Core's resolver
-		// wires (filmtv, importerID) → the constructor there. Categories come
-		// from the fixed import-category vocabulary; "additive" is the only
-		// conflict strategy (re-runnable, gap-fill / advance-only).
+		// Core's Migration Wizard resolves each Film & TV importer to its
+		// compiled source. The SDK defines the category vocabulary and the
+		// additive conflict strategy (re-runnable, gap-fill / advance-only).
 		//
 		// Plex/Emby/Jellyfin read the foreign server's SQLite database
 		// (export-file input) and carry watch-state — resume position +
-		// completion + the historical timestamp. NFO walks a
-		// sidecar tree (export-file input = the library folder) and carries its
-		// TMDB/IMDB parse-hint ids + local artwork; it is
-		// declared under "collections" as the closest fixed category for that
-		// metadata-hint material (the v1 handler applies engagement for
-		// watch-state only, so an NFO run reports the match rate and pins matched
-		// files while identification consumes the ids).
+		// completion + the historical timestamp. Plex also carries per-account
+		// ratings and library-wide collection memberships. Core's v1 handler
+		// applies watch-state. Applying Plex ratings and collections lands
+		// separately in Core.
+		//
+		// NFO walks a sidecar tree (the library folder) and declares TMDB/IMDB
+		// identification hints and local artwork under "collections". An NFO
+		// run reports the match rate and pins matched files for identification.
 		Importers: []sdk.ImporterSpec{
 			{
 				ID:          "plex",
 				DisplayName: sdk.LocaleString{"en": "Plex", "fr": "Plex"},
-				Categories:  []string{"watch-state"},
+				Categories:  []string{sdk.CategoryWatchState, sdk.CategoryRatings, sdk.CategoryCollections},
 				Input:       "export-file",
 				Conflict:    "additive",
 			},

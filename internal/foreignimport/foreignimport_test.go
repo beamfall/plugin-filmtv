@@ -1,9 +1,12 @@
 package foreignimport
 
 import (
+	"context"
 	"database/sql"
 	"os"
 	"path/filepath"
+	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -68,6 +71,106 @@ func TestReadPlexMapsPathKeyedWatchState(t *testing.T) {
 	}
 	if !watched.LastPlayed.Equal(time.Unix(1614834367, 0).UTC()) {
 		t.Fatalf("watched LastPlayed = %v, want unix 1614834367", watched.LastPlayed)
+	}
+}
+
+func TestReadPlexByAccount(t *testing.T) {
+	schema, err := os.ReadFile("testdata/plex-accounts.sql")
+	if err != nil {
+		t.Fatalf("read Plex fixture: %v", err)
+	}
+	path := fixtureDB(t, "plex.db", string(schema))
+	options := PlexReadOptions{WatchState: true, Ratings: true, Collections: true}
+	accounts, collections, err := ReadPlexByAccount(context.Background(), path, options)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rating, zeroRating := 8.5, 0.0
+	wantAccounts := map[string][]PlexAccountItem{"Alice#1": nil, "Bob#2": nil, "Empty#3": nil}
+	wantCollections := []PlexCollectionMember{{Path: "/collection-only.mkv", Name: "Weekend", Position: 7}}
+	for _, file := range []struct {
+		path     string
+		duration int64
+	}{
+		{path: "/movie.mkv", duration: 90},
+		{path: "/part2.mkv", duration: 90},
+		{path: "/version.mkv", duration: 91},
+	} {
+		wantAccounts["Alice#1"] = append(wantAccounts["Alice#1"], PlexAccountItem{
+			WatchRow: WatchRow{
+				Path: file.path, DurationSeconds: file.duration, Watched: true, LastPlayed: time.Unix(1700000000, 0).UTC(),
+			},
+			HasWatchState: true,
+			Rating:        &rating,
+		})
+		wantAccounts["Bob#2"] = append(wantAccounts["Bob#2"], PlexAccountItem{
+			WatchRow: WatchRow{
+				Path: file.path, DurationSeconds: file.duration, PositionSeconds: 12, LastPlayed: time.Unix(1700000010, 0).UTC(),
+			},
+			HasWatchState: true,
+		})
+		wantCollections = append(wantCollections,
+			PlexCollectionMember{Path: file.path, Name: "Favorites", Position: 3},
+			PlexCollectionMember{Path: file.path, Name: "Weekend", Position: 0},
+		)
+	}
+	wantAccounts["Alice#1"] = append(wantAccounts["Alice#1"], PlexAccountItem{
+		WatchRow: WatchRow{Path: "/zero-rated.mkv", DurationSeconds: 120},
+		Rating:   &zeroRating,
+	})
+	if !reflect.DeepEqual(accounts, wantAccounts) {
+		t.Errorf("account items = %#v, want %#v", accounts, wantAccounts)
+	}
+	if !reflect.DeepEqual(collections, wantCollections) {
+		t.Errorf("collection memberships = %#v, want %#v", collections, wantCollections)
+	}
+}
+
+func TestReadPlexByAccountCategoryQueries(t *testing.T) {
+	schema, err := os.ReadFile("testdata/plex-accounts.sql")
+	if err != nil {
+		t.Fatalf("read Plex fixture: %v", err)
+	}
+	path := fixtureDB(t, "plex.db", string(schema), "DROP TABLE taggings")
+	accounts, collections, err := ReadPlexByAccount(context.Background(), path, PlexReadOptions{WatchState: true})
+	if err != nil {
+		t.Fatalf("watch-state-only read without a collection table: %v", err)
+	}
+	if len(accounts["Alice#1"]) != 3 || len(accounts["Bob#2"]) != 3 || len(collections) != 0 {
+		t.Fatalf("watch-state-only read: accounts = %#v, collections = %#v", accounts, collections)
+	}
+	if _, _, err := ReadPlexByAccount(context.Background(), path, PlexReadOptions{Collections: true}); err == nil ||
+		!strings.Contains(err.Error(), "query plex collections") {
+		t.Fatalf("collections read without a collection table: got %v, want collection query error", err)
+	}
+}
+
+func TestReadPlexByAccountQueryErrors(t *testing.T) {
+	schema, err := os.ReadFile("testdata/plex-accounts.sql")
+	if err != nil {
+		t.Fatalf("read Plex fixture: %v", err)
+	}
+	for _, test := range []struct {
+		name      string
+		mutation  string
+		wantError string
+	}{
+		{name: "missing accounts", mutation: "DROP TABLE accounts", wantError: "query plex account settings"},
+		{name: "invalid rating", mutation: "UPDATE metadata_item_settings SET rating = 'invalid' WHERE account_id = 1", wantError: "scan plex account settings"},
+		{name: "invalid collection position", mutation: `UPDATE taggings SET "index" = 'invalid' WHERE tag_id = 2`, wantError: "scan plex collection membership"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			path := fixtureDB(t, "plex.db", string(schema), test.mutation)
+			options := PlexReadOptions{WatchState: true, Ratings: true, Collections: true}
+			accounts, collections, err := ReadPlexByAccount(context.Background(), path, options)
+			if err == nil || !strings.Contains(err.Error(), test.wantError) {
+				t.Fatalf("ReadPlexByAccount error = %v, want %q", err, test.wantError)
+			}
+			if accounts != nil || collections != nil {
+				t.Fatalf("failed read returned accounts = %#v, collections = %#v", accounts, collections)
+			}
+		})
 	}
 }
 

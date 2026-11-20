@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"io/fs"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -101,16 +102,27 @@ func watchRowForeignItem(row foreignimport.WatchRow) sdk.ForeignItem {
 	}
 }
 
-type plexSource struct{ dbWatchSource }
+type plexSource struct {
+	dbWatchSource
+	categories []string
+}
 
-func (plexSource) Categories() []string {
+func (s plexSource) Categories() []string {
+	if s.categories != nil {
+		return slices.Clone(s.categories)
+	}
 	return []string{sdk.CategoryWatchState, sdk.CategoryRatings, sdk.CategoryCollections}
 }
 
 // ItemsBySourceUser supplies Core with account-specific playback state and ratings.
 // Library-wide collection memberships are available under each source-user key.
 func (s plexSource) ItemsBySourceUser(ctx context.Context) (map[string][]sdk.ForeignItem, error) {
-	accounts, memberships, err := foreignimport.ReadPlexByAccount(ctx, s.dbPath)
+	options := foreignimport.PlexReadOptions{
+		WatchState:  s.categories == nil || slices.Contains(s.categories, sdk.CategoryWatchState),
+		Ratings:     slices.Contains(s.categories, sdk.CategoryRatings),
+		Collections: slices.Contains(s.categories, sdk.CategoryCollections),
+	}
+	accounts, memberships, err := foreignimport.ReadPlexByAccount(ctx, s.dbPath, options)
 	if err != nil {
 		return nil, err
 	}
@@ -152,14 +164,40 @@ func (s plexSource) ItemsBySourceUser(ctx context.Context) (map[string][]sdk.For
 	return byUser, nil
 }
 
-// NewPlexSource returns the Plex migration Source over a Plex library database
-// export file. Items and Stream provide the legacy watch-state path.
+// NewPlexSource advertises the Plex importer's capabilities and reads watch
+// state from the exported library database. Use NewPlexSourceForCategories
+// when the resolver supplies a run's category selection.
 func NewPlexSource(dbPath string) sdk.Source { //nolint:staticcheck // deliberate SDK 0.x compatibility path for pre-streaming consumers
-	return plexSource{dbWatchSource: dbWatchSource{
+	return newPlexSource(dbPath, nil)
+}
+
+// NewPlexSourceForCategories returns a Plex source scoped to the requested
+// categories. Ratings and collections are available through ItemsBySourceUser.
+func NewPlexSourceForCategories(dbPath string, requested []string) sdk.Source { //nolint:staticcheck // deliberate SDK 0.x compatibility path for pre-streaming consumers
+	categories := make([]string, 0, 3)
+	for _, category := range (plexSource{}).Categories() {
+		if slices.Contains(requested, category) {
+			categories = append(categories, category)
+		}
+	}
+	return newPlexSource(dbPath, categories)
+}
+
+func newPlexSource(dbPath string, categories []string) plexSource {
+	source := dbWatchSource{
 		read:   foreignimport.ReadPlexContext,
 		stream: foreignimport.StreamPlexWatchRows,
 		dbPath: dbPath,
-	}}
+	}
+	if categories != nil && !slices.Contains(categories, sdk.CategoryWatchState) {
+		source.read = func(ctx context.Context, _ string) ([]foreignimport.WatchRow, error) {
+			return nil, ctx.Err()
+		}
+		source.stream = func(ctx context.Context, _ string, _ func(foreignimport.WatchRow) error) error {
+			return ctx.Err()
+		}
+	}
+	return plexSource{dbWatchSource: source, categories: categories}
 }
 
 // NewEmbySource returns the Emby migration Source over an Emby `library.db`.
