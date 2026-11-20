@@ -9,7 +9,7 @@ CORE-2726's Codex review left four parser gaps:
 
 - A trailing `WEB-DL` reads as `WEB` plus a release group `DL`, so scene noise ending in it stays a
   title (`[REC] (2007) PROPER.REPACK.WEB-DL` parses as `PROPER REPACK WEB-DL`).
-- After a bare leading year, scene noise before an episode marker becomes the series name
+- After a bare leading year, release noise before an episode marker becomes the series name
   (`/tv/Fringe/Season 01/(2007) PROPER.1080p.S01E01 - Pilot.mkv` parses as series `PROPER 1080p`).
 - A leading checksum counts as a release-group bracket, so the year-named title after it becomes
   the year and the name does not parse (`[DEADBEEF] 1923`).
@@ -20,10 +20,11 @@ CORE-2726's Codex review left four parser gaps:
 
 - A release tag split by a hyphen (`WEB-DL`) is one tag, not a tag and a release group, in scene
   noise and at the end of a title (`Movie.WEB-DL` parsed as `Movie WEB-DL`).
-- An episode whose name is only scene noise after a bare leading year takes its series name from
+- An episode whose name is only release noise after a bare leading year takes its series name from
   the show folder.
-- A checksum bracket at the start of a name is not a release group: a year-named title after it is
-  the title, not the year, and the checksum does not end the title.
+- Checksum brackets alone at the start of a name are blanked before parsing: they are not a release
+  group, so a year-named title after them is the title, not the year, and they do not end the
+  title. They still count as episode context (`[DEADBEEF] Naruto - 001`).
 - Decision: a checksum keeps a release word before it in the title. It ends the title the way a
   year does, so `Movie Uncut [DEADBEEF]` stays `Movie Uncut`, matching the pinned CORE-2726 case
   `[Group] (2013) Proper Uncut [DEADBEEF]` → `Proper Uncut`.

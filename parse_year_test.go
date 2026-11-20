@@ -156,6 +156,15 @@ func TestYearPickerKeepsYearNamedTitles(t *testing.T) {
 		{"/movies/[Group][DEADBEEF] 1923.mkv", sdk.ParsedMedia{Title: "[Group]", Class: "movie", Year: 1923}, true},
 		{"/movies/Movie Uncut [DEADBEEF].mkv", sdk.ParsedMedia{Title: "Movie Uncut", Class: "movie"}, true},
 		{"/movies/Movie Uncut.mkv", sdk.ParsedMedia{Title: "Movie", Class: "movie"}, true},
+		// The leading checksum is still episode context, a one-word title after
+		// it is not cut as an edition word, a checksum after a leading year
+		// exposes no release group, and release tags alone before an episode
+		// marker name no series.
+		{"/downloads/[DEADBEEF] Naruto - 001.mkv", sdk.ParsedMedia{Title: "Naruto", Class: "episode", Index: 1, AbsoluteOrdinal: 1}, true},
+		{"/movies/[DEADBEEF] Uncut.mkv", sdk.ParsedMedia{Title: "Uncut", Class: "movie"}, true},
+		{"/movies/(2007) [DEADBEEF]-YIFY.mkv", sdk.ParsedMedia{}, false},
+		{"/tv/Fringe/Season 01/(2007) 1080p.WEB-DL.S01E01 - Pilot.mkv", sdk.ParsedMedia{Title: "Fringe", Class: "episode", Year: 2007, Sequence: "1", Index: 1}, true},
+		{"/tv/Fringe/Season 01/(2007) ReMastered.S01E01.mkv", sdk.ParsedMedia{Title: "ReMastered", Class: "episode", Year: 2007, Sequence: "1", Index: 1}, true},
 		// Controls: a title before the year keeps the old reading.
 		{"/movies/1917 (2019).mkv", sdk.ParsedMedia{Title: "1917", Class: "movie", Year: 2019}, true},
 		{"/movies/2001 A Space Odyssey (1968).mkv", sdk.ParsedMedia{Title: "2001 A Space Odyssey", Class: "movie", Year: 1968}, true},

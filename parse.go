@@ -228,7 +228,7 @@ func parseName(path string) (nameParse, bool) {
 		return nameParse{}, false
 	}
 	name := strings.TrimSuffix(base, filepath.Ext(base))
-	name = removeProviderIDTags(name)
+	name = blankLeadingChecksums(removeProviderIDTags(name))
 	lower := asciiLower(name)
 
 	var parsed sdk.ParsedMedia
@@ -273,7 +273,7 @@ func parseName(path string) (nameParse, bool) {
 		switch {
 		case year.leading:
 			titleStart = year.end
-			if sceneTagNoise(lower[year.end:cut]) {
+			if isEpisode && onlyNoiseAfter(name, lower, year.end, cut) || !isEpisode && sceneTagNoise(lower[year.end:]) {
 				// "(2007) PROPER.[DEADBEEF]" has no title, and "(2007)
 				// PROPER.1080p.S01E01" no series name of its own.
 				cut = year.end
@@ -295,13 +295,8 @@ func parseName(path string) (nameParse, bool) {
 		if noiseStart := firstNoiseToken(lower[titleStart:], true); noiseStart >= 0 {
 			cut = titleStart + noiseStart
 		}
-		for _, checksum := range reChecksum.FindAllStringIndex(lower[titleStart:cut], -1) {
-			// A checksum ends the title, but one leading the name ("[DEADBEEF]
-			// 1923") has no title before it to end.
-			if !onlySeparators(reChecksum.ReplaceAllString(lower[titleStart:titleStart+checksum[0]], "")) {
-				cut = titleStart + checksum[0]
-				break
-			}
+		if checksum := reChecksum.FindStringIndex(lower[titleStart:cut]); checksum != nil {
+			cut = titleStart + checksum[0]
 		}
 	}
 	titleStart = min(titleStart, cut)
@@ -636,8 +631,9 @@ const (
 //   - a season folder;
 //   - the nearest library folder above the file being a TV folder ("TV",
 //     "Anime");
-//   - a CRC32 checksum bracket, or a release-group bracket in front of the
-//     anime " - 001" form;
+//   - a CRC32 checksum bracket anywhere in the file name, one parseName
+//     blanked included, or a release-group bracket in front of the anime
+//     " - 001" form;
 //   - a show folder named for series, except for an underscored counter and
 //     a dashed number after a series name with a year.
 //
@@ -657,7 +653,7 @@ func episodeContext(path, lower, series string, form weakForm) bool {
 		return true
 	}
 	switch {
-	case library == "tv", form != formCompactCode && reChecksum.MatchString(lower):
+	case library == "tv", form != formCompactCode && reChecksum.MatchString(filepath.Base(path)):
 		return true
 	case (form == formDashed || form == formDashedYear) && reLeadingGroups.MatchString(lower):
 		return true
@@ -687,8 +683,8 @@ func nearestLibraryFolder(dir string) string {
 
 // findAbsoluteEpisode reads an absolute episode number in title, the part of
 // path's name before any year or release noise, and lowerTitle, its
-// ASCII-folded copy. lower is the whole folded name, whose checksum bracket
-// counts as context although the title stops before it. The number must
+// ASCII-folded copy. lower is the whole folded name, whose release-group
+// brackets count as context although the title stops before them. The number must
 // follow a series name of its own, and path must give episode context.
 // absoluteEpisode reads an absolute episode number in name, the file name
 // without its extension, and lower, its ASCII-folded copy. It runs before the
@@ -1020,9 +1016,6 @@ func (y yearToken) title(s string) string {
 // release-group brackets is the year ("[REC].2007").
 func findYear(name, lower string, episodeCut int) yearToken {
 	groupsEnd := len(reLeadingGroups.FindString(name))
-	if onlySeparators(reChecksum.ReplaceAllString(name[:groupsEnd], "")) {
-		groupsEnd = 0 // a leading checksum is no release group ("[DEADBEEF] 1923")
-	}
 	var candidates []yearToken
 	var parens []bool
 	// An underscore bounds a year like a space ("Heat_1995_1080p").
@@ -1157,6 +1150,18 @@ func opensWithSceneTag(lower string) bool {
 	rest := blankChecksums(lower)
 	words := tokenSpans(rest)
 	return len(words) > 0 && sceneTags[rest[words[0][0]:words[0][1]]]
+}
+
+// blankLeadingChecksums blanks the release-group brackets that lead name
+// when they are only checksums, keeping its width: a checksum is neither a
+// release group nor the title, so "[DEADBEEF] 1923" is the film 1923 and
+// "[DEADBEEF] Naruto - 001" an episode of Naruto.
+func blankLeadingChecksums(name string) string {
+	groups := reLeadingGroups.FindString(name)
+	if groups == "" || !onlySeparators(reChecksum.ReplaceAllString(groups, "")) {
+		return name
+	}
+	return strings.Repeat(" ", len(groups)) + name[len(groups):]
 }
 
 // blankChecksums replaces each checksum bracket in s with spaces of its width.

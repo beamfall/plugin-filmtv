@@ -1,8 +1,8 @@
 ## 1. Build
 
 - [ ] 1.1 A hyphen-split release tag (`WEB-DL`) is not a release group in scene noise
-- [ ] 1.2 Scene noise before an episode marker after a bare leading year names no series
-- [ ] 1.3 A leading checksum is not a release group and does not cut the title
+- [ ] 1.2 Release noise before an episode marker after a bare leading year names no series
+- [ ] 1.3 Leading checksums are blanked: no release group, no title cut, still episode context
 
 ## 2. Prove
 
