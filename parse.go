@@ -521,7 +521,8 @@ func isTitleQualifier(s string) bool {
 	if _, ok := releaseWords[lower]; ok {
 		return true
 	}
-	// Words split as the filename tokenizer splits them ("4K-Remastered").
+	// A word is a run of letters, digits and apostrophes ("4K-Remastered"
+	// ends in "remastered").
 	words := strings.FieldsFunc(lower, func(r rune) bool {
 		return r != '\'' && !unicode.IsLetter(r) && !unicode.IsDigit(r)
 	})
