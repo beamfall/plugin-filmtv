@@ -318,11 +318,10 @@ func parseName(path string) (nameParse, bool) {
 	if !isEpisode {
 		episode, isEpisode = seriesCodeEpisode(path, lower)
 	}
-	fromAbsolute := false
 	if !isEpisode {
 		episode, isEpisode = absoluteEpisode(path, name, lower)
-		fromAbsolute = isEpisode
 	}
+	fromAbsolute := isEpisode && episode.absolute > 0
 	// An "Episode S.EE" code anywhere, or an episode word in a season folder
 	// ("Episode 14"), is read when no other marker is, and otherwise only
 	// against an absolute number, which may be part of the title: the first
@@ -603,13 +602,8 @@ func findEpisode(lower string) (episodeToken, bool) {
 	}
 	if m := reSeasonEpisodeWords.FindStringSubmatchIndex(lower); m != nil {
 		sequence := numericText(lower[m[4]:m[5]])
-		token := episodeToken{start: m[2], end: m[3], sequence: sequence, index: packedEpisode(lower[m[6]:m[7]], lower[m[8]:m[9]], atoi(sequence))}
-		if token.index > 999 {
-			// A season's episode runs to three digits: four are the absolute
-			// number ("One Piece Temporada 1 Episodio 1071").
-			token.sequence, token.absolute = "", token.index
-		}
-		return token, true
+		token := episodeToken{start: m[2], end: m[3], sequence: sequence, index: packedEpisode(lower[m[6]:m[7]], lower[m[8]:m[9]], lower[m[4]:m[5]])}
+		return absoluteIfLong(token), true
 	}
 	if m := reTemporadaEpisode.FindStringSubmatchIndex(lower); m != nil {
 		token := episodeToken{start: m[2], end: m[3], sequence: numericText(lower[m[4]:m[5]]), index: atoi(lower[m[6]:m[7]])}
@@ -637,10 +631,13 @@ func findShorthandEpisode(lower string) (episodeToken, bool) {
 // packedEpisode returns the episode number digits name after an episode
 // word. "Cap" packs the season in front of a two-digit episode ("Cap.209":
 // season 2, episode 9; "Cap.1002": season 10, episode 2); when the digits
-// open with season, the episode is the last two.
-func packedEpisode(word, digits string, season int) int {
-	if s := strconv.Itoa(season); word == "cap" && len(digits) == len(s)+2 && strings.HasPrefix(digits, s) {
-		return atoi(digits[len(s):])
+// open with season, as written or unpadded ("Temp.02 Cap.0209"), the episode
+// is the last two.
+func packedEpisode(word, digits, season string) int {
+	for _, s := range []string{season, numericText(season)} {
+		if word == "cap" && len(digits) == len(s)+2 && strings.HasPrefix(digits, s) {
+			return atoi(digits[len(s):])
+		}
 	}
 	return atoi(digits)
 }
@@ -688,7 +685,7 @@ func seasonFolderEpisode(path, lower string, wordsOnly bool) (episodeToken, bool
 	var index int
 	switch {
 	case m[4] >= 0:
-		index = packedEpisode(lower[m[4]:m[5]], lower[m[6]:m[7]], season)
+		index = packedEpisode(lower[m[4]:m[5]], lower[m[6]:m[7]], strconv.Itoa(season))
 	case m[8] >= 0:
 		index = atoi(lower[m[8]:m[9]])
 	default:
@@ -697,7 +694,17 @@ func seasonFolderEpisode(path, lower string, wordsOnly bool) (episodeToken, bool
 	if index == 0 {
 		return episodeToken{}, false
 	}
-	return episodeToken{start: m[2], end: m[3], sequence: strconv.Itoa(season), index: index}, true
+	return absoluteIfLong(episodeToken{start: m[2], end: m[3], sequence: strconv.Itoa(season), index: index}), true
+}
+
+// absoluteIfLong reads an episode number past three digits, after a season
+// word or in a season folder, as the absolute number: a season's episodes run
+// to 999 ("One Piece Temporada 1 Episodio 1071").
+func absoluteIfLong(token episodeToken) episodeToken {
+	if token.index > 999 {
+		token.sequence, token.absolute = "", token.index
+	}
+	return token
 }
 
 // bareSeasonEpisode reads a season-by-episode code with a bare "e" ("1e01")

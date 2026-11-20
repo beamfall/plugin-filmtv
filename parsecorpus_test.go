@@ -915,6 +915,27 @@ func parseCorpus() []parseCase {
 			resolvable: true,
 		},
 		{
+			name:       "spanish-packed-cap-padded-season",
+			path:       "/tv/Juego de Tronos/Season 02/Juego de Tronos - Temp.02 [Cap.0209].mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Juego de Tronos", Class: "episode", Sequence: "2", Index: 9},
+			resolvable: true,
+		},
+		{
+			name:       "dotted-code-before-four-digit-season-word-episode",
+			path:       "/tv/One Piece/One Piece Episode 20.182 - Temporada 1 Episodio 1071.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "One Piece", Class: "episode", Sequence: "20", Index: 182},
+			resolvable: true,
+		},
+		{
+			name:       "four-digit-episode-in-season-folder-is-absolute",
+			path:       "/tv/One Piece/Season 01/One Piece - Episode 1071.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "One Piece", Class: "episode", Index: 1071, AbsoluteOrdinal: 1071},
+			resolvable: true,
+		},
+		{
 			name:       "bare-e-in-season-folder",
 			path:       "/tv/Mob Psycho 100/Season 2/Mob.Psycho.100.II.E10.720p.WEB.mkv",
 			wantOK:     true,
