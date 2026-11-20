@@ -90,9 +90,10 @@ var (
 	// Release-group brackets in front of a series name ("[Group] Show - S01E01"),
 	// adjacent or separated ("[Fansub].[Group]").
 	reLeadingGroups = regexp.MustCompile(`^(?:[\s._-]*\[[^\]]*\])+`)
-	// reLeadingChecksums matches the checksum brackets that open a name, up to
-	// its first other bracket or word.
-	reLeadingChecksums = regexp.MustCompile(`(?i)^(?:[\s._-]*\[[0-9a-f]{8}\])+`)
+	// reLeadingChecksums matches the checksum brackets that open a name, or
+	// follow its leading parenthesized year, up to its first other bracket or
+	// word.
+	reLeadingChecksums = regexp.MustCompile(`(?i)^((?:[\s._-]*\(\d{4}\))?)((?:[\s._-]*\[[0-9a-f]{8}\])+)`)
 	// A video resolution token: 480p, 1080i, 2160p.
 	reResolution = regexp.MustCompile(`^\d{3,4}[pi]$`)
 	// A 4-digit year, optionally parenthesized; range-guarded to 1900–2099 in
@@ -276,10 +277,12 @@ func parseName(path string) (nameParse, bool) {
 		switch {
 		case year.leading:
 			titleStart = year.end
-			if isEpisode && episodeNoiseOnly(lower, year.end, cut) || !isEpisode && sceneTagNoise(lower[year.end:]) {
+			if isEpisode {
+				titleStart = episodeSeriesStart(lower, year.end, cut)
+			}
+			if isEpisode && titleStart == cut || !isEpisode && sceneTagNoise(lower[year.end:]) {
 				// "(2007) PROPER.[DEADBEEF]" has no title, and "(2007)
-				// PROPER.1080p.S01E01" no series name of its own; "(2007)
-				// [1080p] Fringe S01E01" names Fringe.
+				// PROPER.1080p.S01E01" no series name of its own.
 				cut = year.end
 			}
 		case year.start < cut:
@@ -300,7 +303,7 @@ func parseName(path string) (nameParse, bool) {
 			cut = titleStart + noiseStart
 		}
 		if checksum := reChecksum.FindStringIndex(lower[titleStart:cut]); checksum != nil {
-			cut = titleStart + checksumCut(lower[titleStart:cut], checksum)
+			cut = titleStart + checksum[0]
 		}
 	}
 	titleStart = min(titleStart, cut)
@@ -1156,51 +1159,64 @@ func opensWithSceneTag(lower string) bool {
 	return len(words) > 0 && sceneTags[rest[words[0][0]:words[0][1]]]
 }
 
-// blankLeadingChecksums blanks the checksum brackets that open name, keeping
-// its width: a checksum is neither a release group nor the title, so
-// "[DEADBEEF] 1923" is the film 1923, "[DEADBEEF] [REC] 2" the film [REC] 2
-// and "[DEADBEEF] Naruto - 001" an episode of Naruto.
+// blankLeadingChecksums blanks the checksum brackets that open name, or follow
+// its leading parenthesized year, keeping its width: a checksum is neither a
+// release group nor the title, so "[DEADBEEF] 1923" is the film 1923,
+// "[DEADBEEF] [REC] 2" the film [REC] 2, "(2007) [DEADBEEF] Zodiac" the film
+// Zodiac and "[DEADBEEF] Naruto - 001" an episode of Naruto.
 func blankLeadingChecksums(name string) string {
-	n := len(reLeadingChecksums.FindString(name))
-	return strings.Repeat(" ", n) + name[n:]
+	m := reLeadingChecksums.FindStringSubmatchIndex(name)
+	if m == nil || strings.HasPrefix(strings.TrimLeft(name[m[1]:], " "), "-") {
+		return name // "[DEADBEEF]-YIFY": a group, and no title, follows
+	}
+	return name[:m[4]] + strings.Repeat(" ", m[5]-m[4]) + name[m[5]:]
 }
 
-// checksumCut returns where the checksum at checksum ends span, the title
-// text after any leading year. A checksum ends the title, but one that opens
-// span ("(2007) [DEADBEEF] Zodiac") has no title before it to end, so the
-// title runs to the next checksum; only a release group hyphenated onto it
-// ("(2007) [DEADBEEF]-YIFY") makes it the end.
-func checksumCut(span string, checksum []int) int {
-	if !onlySeparators(span[:checksum[0]]) || strings.HasPrefix(strings.TrimLeft(span[checksum[1]:], " "), "-") {
-		return checksum[0]
+// episodeSeriesStart returns where the series name starts in
+// lower[start:end], the text between a leading year and an episode marker:
+// after the release tags that open it ("1080p.Fringe", "[1080p] Fringe"), or
+// at end when it is release noise throughout ("PROPER.1080p", "DD5.1",
+// "1080p.WEB-DL-GRP"). Words are read against the rest of the name, so a
+// release word before the marker ("ReMastered"), or a run of release words
+// that holds no tag ("Proper Uncut"), stays the series name. A checksum is
+// not a word.
+func episodeSeriesStart(lower string, start, end int) int {
+	span := blankChecksums(lower[start:end])
+	tokens := tokenSpans(span)
+	words := make([]string, 0, len(tokens)+2)
+	for _, t := range tokens {
+		words = append(words, span[t[0]:t[1]])
 	}
-	if next := reChecksum.FindStringIndex(span[checksum[1]:]); next != nil {
-		return checksum[1] + next[0]
+	for _, t := range tokenSpans(lower[end:]) {
+		words = append(words, lower[end+t[0]:end+t[1]])
 	}
-	return len(span)
+	tagged := false
+	for i := 0; i < len(tokens); i++ {
+		word, joined := words[i], i > 0 && tokens[i-1][1] == tokens[i][0]-1
+		switch {
+		case sceneTags[word]:
+		case endsTitle(words[i:]):
+			tagged = tagged || isTag(words[i:])
+			if i+1 < len(tokens) && releaseNoise[word+words[i+1]] {
+				i++ // one tag split in two ("WEB-DL")
+			}
+		case joined && span[tokens[i][0]-1] == '.' && isChannelCount(word) && isTag(words[i-1:]):
+			// the channel count of an audio tag ("DD5.1")
+		case joined && span[tokens[i][0]-1] == '-' && i == len(tokens)-1 && tagged:
+			// a release group hyphenated onto the last tag ("WEB-DL-GRP")
+		case tagged:
+			return start + tokens[i][0]
+		default:
+			return start
+		}
+	}
+	return end
 }
 
-// episodeNoiseOnly reports whether lower[start:end], the text between a
-// leading year and an episode marker, is release noise word by word, read
-// against the rest of the name: "PROPER.1080p" and "1080p.WEB-DL" name no
-// series, but "[1080p] Fringe" names Fringe and "ReMastered" itself. A
-// checksum is not a word.
-func episodeNoiseOnly(lower string, start, end int) bool {
-	rest := blankChecksums(lower[start:])
-	tokens := tokenSpans(rest)
-	words := make([]string, len(tokens))
-	for i, span := range tokens {
-		words[i] = rest[span[0]:span[1]]
-	}
-	for i := 0; i < len(words) && tokens[i][0] < end-start; i++ {
-		if !sceneTags[words[i]] && !endsTitle(words[i:]) {
-			return false
-		}
-		if i+1 < len(words) && releaseNoise[words[i]+words[i+1]] {
-			i++ // one tag split in two ("WEB-DL")
-		}
-	}
-	return true
+// isChannelCount reports whether word is the single digit after the dot of an
+// audio channel layout ("5.1", "7.1").
+func isChannelCount(word string) bool {
+	return len(word) == 1 && word[0] >= '0' && word[0] <= '9'
 }
 
 // blankChecksums replaces each checksum bracket in s with spaces of its width.
