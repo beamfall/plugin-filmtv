@@ -27,8 +27,8 @@ MIT notice, and SHALL keep cases by a written rule that drops packs, adult and t
 
 ### Requirement: A season code's episode is read whole
 
-The parser SHALL read every digit of an `SxxEyyyy` episode up to a resolution glued to it
-(`1080p`), reading an episode above 999 as the absolute episode.
+The parser SHALL read every digit of an `SxxEyyyy` episode up to a whole resolution glued to it
+(`1080p`, followed by no letter or digit), reading an episode above 999 as the absolute episode.
 
 #### Scenario: Four-digit episode after a season code
 
@@ -39,3 +39,8 @@ The parser SHALL read every digit of an `SxxEyyyy` episode up to a resolution gl
 
 - **WHEN** the parser reads `Show.S01E1231080p.WEB.mkv` or `One.Piece.S01E10561080p.WEB.mkv`
 - **THEN** it parses to season 1, episode 123, and to absolute episode 1056
+
+#### Scenario: A word after the episode is not a resolution
+
+- **WHEN** the parser reads `Show.S01E1480Part2.mkv`
+- **THEN** it parses to absolute episode 1480
