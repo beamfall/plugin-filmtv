@@ -76,6 +76,8 @@ func TestEpisodeMarkerWords(t *testing.T) {
 		{"/downloads/Show.S01E1231080p.WEB.mkv", episode("Show", "1", 123), true},
 		{"/downloads/One.Piece.S01E10561080p.WEB.mkv", sdk.ParsedMedia{Title: "One Piece", Class: "episode", Index: 1056, AbsoluteOrdinal: 1056}, true},
 		{"/downloads/Show.S01E01720p.WEB.mkv", episode("Show", "1", 1), true},
+		{"/downloads/Show.S01E1231440p.WEB.mkv", episode("Show", "1", 123), true},
+		{"/downloads/Show.S01E1480Part2.mkv", sdk.ParsedMedia{Title: "Show", Class: "episode", Index: 1480, AbsoluteOrdinal: 1480}, true},
 		{"/downloads/Babylon.5.1x02.Soul.Hunter.mkv", episode("Babylon 5", "1", 2), true},
 		{"/downloads/Stargate.SG-1.1x02.Children.of.the.Gods.mkv", episode("Stargate SG-1", "1", 2), true},
 		{"/downloads/Anubis saison 1 ep 720p.mkv", sdk.ParsedMedia{Title: "Anubis saison 1 ep", Class: "movie"}, true},

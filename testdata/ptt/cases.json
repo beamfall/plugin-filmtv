@@ -4,7 +4,7 @@
  "commit": "88429bb90acef55673f421f45038878809b1e577",
  "license": "MIT, Copyright (c) 2024 Spoked; see LICENSE in this directory",
  "license_text": "MIT License\n\nCopyright (c) 2024 Spoked\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n",
- "rule": "A case is kept unless any PTT fixture marks it complete, adult or trash, or declares more than one season for it, or its graded fixtures declare more than three episodes, a season with an empty episode list, or a season with no episode list on a name not ending in .mkv, .mp4, .avi, .m4v: those are packs, not library files.",
+ "rule": "A case is kept unless any PTT fixture marks it complete, adult or trash, or declares more than one season for it, more than three episodes, a season with an empty episode list, or a season with no episode list on a name not ending in .mkv, .mp4, .avi, .m4v: those are packs, not library files.",
  "imported": 471,
  "cases": [
   {
@@ -746,10 +746,6 @@
    "episodes": [
     38
    ]
-  },
-  {
-   "name": "Archer.S02.1080p.BluRay.DTSMA.AVC.Remux",
-   "episodes": []
   },
   {
    "name": "BBC Indian Ocean with Simon Reeve 5of6 Sri Lanka to Bangladesh.avi",

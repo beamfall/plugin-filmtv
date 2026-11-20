@@ -7,9 +7,8 @@ reads from it. This reads them from a PTT checkout without running PTT:
     python3 -I testdata/ptt/import.py <PTT checkout> > testdata/ptt/cases.json
 
 Fields come from test_title.py (title), test_year.py (year, 0 for none),
-test_season.py and test_parser.py's season list (seasons), test_episodes.py
-(episodes) and test_main.py, which asserts the whole parse, so its absent year
-is 0. Those are the graded fields. test_collection.py, test_adult.py,
+test_season.py (seasons), test_episodes.py (episodes) and test_main.py,
+which asserts the whole parse, so its absent year is 0. Those are the graded fields. test_collection.py, test_adult.py,
 test_trash.py and test_parser.py's season list are read only as evidence that a
 name is a pack; they add no graded field. A name in several files merges its
 fields; two files that disagree stop the import, as does a checkout with local
@@ -28,9 +27,9 @@ VIDEO = (".mkv", ".mp4", ".avi", ".m4v")
 
 RULE = (
     "A case is kept unless any PTT fixture marks it complete, adult or trash, "
-    "or declares more than one season for it, or its graded fixtures declare more "
-    "than three episodes, a season with an empty episode list, or a season with no "
-    "episode list on a name not ending in " + ", ".join(VIDEO) + ": those are packs, "
+    "or declares more than one season for it, more than three episodes, a season "
+    "with an empty episode list, or a season with no episode list on a name not "
+    "ending in " + ", ".join(VIDEO) + ": those are packs, "
     "not library files."
 )
 
@@ -107,8 +106,8 @@ def evidence(source, row):
 def is_library_file(name, fields, seen):
     if any(fields.get(k) or seen.get(k) for k in FLAGS):
         return False
-    seasons, episodes = fields.get("seasons"), fields.get("episodes")
-    if any(s is not None and len(s) > 1 for s in (seasons, seen.get("seasons"))):
+    seasons, episodes = fields.get("seasons", seen.get("seasons")), fields.get("episodes")
+    if seasons is not None and len(seasons) > 1:
         return False
     if episodes is not None and (len(episodes) > 3 or seasons and not episodes):
         return False

@@ -35,7 +35,7 @@ var updatePTT = flag.Bool("update-ptt", false, "rewrite testdata/ptt/unresolved.
 // The documented per-field floors: the fraction of declared fields the parser
 // gets right on PTT's library-shaped set. Each is the rate observed when it was
 // set, rounded down to two places (PTT 1.8.5, CORE-2705: title 92/138, year
-// 92/97, season 96/134, episode 142/242), so it catches a broad slide; a single
+// 92/97, season 96/134, episode 141/241), so it catches a broad slide; a single
 // regression is caught by the per-case marks. Raise a floor when a parser gap
 // ticket raises its rate.
 const (

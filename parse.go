@@ -79,7 +79,7 @@ var (
 	reSeasonX = regexp.MustCompile(`\b(\d{1,2})x(\d{1,3})\b`)
 	// reGluedResolution splits a resolution glued to an SxxEyy episode
 	// ("E1231080p": episode 123; "E10561080p": episode 1056).
-	reGluedResolution = regexp.MustCompile(`^(\d{1,4}?)(?:480|576|720|1080|2160)[pi]`)
+	reGluedResolution = regexp.MustCompile(`^(\d{1,4}?)(?:240|360|480|540|576|720|1080|1440|2160|4320)[pi](?:[^\pL\pN]|$)`)
 	// One further XxYY token of a multi-episode shorthand range. Groups: the
 	// season, the episode.
 	reSeasonXChainLink = regexp.MustCompile(`^-(\d{1,2})x(\d{1,3})`)
