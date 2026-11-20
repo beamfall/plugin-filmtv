@@ -323,10 +323,7 @@ bracket SHALL NOT be title text.
 After a leading parenthesized year, a scene tag (`PROPER`, `REPACK`, `RERIP`) that only checksum
 brackets and release tags follow SHALL be release noise. When a bracketed title stands before the
 year, that title stays the title. When nothing stands before the year, the name SHALL have no title
-and SHALL NOT parse. Further scene tags, a tag split in two (`H.264`) and a release group
-hyphenated onto the last tag are part of that noise; an episode marker ends it. A release
-word that can be a title directly after the scene tag, or any word after the noise that is not
-release noise, SHALL keep the scene tag as the title, with or without a checksum. A show folder SHALL follow the same rule.
+and SHALL NOT parse. A show folder SHALL follow the same rule.
 
 #### Scenario: Scene tag
 
@@ -343,6 +340,36 @@ release noise, SHALL keep the scene tag as the title, with or without a checksum
 - **WHEN** a file is `/movies/(2007) PROPER.[DEADBEEF].mkv`
 - **THEN** it does not parse
 
+#### Scenario: Scene noise in a show folder
+
+- **WHEN** a file is `/tv/(2007) PROPER.[DEADBEEF].1080p/Season 01/S01E01.mkv`
+- **THEN** it does not parse
+
+#### Scenario: Stacked scene tags
+
+- **WHEN** a file is `/movies/[REC] (2007) PROPER.REPACK.1080p.mkv`
+- **THEN** it parses to title `[REC]`, year 2007
+
+### Requirement: Scene noise runs to the end of its span
+
+Further scene tags, a tag split in two (`H.264`) and a release group hyphenated onto the last tag
+SHALL be part of scene-tag noise; an episode marker SHALL end it.
+
+#### Scenario: Stacked scene tags in noise
+
+- **WHEN** a file is `/movies/[REC] (2007) PROPER.1080p.REPACK.REPACK.mkv`
+- **THEN** it parses to title `[REC]`, year 2007
+
+#### Scenario: Split codec and release group
+
+- **WHEN** a file is `/movies/(2007) PROPER.REPACK.H.264-GRP.mkv`
+- **THEN** it does not parse
+
+### Requirement: A title word keeps a scene tag a title
+
+A release word that can be a title directly after the scene tag, or any word after the noise that
+is not release noise, SHALL keep the scene tag as the title, with or without a checksum.
+
 #### Scenario: Scene tag before a title-capable word
 
 - **WHEN** a file is `/movies/[Group] (2013) Proper Uncut [DEADBEEF].mkv`
@@ -357,16 +384,6 @@ release noise, SHALL keep the scene tag as the title, with or without a checksum
 
 - **WHEN** a file is `/movies/(2007) PROPER.1080p.Story.mkv`
 - **THEN** it parses to title `PROPER`, year 2007
-
-#### Scenario: Scene noise in a show folder
-
-- **WHEN** a file is `/tv/(2007) PROPER.[DEADBEEF].1080p/Season 01/S01E01.mkv`
-- **THEN** it does not parse
-
-#### Scenario: Stacked scene tags
-
-- **WHEN** a file is `/movies/[REC] (2007) PROPER.REPACK.1080p.mkv`
-- **THEN** it parses to title `[REC]`, year 2007
 
 #### Scenario: Ordinary release word
 
