@@ -110,6 +110,21 @@ func TestYearPickerKeepsYearNamedTitles(t *testing.T) {
 		{"/movies/[REC] (2007) PROPER.[DEADBEEF].1080p.mkv", sdk.ParsedMedia{Title: "[REC]", Class: "movie", Year: 2007}, true},
 		{"/movies/[REC] (2007) REPACK [DEADBEEF] x264.mkv", sdk.ParsedMedia{Title: "[REC]", Class: "movie", Year: 2007}, true},
 		{"/movies/(2007) Proper Uncut [DEADBEEF].mkv", sdk.ParsedMedia{Title: "Proper Uncut", Class: "movie", Year: 2007}, true},
+		// A word after the noise keeps the tag a title; a hyphenated group does
+		// not; a scene tag that opens a title leads the name even without a
+		// checksum, its trailing "Uncut" read as an edition as it is without
+		// the group.
+		{"/movies/(2007) PROPER.1080p.Story.mkv", sdk.ParsedMedia{Title: "PROPER", Class: "movie", Year: 2007}, true},
+		{"/movies/(2007) PROPER.1080p.x264-GRP.mkv", sdk.ParsedMedia{}, false},
+		{"/movies/[REC] (2007) PROPER.1080p.x264-GRP.mkv", sdk.ParsedMedia{Title: "[REC]", Class: "movie", Year: 2007}, true},
+		{"/movies/[Group] (2013) Proper Uncut.mkv", sdk.ParsedMedia{Title: "Proper", Class: "movie", Year: 2013}, true},
+		{"/movies/(2013) Proper Uncut.mkv", sdk.ParsedMedia{Title: "Proper", Class: "movie", Year: 2013}, true},
+		// Show folders read the same way: a checksum hides no year-shaped
+		// title, and a bare year before scene noise names no series.
+		{"/tv/[DEADBEEF] 1923/Season 01/S01E01.mkv", sdk.ParsedMedia{Title: "1923", Class: "episode", Sequence: "1", Index: 1}, true},
+		{"/tv/(2007) PROPER.[DEADBEEF].1080p/Season 01/S01E01.mkv", sdk.ParsedMedia{}, false},
+		{"/tv/(2007) PROPER/Season 01/S01E01.mkv", sdk.ParsedMedia{}, false},
+		{"/tv/(2007) Proper Uncut/Season 01/S01E01.mkv", sdk.ParsedMedia{Title: "Proper Uncut", Class: "episode", Year: 2007, Sequence: "1", Index: 1}, true},
 		{"/tv/Show (2011) Café1999 0001.mkv", sdk.ParsedMedia{Title: "Show", Year: 2011}, true},
 		{"/tv/Show (2011) Café1999 0001.mkv", sdk.ParsedMedia{Title: "Show", Year: 2011}, true},
 		{"/movies/Amélie2001.mkv", sdk.ParsedMedia{Title: "Amélie2001", Class: "movie"}, true},

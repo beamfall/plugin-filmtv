@@ -893,8 +893,15 @@ func seriesFromFolder(folder string) (string, int) {
 	if series == "." || series == string(filepath.Separator) || strings.ContainsRune(series, filepath.Separator) {
 		return "", 0
 	}
-	year := findYear(series, asciiLower(series), -1)
-	title := cleanTitle(reChecksum.ReplaceAllString(year.title(series), " "))
+	// A checksum is never the title, so it neither hides a year-shaped title
+	// ("[DEADBEEF] 1923") nor follows a scene tag that would be one.
+	series = blankChecksums(series)
+	lower := asciiLower(series)
+	year := findYear(series, lower, -1)
+	if year.leading && sceneTagNoise(lower[year.end:]) {
+		return "", 0 // "(2007) PROPER.[DEADBEEF].1080p" names no series
+	}
+	title := cleanTitle(year.title(series))
 	if title == "" {
 		return "", 0
 	}
@@ -1086,37 +1093,51 @@ func onlyNoiseAfter(name, lower string, start, end int) bool {
 	if cleanTitle(reChecksum.ReplaceAllString(lower[min(start, end):end], "")) == "" {
 		return true
 	}
-	rest := lower[start:]
-	if sceneTagNoise(rest) {
-		rest = blankChecksums(rest)
+	if rest := lower[start:]; opensWithSceneTag(rest) {
+		return sceneTagNoise(rest) // "Proper Uncut" is a title, "PROPER.1080p" is not
 	}
-	noise := firstNoiseToken(rest, false)
+	noise := firstNoiseToken(lower[start:], false)
 	return noise >= 0 && cleanTitle(name[start:start+noise]) == ""
 }
 
 // sceneTags are the release words only a scene release uses, never a title.
 var sceneTags = map[string]bool{"proper": true, "repack": true, "rerip": true}
 
-// sceneTagNoise reports whether lower, the ASCII-folded text after a year,
-// opens with a scene tag that only checksums and release noise follow, from
-// a tag on ("PROPER.[DEADBEEF]", "PROPER.[DEADBEEF].1080p"). A release word
-// that can be a title keeps the tag a title ("Proper Uncut [DEADBEEF]").
+// sceneTagNoise reports whether lower, the ASCII-folded text after a year, is
+// a scene tag that only checksums and release noise follow, up to a release
+// group hyphenated onto the last tag ("PROPER.[DEADBEEF].1080p",
+// "REPACK.x264-GRP"). A release word that can be a title ("Proper Uncut"), or
+// any other word after the noise ("PROPER.1080p.Story"), keeps the tag a title.
 func sceneTagNoise(lower string) bool {
-	rest := blankChecksums(lower)
-	words := tokenSpans(rest)
-	if len(words) == 0 || !sceneTags[rest[words[0][0]:words[0][1]]] {
+	if !opensWithSceneTag(lower) {
 		return false
 	}
-	if len(words) == 1 {
-		return true
+	rest := blankChecksums(lower)
+	tokens := tokenSpans(rest)
+	if n := len(tokens); n > 2 && tokens[n-2][1] == tokens[n-1][0]-1 && rest[tokens[n-2][1]] == '-' {
+		tokens = tokens[:n-1]
 	}
-	after := rest[words[1][0]:]
-	tokens := tokenSpans(after)
-	first := make([]string, 0, 2)
-	for _, span := range tokens[:min(2, len(tokens))] {
-		first = append(first, after[span[0]:span[1]])
+	words := make([]string, len(tokens))
+	for i, span := range tokens {
+		words[i] = rest[span[0]:span[1]]
 	}
-	return isTag(first) && firstNoiseToken(after, false) == 0
+	if len(words) > 1 && !isTag(words[1:]) {
+		return false
+	}
+	for i := 1; i < len(words); i++ {
+		if !endsTitle(words[i:]) {
+			return false
+		}
+	}
+	return true
+}
+
+// opensWithSceneTag reports whether lower's first word, checksums aside, is a
+// scene tag.
+func opensWithSceneTag(lower string) bool {
+	rest := blankChecksums(lower)
+	words := tokenSpans(rest)
+	return len(words) > 0 && sceneTags[rest[words[0][0]:words[0][1]]]
 }
 
 // blankChecksums replaces each checksum bracket in s with spaces of its width.
