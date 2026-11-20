@@ -17,9 +17,10 @@ Three kinds of release text stay in a film's title and spoil the provider search
 
 ## What Changes
 
-- A year ends a title after a release word as a resolution would: `EXTENDED.2022` drops the edition
-  word, while `Charlotte's.Web.2006`, `Extended.Family.2023` and `Internal.Affairs.(2002)` keep
-  their titles.
+- A year ends a title after a run of edition tags (`EXTENDED`, `Unrated`, `Uncut`, `Remastered`,
+  `IMAX`), language tags (`NORDiC`, `iTA`, `ENG`) and release tags: `EXTENDED.2022` drops the
+  edition word, while `Charlotte's.Web.2006`, `Extended.Family.2023` and `Le.Cercle.Internal.2020`
+  keep their titles. A scene tag that is also a word (`Internal`, `Proper`) is not an edition.
 - French and Scandinavian language and subtitle tags (`VostFR`, `TRUEFRENCH`, `SUBFRENCH`, `VFF`,
   `VFQ`, `VF2`, `SweSub`) are release noise. `NORDiC`, `iTA`, `ENG` and `IMAX` end a title as
   `EXTENDED` does, and `DC`, `FRENCH` and `GERMAN` as `WEB` does: only before a release tag.

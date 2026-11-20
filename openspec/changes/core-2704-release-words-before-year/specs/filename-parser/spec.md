@@ -2,9 +2,9 @@
 
 ### Requirement: A release word before the year is not title text
 
-The parser SHALL end a film title before a release word that would end the title in front of a
-resolution, when the year follows it, and SHALL keep a word that ends a title only in front of a
-release tag.
+The parser SHALL end a film title before a trailing run of edition tags, language tags and release
+tags that the year follows, keeping the first word, and SHALL keep a scene tag that is also a word
+(`Internal`) and a word that ends a title only in front of a release tag (`Web`, `DC`).
 
 #### Scenario: Edition word before the year
 
@@ -13,8 +13,8 @@ release tag.
 
 #### Scenario: Real titles holding release words
 
-- **WHEN** the parser reads `Extended.Family.2023.1080p.mkv`, `Internal.Affairs.(2002).mkv` or `Charlotte's.Web.2006.mkv`
-- **THEN** the titles are `Extended Family`, `Internal Affairs` and `Charlotte's Web`
+- **WHEN** the parser reads `Extended.Family.2023.1080p.mkv`, `Le.Cercle.Internal.2020.x.mkv` or `Charlotte's.Web.2006.mkv`
+- **THEN** the titles are `Extended Family`, `Le Cercle Internal` and `Charlotte's Web`
 
 ### Requirement: Language and subtitle tags are release noise
 
