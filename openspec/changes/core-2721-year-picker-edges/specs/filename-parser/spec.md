@@ -19,7 +19,8 @@ dots, for the release year, the year-run and leading-year rules, and series name
 
 When a bare year directly precedes a four-digit absolute episode number and the file has the
 episode context that number needs, the parser SHALL read the year as part of the series name, not
-as the release year. Without that context the name SHALL parse as before.
+as the release year. Without that context the name SHALL parse as a film name, its year read by the
+general rules.
 
 #### Scenario: Spaced series year
 
@@ -35,7 +36,7 @@ as the release year. Without that context the name SHALL parse as before.
 
 Leading release-group brackets MAY be separated by spaces, dots, underscores or hyphens, and years
 inside any of them SHALL NOT count. A film title SHALL drop its leading release-group brackets when
-only a year-named title follows them, and SHALL keep them otherwise (`[REC] 2`). A CRC32 checksum
+only a year-named title and a release year follow them, and SHALL keep them otherwise (`[REC] 2`). A CRC32 checksum
 bracket SHALL NOT be title text.
 
 #### Scenario: Separated groups
@@ -71,7 +72,7 @@ Other release words in that place SHALL stay the title.
 
 ### Requirement: A dashed episode can follow a dashed year
 
-When a dashed number in the year range (` - 2011`) is followed by another dashed number, the parser
+When a dashed number in the year range (` - 2011`) is directly followed by another dashed number, the parser
 SHALL read the year as the series' year and the later number as the absolute episode, given the
 context a dashed number after a year needs. Underscore-spaced dashes (`_-_`) SHALL read the same.
 
@@ -89,3 +90,8 @@ context a dashed number after a year needs. Underscore-spaced dashes (`_-_`) SHA
 
 - **WHEN** a file is `/tv/Show - 2015.mkv`
 - **THEN** it parses to title `Show`, year 2015, no episode
+
+#### Scenario: Dashed number in later metadata
+
+- **WHEN** a file is `/tv/Show - 2011 - [Disc - 12 - Bonus].mkv`
+- **THEN** it parses to title `Show`, year 2011, no episode

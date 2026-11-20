@@ -83,6 +83,14 @@ func TestYearPickerKeepsYearNamedTitles(t *testing.T) {
 		{"/movies/Heat - 1995 - 1080.mkv", sdk.ParsedMedia{Title: "Heat", Class: "movie", Year: 1995}, true},
 		{"/movies/Heat (1995) - 1080.mkv", sdk.ParsedMedia{Title: "Heat", Class: "movie", Year: 1995, VersionLabel: "1080"}, true},
 		{"/tv/Hunter x Hunter (2011) - 12.mkv", sdk.ParsedMedia{Title: "Hunter x Hunter", Class: "episode", Year: 2011, Index: 12, AbsoluteOrdinal: 12}, true},
+		// Review round 1: folder context, glued codes, later metadata, an
+		// earlier year in the series name, a title word after a scene tag.
+		{"/incoming/Space_1999/Space_1999 0001.mkv", sdk.ParsedMedia{Title: "Space 1999", Class: "episode", Index: 1, AbsoluteOrdinal: 1}, true},
+		{"/incoming/Show_2011/Show_2011 1e01.mkv", sdk.ParsedMedia{Title: "Show", Class: "episode", Year: 2011, Sequence: "1", Index: 1}, true},
+		{"/tv/Space_1999/space1999101.mkv", sdk.ParsedMedia{Title: "Space", Class: "episode", Year: 1999, Sequence: "1", Index: 1}, true},
+		{"/tv/Show - 2011 - [Disc - 12 - Bonus].mkv", sdk.ParsedMedia{Title: "Show", Year: 2011}, true},
+		{"/tv/Class of 1999 II 2001 0001.mkv", sdk.ParsedMedia{Title: "Class of 1999 II 2001", Class: "episode", Index: 1, AbsoluteOrdinal: 1}, true},
+		{"/movies/[Group] (2013) Proper Uncut [DEADBEEF].mkv", sdk.ParsedMedia{Title: "Proper Uncut", Class: "movie", Year: 2013}, true},
 		// Controls: a title before the year keeps the old reading.
 		{"/movies/1917 (2019).mkv", sdk.ParsedMedia{Title: "1917", Class: "movie", Year: 2019}, true},
 		{"/movies/2001 A Space Odyssey (1968).mkv", sdk.ParsedMedia{Title: "2001 A Space Odyssey", Class: "movie", Year: 1968}, true},

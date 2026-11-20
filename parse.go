@@ -522,6 +522,12 @@ func seriesCodeEpisode(path, lower string) (episodeToken, bool) {
 	if trimmed := strings.TrimPrefix(key, "the"); trimmed != key && len(trimmed) >= 3 {
 		keys = append(keys, trimmed)
 	}
+	if year > 0 {
+		// The year may be part of the glued series name ("space1999101").
+		for _, k := range keys {
+			keys = append(keys, k+strconv.Itoa(year))
+		}
+	}
 	for _, key := range keys {
 		for from := 0; ; {
 			at := strings.Index(lower[from:], key)
@@ -648,7 +654,9 @@ func episodeContext(path, lower, series string, form weakForm) bool {
 		return false
 	}
 	folder, _ := seriesFromFolder(filepath.Base(dir))
-	return strings.EqualFold(folder, series)
+	// A folder named for the series with its year ("Space_1999") matches a
+	// series name that keeps the year.
+	return strings.EqualFold(folder, series) || strings.EqualFold(cleanTitle(removeProviderIDTags(filepath.Base(dir))), series)
 }
 
 // nearestLibraryFolder returns "tv" or "film" for the nearest folder above dir
@@ -695,7 +703,11 @@ func findAbsoluteEpisode(path, title, lowerTitle, lower string) (episodeToken, b
 	// and an episode number may follow it ("Show - 2011 - 12").
 	for m != nil && m[6] >= 0 && isYearNumber(lowerTitle[m[6]:m[7]]) {
 		yearEnd := m[7]
-		if m = reAbsoluteEpisode.FindStringSubmatchIndex(lowerTitle[yearEnd:]); m != nil {
+		// The episode number must follow the year directly, not sit in
+		// later metadata ("Show - 2011 - [Disc - 12]").
+		if m = reAbsoluteEpisode.FindStringSubmatchIndex(lowerTitle[yearEnd:]); m != nil && m[0] > 0 {
+			m = nil
+		} else if m != nil {
 			for i := range m {
 				if m[i] >= 0 {
 					m[i] += yearEnd
@@ -716,15 +728,13 @@ func findAbsoluteEpisode(path, title, lowerTitle, lower string) (episodeToken, b
 			form = formUnderscored
 		}
 	}
-	seriesYear := false
-	if year.found() && !year.leading {
+	// "Space 1999 0001": a bare year right before the number names the
+	// series, whichever year the series name holds first.
+	seriesYear := form != formDashed && endsInBareYear(series)
+	if year.found() && !year.leading && !seriesYear {
 		switch {
 		case form == formDashed:
 			form = formDashedYear
-		case series[year.start] != '(' && onlySeparators(series[year.end:]):
-			// "Space 1999 0001": a bare year right before the number names
-			// the series.
-			seriesYear = true
 		default:
 			// After any other year only the dashed anime form reads as an
 			// episode.
@@ -743,6 +753,17 @@ func findAbsoluteEpisode(path, title, lowerTitle, lower string) (episodeToken, b
 		return episodeToken{}, false
 	}
 	return episodeToken{start: m[0], end: m[1], index: index, seriesYear: seriesYear}, true
+}
+
+// endsInBareYear reports whether series, the text before an absolute number,
+// ends in a bare year after title text ("Class of 1999 II 2001 ").
+func endsInBareYear(series string) bool {
+	trimmed := strings.TrimRight(series, " ._-")
+	if len(trimmed) < 5 || !isYearNumber(trimmed[len(trimmed)-4:]) {
+		return false
+	}
+	before := trimmed[:len(trimmed)-4]
+	return strings.ContainsRune(" ._-", rune(before[len(before)-1])) && hasTitleText(before)
 }
 
 // findAirDate locates the first calendar-valid air date in the ASCII-folded
@@ -1026,13 +1047,14 @@ func findYear(name, lower string, episodeCut int) yearToken {
 // ("PROPER.1080p"); a checksum is not a title. Noise is read against the
 // whole rest of the name, so a release word that is the title ("ReMastered
 // S01E01", "DV [DEADBEEF]") stays a title, but a scene tag before only
-// checksums ("PROPER.[DEADBEEF]") is noise.
+// checksums ("PROPER.[DEADBEEF]", not "Proper Uncut [DEADBEEF]") is noise.
 func onlyNoiseAfter(name, lower string, start, end int) bool {
 	if cleanTitle(reChecksum.ReplaceAllString(lower[min(start, end):end], "")) == "" {
 		return true
 	}
 	rest := lower[start:]
-	if words := tokenSpans(rest); len(words) > 0 && sceneTags[rest[words[0][0]:words[0][1]]] {
+	if words := tokenSpans(rest); len(words) > 0 && sceneTags[rest[words[0][0]:words[0][1]]] &&
+		cleanTitle(reChecksum.ReplaceAllString(rest[words[0][1]:], "")) == "" {
 		rest = reChecksum.ReplaceAllStringFunc(rest, func(c string) string { return strings.Repeat(" ", len(c)) })
 	}
 	noise := firstNoiseToken(rest, false)
