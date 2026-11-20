@@ -62,6 +62,7 @@ func TestEpisodeFormsDoNotMisreadFilms(t *testing.T) {
 		{"film-year-then-dash-number", "Movie (2019) - 12.mkv", sdk.ParsedMedia{Title: "Movie", Class: "movie", Year: 2019}},
 		// A film's own folder bears its name and year, so it gives a name with a
 		// year no episode context.
+		{"camera-stem-with-year-under-tv", "/tv/VID (2019) - 12.mp4", sdk.ParsedMedia{Title: "VID", Year: 2019}},
 		{"film-year-dash-number-in-own-folder", "/incoming/Heat (1995)/Heat (1995) - 1080.mkv", sdk.ParsedMedia{Title: "Heat", Class: "movie", Year: 1995}},
 		// A camera clip stem is never a series, even under a TV folder.
 		{"camera-clip", "VID_0001.mp4", sdk.ParsedMedia{Title: "VID 0001", Class: "movie"}},

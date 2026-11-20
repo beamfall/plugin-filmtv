@@ -580,9 +580,14 @@ const (
 	// ("Wedding_0002"): the counter a camera or a home video carries as often
 	// as an episode number.
 	formUnderscored
-	// formDashed is a three-digit number after " - " ("Naruto - 001"), the
-	// anime release form.
+	// formDashed is a two- to four-digit number after " - " ("Naruto - 001",
+	// "One Piece - 1071"), the anime release form.
 	formDashed
+	// formDashedYear is formDashed after a series name with a year ("Hunter x
+	// Hunter (2011) - 12"). It has the shape of a film's version label ("Heat
+	// (1995) - 1080"), and a film's own folder bears the same name, so a show
+	// folder named like the series is no context for it.
+	formDashedYear
 	// formCompactCode is a compact season-and-episode code ("S0101"): only a
 	// folder gives it context, never a checksum bracket.
 	formCompactCode
@@ -619,9 +624,9 @@ func episodeContext(path, lower, series string, form weakForm) bool {
 	switch {
 	case library == "tv", form != formCompactCode && reChecksum.MatchString(lower):
 		return true
-	case form == formDashed && reLeadingGroups.MatchString(lower):
+	case (form == formDashed || form == formDashedYear) && reLeadingGroups.MatchString(lower):
 		return true
-	case form == formUnderscored || series == "":
+	case form == formUnderscored || form == formDashedYear || series == "":
 		return false
 	}
 	folder, _ := seriesFromFolder(filepath.Base(dir))
@@ -673,18 +678,11 @@ func findAbsoluteEpisode(path, title, lowerTitle, lower string) (episodeToken, b
 	}
 	series := title[:m[0]]
 	series = series[len(reLeadingGroups.FindString(series)):]
-	// A series name with a year ("Heat (1995) - 1080") has the shape of a
-	// film's version label, and a film's own folder bears the same name, so
-	// for it a show folder named like the series is no context.
 	_, yearStart := findYear(series, asciiLower(series), -1)
 	if yearStart >= 0 {
 		series = series[:yearStart]
 	}
 	series = cleanTitle(series)
-	contextSeries := series
-	if yearStart >= 0 {
-		contextSeries = ""
-	}
 	form, digits := formDashed, m[6:8]
 	if m[4] >= 0 {
 		form, digits = formNumbered, m[4:6]
@@ -692,11 +690,18 @@ func findAbsoluteEpisode(path, title, lowerTitle, lower string) (episodeToken, b
 			form = formUnderscored
 		}
 	}
-	if series == "" || !episodeContext(path, lower, contextSeries, form) {
+	if yearStart >= 0 {
+		// After a year only the dashed anime form reads as an episode.
+		if form != formDashed {
+			return episodeToken{}, false
+		}
+		form = formDashedYear
+	}
+	if series == "" || !episodeContext(path, lower, series, form) {
 		return episodeToken{}, false
 	}
 	index := atoi(lowerTitle[digits[0]:digits[1]])
-	if index == 0 || form == formDashed && digits[1]-digits[0] == 4 && index >= 1900 && index <= 2099 {
+	if index == 0 || (form == formDashed || form == formDashedYear) && digits[1]-digits[0] == 4 && index >= 1900 && index <= 2099 {
 		// A dashed four-digit number in the year range is a year ("Show - 2015").
 		return episodeToken{}, false
 	}
