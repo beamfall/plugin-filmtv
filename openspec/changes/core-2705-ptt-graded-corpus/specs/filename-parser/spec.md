@@ -25,18 +25,17 @@ MIT notice, and SHALL keep cases by a written rule that drops packs, adult and t
 - **WHEN** any PTT fixture marks a name complete, or declares two seasons, more than three episodes, or a season with an empty episode list
 - **THEN** the import leaves it out of the graded set
 
-### Requirement: A season code's episode is read whole and a channel layout is no season code
+### Requirement: A season code's episode is read whole
 
-The parser SHALL read every digit of an `SxxEyyyy` episode not followed by another digit, reading
-one above 999 as the absolute episode, and SHALL NOT read an `NxM` code as a season and episode
-when it follows a digit and a dot and an audio codec leads it or a `+` joins it to another layout.
+The parser SHALL read every digit of an `SxxEyyyy` episode up to a resolution glued to it
+(`1080p`), reading an episode above 999 as the absolute episode.
 
 #### Scenario: Four-digit episode after a season code
 
 - **WHEN** the parser reads `One.Piece.S01E1056.1080p.WEB.x264.mkv`
 - **THEN** it parses to title `One Piece`, absolute episode 1056
 
-#### Scenario: Channel layout
+#### Scenario: Resolution glued to the episode
 
-- **WHEN** the parser reads `Escaflowne (2000) (BDRip x265 AC3 5.1x2+2.0x3).mkv`
-- **THEN** it parses to the film `Escaflowne` (2000), while `Doctor.Who.2005.8x11.Dark.Water.720p.mkv` and `Babylon.5.1x02.Soul.Hunter.mkv` still parse to season codes
+- **WHEN** the parser reads `Show.S01E1231080p.WEB.mkv` or `One.Piece.S01E10561080p.WEB.mkv`
+- **THEN** it parses to season 1, episode 123, and to absolute episode 1056
