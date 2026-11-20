@@ -273,8 +273,10 @@ func parseName(path string) (nameParse, bool) {
 		switch {
 		case year.leading:
 			titleStart = year.end
-			if !isEpisode && sceneTagNoise(lower[year.end:]) {
-				cut = year.end // "(2007) PROPER.[DEADBEEF]" has no title
+			if sceneTagNoise(lower[year.end:cut]) {
+				// "(2007) PROPER.[DEADBEEF]" has no title, and "(2007)
+				// PROPER.1080p.S01E01" no series name of its own.
+				cut = year.end
 			}
 		case year.start < cut:
 			cut = year.start
@@ -293,8 +295,13 @@ func parseName(path string) (nameParse, bool) {
 		if noiseStart := firstNoiseToken(lower[titleStart:], true); noiseStart >= 0 {
 			cut = titleStart + noiseStart
 		}
-		if checksum := reChecksum.FindStringIndex(lower[titleStart:cut]); checksum != nil {
-			cut = titleStart + checksum[0]
+		for _, checksum := range reChecksum.FindAllStringIndex(lower[titleStart:cut], -1) {
+			// A checksum ends the title, but one leading the name ("[DEADBEEF]
+			// 1923") has no title before it to end.
+			if !onlySeparators(reChecksum.ReplaceAllString(lower[titleStart:titleStart+checksum[0]], "")) {
+				cut = titleStart + checksum[0]
+				break
+			}
 		}
 	}
 	titleStart = min(titleStart, cut)
@@ -1013,6 +1020,9 @@ func (y yearToken) title(s string) string {
 // release-group brackets is the year ("[REC].2007").
 func findYear(name, lower string, episodeCut int) yearToken {
 	groupsEnd := len(reLeadingGroups.FindString(name))
+	if onlySeparators(reChecksum.ReplaceAllString(name[:groupsEnd], "")) {
+		groupsEnd = 0 // a leading checksum is no release group ("[DEADBEEF] 1923")
+	}
 	var candidates []yearToken
 	var parens []bool
 	// An underscore bounds a year like a space ("Heat_1995_1080p").
@@ -1114,8 +1124,9 @@ func sceneTagNoise(lower string) bool {
 	}
 	rest := blankChecksums(lower)
 	tokens := tokenSpans(rest)
-	if n := len(tokens); n > 2 && tokens[n-2][1] == tokens[n-1][0]-1 && rest[tokens[n-2][1]] == '-' {
-		tokens = tokens[:n-1]
+	if n := len(tokens); n > 2 && tokens[n-2][1] == tokens[n-1][0]-1 && rest[tokens[n-2][1]] == '-' &&
+		!releaseNoise[rest[tokens[n-2][0]:tokens[n-2][1]]+rest[tokens[n-1][0]:tokens[n-1][1]]] {
+		tokens = tokens[:n-1] // "-GRP", but "WEB-DL" is one tag
 	}
 	words := make([]string, len(tokens))
 	for i, span := range tokens {
@@ -1259,16 +1270,17 @@ func firstNoiseToken(lower string, keepFirstWord bool) int {
 
 // trailingGroup reports whether last is a release group hyphenated directly
 // onto prev, a release word ("PROPER-GRP"); a group that is itself a tag
-// ("Movie-1080p") stays a word endsTitle can see.
+// ("Movie-1080p"), or the second half of one ("WEB-DL"), stays a word
+// endsTitle can see.
 func trailingGroup(lower string, prev, last [2]int) bool {
 	if prev[1] != last[0]-1 || lower[prev[1]] != '-' {
 		return false
 	}
-	group := lower[last[0]:last[1]]
-	if reResolution.MatchString(group) || releaseNoise[group] {
-		return false
+	group, word := lower[last[0]:last[1]], lower[prev[0]:prev[1]]
+	if reResolution.MatchString(group) || releaseNoise[group] || releaseNoise[word+group] {
+		return false // "Movie-1080p", "Movie.WEB-DL"
 	}
-	_, isWord := releaseWords[lower[prev[0]:prev[1]]]
+	_, isWord := releaseWords[word]
 	return isWord
 }
 

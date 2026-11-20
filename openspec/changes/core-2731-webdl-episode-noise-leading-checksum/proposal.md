@@ -18,7 +18,8 @@ CORE-2726's Codex review left four parser gaps:
 
 ## What Changes
 
-- A release tag split by a hyphen (`WEB-DL`) is one tag, not a tag and a release group.
+- A release tag split by a hyphen (`WEB-DL`) is one tag, not a tag and a release group, in scene
+  noise and at the end of a title (`Movie.WEB-DL` parsed as `Movie WEB-DL`).
 - An episode whose name is only scene noise after a bare leading year takes its series name from
   the show folder.
 - A checksum bracket at the start of a name is not a release group: a year-named title after it is

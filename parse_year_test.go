@@ -139,6 +139,23 @@ func TestYearPickerKeepsYearNamedTitles(t *testing.T) {
 		{"/movies/Amélie2001.mkv", sdk.ParsedMedia{Title: "Amélie2001", Class: "movie"}, true},
 		{"/movies/Amélie (2001).mkv", sdk.ParsedMedia{Title: "Amélie", Class: "movie", Year: 2001}, true},
 		{"/movies/2001été (2019).mkv", sdk.ParsedMedia{Title: "2001été", Class: "movie", Year: 2019}, true},
+		// CORE-2731: a hyphen-split tag ("WEB-DL") is no release group, scene
+		// noise before an episode marker names no series, a leading checksum is
+		// no release group, and a checksum keeps a release word before it.
+		{"/movies/[REC] (2007) PROPER.REPACK.WEB-DL.mkv", sdk.ParsedMedia{Title: "[REC]", Class: "movie", Year: 2007}, true},
+		{"/movies/(2007) PROPER.WEB-DL-GRP.mkv", sdk.ParsedMedia{}, false},
+		{"/movies/Movie.WEB-DL.mkv", sdk.ParsedMedia{Title: "Movie", Class: "movie"}, true},
+		{"/tv/Fringe/Season 01/(2007) PROPER.1080p.S01E01 - Pilot.mkv", sdk.ParsedMedia{Title: "Fringe", Class: "episode", Year: 2007, Sequence: "1", Index: 1}, true},
+		{"/tv/Fringe/Season 01/(2007) PROPER.S01E01.mkv", sdk.ParsedMedia{Title: "Fringe", Class: "episode", Year: 2007, Sequence: "1", Index: 1}, true},
+		{"/tv/Fringe/Season 01/(2007) Pilot.S01E01.mkv", sdk.ParsedMedia{Title: "Pilot", Class: "episode", Year: 2007, Sequence: "1", Index: 1}, true},
+		{"/movies/[DEADBEEF] 1923.mkv", sdk.ParsedMedia{Title: "1923", Class: "movie"}, true},
+		{"/movies/[DEADBEEF].2007.mkv", sdk.ParsedMedia{Title: "2007", Class: "movie"}, true},
+		{"/movies/[DEADBEEF] Movie [CAFEBABE].mkv", sdk.ParsedMedia{Title: "Movie", Class: "movie"}, true},
+		{"/movies/[DEADBEEF] Movie 1999.mkv", sdk.ParsedMedia{Title: "Movie", Class: "movie", Year: 1999}, true},
+		{"/movies/[Group] 1923.mkv", sdk.ParsedMedia{Title: "[Group]", Class: "movie", Year: 1923}, true},
+		{"/movies/[Group][DEADBEEF] 1923.mkv", sdk.ParsedMedia{Title: "[Group]", Class: "movie", Year: 1923}, true},
+		{"/movies/Movie Uncut [DEADBEEF].mkv", sdk.ParsedMedia{Title: "Movie Uncut", Class: "movie"}, true},
+		{"/movies/Movie Uncut.mkv", sdk.ParsedMedia{Title: "Movie", Class: "movie"}, true},
 		// Controls: a title before the year keeps the old reading.
 		{"/movies/1917 (2019).mkv", sdk.ParsedMedia{Title: "1917", Class: "movie", Year: 2019}, true},
 		{"/movies/2001 A Space Odyssey (1968).mkv", sdk.ParsedMedia{Title: "2001 A Space Odyssey", Class: "movie", Year: 1968}, true},

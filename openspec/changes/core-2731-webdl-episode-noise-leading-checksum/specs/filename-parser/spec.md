@@ -2,8 +2,8 @@
 
 ### Requirement: A hyphen-split release tag is not a release group
 
-A release tag split by a hyphen (`WEB-DL`) SHALL be one release tag in scene-tag noise, not a tag
-followed by a hyphenated release group.
+A release tag split by a hyphen (`WEB-DL`) SHALL be one release tag, in scene-tag noise and at the
+end of a title, not a tag followed by a hyphenated release group.
 
 #### Scenario: Scene tags before WEB-DL
 
@@ -14,6 +14,11 @@ followed by a hyphenated release group.
 
 - **WHEN** a file is `/movies/(2007) PROPER.WEB-DL-GRP.mkv`
 - **THEN** it does not parse
+
+#### Scenario: WEB-DL ends a title
+
+- **WHEN** a file is `/movies/Movie.WEB-DL.mkv`
+- **THEN** it parses to title `Movie`
 
 ### Requirement: Episode scene noise names no series
 
