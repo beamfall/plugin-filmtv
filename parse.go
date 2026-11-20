@@ -1162,7 +1162,7 @@ func opensWithSceneTag(lower string) bool {
 // Zodiac and "[DEADBEEF] Naruto - 001" an episode of Naruto.
 func blankLeadingChecksums(name string) string {
 	n := len(reLeadingChecksums.FindString(name))
-	if n < len(name) && name[n] == '-' && name[n-1] == ']' {
+	if n > 0 && n < len(name) && name[n] == '-' && name[n-1] == ']' {
 		return name // "[DEADBEEF]-YIFY": a group, not a title, follows
 	}
 	return blankChecksums(name[:n]) + name[n:]
@@ -1192,8 +1192,8 @@ func episodeNoiseOnly(lower string, start, end int) bool {
 		case sceneTags[word]:
 		case endsTitle(words[i:]):
 			tagged = tagged || isTag(words[i:])
-			if i+1 < len(tokens) && tokens[i+1][0] == tokens[i][1]+1 && span[tokens[i][1]] == '-' && releaseNoise[word+words[i+1]] {
-				i++ // one tag split in two ("WEB-DL")
+			if i+1 < len(tokens) && tokens[i+1][0] == tokens[i][1]+1 && strings.IndexByte("-.", span[tokens[i][1]]) >= 0 && releaseNoise[word+words[i+1]] {
+				i++ // one tag split in two ("WEB-DL", "H.264")
 			}
 		case joined && span[tokens[i][0]-1] == '.' && isChannelCount(words[i-1], word):
 			// the channel count of an audio tag ("DD5.1")

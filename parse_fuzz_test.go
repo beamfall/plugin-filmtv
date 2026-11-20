@@ -16,6 +16,8 @@ func FuzzParseFilename(f *testing.F) {
 		"The.Matrix.1999.1080p.mkv",
 		"Some.Show.S02E05-E07.2020.WEB-DL.mkv",
 		"Season 3 Episode 9.mp4",
+		"-Fringe (2008).mkv",
+		"[DEADBEEF] (2007) [CAFEBABE]-YIFY.mkv",
 		"KK.Movie.2003.mkv",
 		"Pioneer One - S01E01 - Earthfall.mkv",
 		"Show Name - 1x01-1x02 - Pilot (Part 1) [1080p].mkv",

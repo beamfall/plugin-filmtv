@@ -185,6 +185,8 @@ func TestYearPickerKeepsYearNamedTitles(t *testing.T) {
 		{"/downloads/[DEADBEEF] - Naruto - 001.mkv", sdk.ParsedMedia{Title: "Naruto", Class: "episode", Index: 1, AbsoluteOrdinal: 1}, true},
 		{"/movies/(1776) [DEADBEEF] Bonus.mkv", sdk.ParsedMedia{Title: "(1776)", Class: "movie"}, true},
 		{"/movies/[DEADBEEF] (2007)-Uncut.mkv", sdk.ParsedMedia{Title: "Uncut", Class: "movie", Year: 2007}, true},
+		{"/movies/-Fringe (2008).mkv", sdk.ParsedMedia{Title: "Fringe", Class: "movie", Year: 2008}, true},
+		{"/tv/Fringe/Season 01/(2007) H.264.S01E01.mkv", sdk.ParsedMedia{Title: "Fringe", Class: "episode", Year: 2007, Sequence: "1", Index: 1}, true},
 		{"/downloads/(2007) [WEB] RIP S01E01.mkv", sdk.ParsedMedia{Title: "RIP", Class: "episode", Year: 2007, Sequence: "1", Index: 1}, true},
 		{"/tv/Fringe (2008)/Season 01/(2007) DD5.1.S01E01.mkv", sdk.ParsedMedia{Title: "Fringe", Class: "episode", Year: 2008, Sequence: "1", Index: 1}, true},
 		// Controls: a title before the year keeps the old reading.
