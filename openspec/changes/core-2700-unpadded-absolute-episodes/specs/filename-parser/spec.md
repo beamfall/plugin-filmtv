@@ -31,8 +31,9 @@ return class `episode`, the series name as the title, and the number as both `In
 ### Requirement: A year does not hide an absolute episode number
 
 A year in the series name or in the episode title SHALL NOT prevent the absolute episode reading, and
-a year in the series name SHALL be returned as the year. A dashed four-digit number from 1900 to 2099
-SHALL be read as a year, not as an episode number.
+a year in the series name SHALL be returned as the year. A show folder named like the series SHALL
+NOT count as episode context for a series name with a year, because a film's own folder has the same
+shape. A dashed four-digit number from 1900 to 2099 SHALL be read as a year, not as an episode number.
 
 #### Scenario: Year in the series name
 
@@ -44,6 +45,11 @@ SHALL be read as a year, not as an episode number.
 - **WHEN** a file is `/tv/Show - 12 - Class of 1999.mkv`
 - **THEN** it parses to title `Show`, no year, absolute episode 12, episode title `Class of 1999`
 
+#### Scenario: Film in its own folder
+
+- **WHEN** a file is `/incoming/Heat (1995)/Heat (1995) - 1080.mkv`
+- **THEN** it parses to title `Heat`, class `movie`, year 1995
+
 #### Scenario: Dashed year
 
 - **WHEN** a file is `/tv/Show/Show - 2015.mkv`
@@ -52,8 +58,8 @@ SHALL be read as a year, not as an episode number.
 ### Requirement: Film numbers after a hyphen stay in the title
 
 The parser SHALL NOT read a single digit after a spaced hyphen as an absolute episode, and SHALL NOT
-read any number after a spaced hyphen as one without episode context or under a film library
-folder, a season folder below the film library included.
+read any number after a spaced hyphen as one without episode context or when the nearest library
+folder above the file is a film library, a season folder below it included.
 
 #### Scenario: Sequel number
 

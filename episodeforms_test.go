@@ -60,6 +60,9 @@ func TestEpisodeFormsDoNotMisreadFilms(t *testing.T) {
 		// A dashed number in the year range is a year, even in a show folder.
 		{"dash-year-in-show-folder", "/tv/Show/Show - 2015.mkv", sdk.ParsedMedia{Title: "Show", Year: 2015}},
 		{"film-year-then-dash-number", "Movie (2019) - 12.mkv", sdk.ParsedMedia{Title: "Movie", Class: "movie", Year: 2019}},
+		// A film's own folder bears its name and year, so it gives a name with a
+		// year no episode context.
+		{"film-year-dash-number-in-own-folder", "/incoming/Heat (1995)/Heat (1995) - 1080.mkv", sdk.ParsedMedia{Title: "Heat", Class: "movie", Year: 1995}},
 		// A camera clip stem is never a series, even under a TV folder.
 		{"camera-clip", "VID_0001.mp4", sdk.ParsedMedia{Title: "VID 0001", Class: "movie"}},
 		{"camera-still-clip", "DSC_0012.mov", sdk.ParsedMedia{Title: "DSC 0012", Class: "movie"}},

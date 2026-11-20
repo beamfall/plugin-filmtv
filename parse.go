@@ -673,10 +673,18 @@ func findAbsoluteEpisode(path, title, lowerTitle, lower string) (episodeToken, b
 	}
 	series := title[:m[0]]
 	series = series[len(reLeadingGroups.FindString(series)):]
-	if _, yearStart := findYear(series, asciiLower(series), -1); yearStart >= 0 {
+	// A series name with a year ("Heat (1995) - 1080") has the shape of a
+	// film's version label, and a film's own folder bears the same name, so
+	// for it a show folder named like the series is no context.
+	_, yearStart := findYear(series, asciiLower(series), -1)
+	if yearStart >= 0 {
 		series = series[:yearStart]
 	}
 	series = cleanTitle(series)
+	contextSeries := series
+	if yearStart >= 0 {
+		contextSeries = ""
+	}
 	form, digits := formDashed, m[6:8]
 	if m[4] >= 0 {
 		form, digits = formNumbered, m[4:6]
@@ -684,7 +692,7 @@ func findAbsoluteEpisode(path, title, lowerTitle, lower string) (episodeToken, b
 			form = formUnderscored
 		}
 	}
-	if series == "" || !episodeContext(path, lower, series, form) {
+	if series == "" || !episodeContext(path, lower, contextSeries, form) {
 		return episodeToken{}, false
 	}
 	index := atoi(lowerTitle[digits[0]:digits[1]])
