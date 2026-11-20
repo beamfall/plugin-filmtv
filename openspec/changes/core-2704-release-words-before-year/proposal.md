@@ -31,6 +31,9 @@ Three kinds of release text stay in a film's title and spoil the provider search
 - A leading `www.site.tld - `, `[www.site.tld]` or `(www.site.tld)` is dropped before parsing. A
   bracketed one still marks a fansub episode as any leading group does
   (`[www.site.org] Naruto - 001`).
+- Found by fuzzing, restoring the parser's index contract (a season's episode runs to three
+  digits): a four-digit number after season and episode words is the absolute episode
+  (`One Piece Temporada 1 Episodio 1071`), and `Cap` packs a two-digit season too (`Cap.1002`).
 
 ## Impact
 

@@ -18,6 +18,7 @@ func FuzzParseFilename(f *testing.F) {
 		"Season 3 Episode 9.mp4",
 		"-Fringe (2008).mkv",
 		"Juego de Tronos - Temp.2 [Cap.209].mkv",
+		"0 Temp0CAp1000 ",
 		"Star.Wars.Episode.1.10-bit.1080p.mkv",
 		"Naruto - 014 - Episode 1.14.mkv",
 		"Show Saison 2 E\u0301pisode 4.mkv",

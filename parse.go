@@ -131,7 +131,7 @@ var (
 	reSitePrefix = regexp.MustCompile(`(?i)^\s*(?:[\[(]\s*www\.[a-z0-9-]+(?:\.[a-z0-9-]+)+\s*[\])]|www\.[a-z0-9-]+(?:\.[a-z0-9-]+)+\s+-)\s*`)
 	// reSiteGroup matches a site name in leading brackets: a release-group
 	// bracket for the fansub episode form ("[www.Site.org] Naruto - 001").
-	reSiteGroup = regexp.MustCompile(`(?i)^\s*\[\s*www\.[^\]]*\]`)
+	reSiteGroup = regexp.MustCompile(`(?i)^\s*\[\s*www\.[^\[\]]*\]`)
 	// reLeadingChecksums matches the checksum brackets and parenthesized
 	// year that open a name, up to its first other bracket or word.
 	reLeadingChecksums = regexp.MustCompile(`(?i)^(?:[\s._-]*(?:\[[0-9a-f]{8}\]|\((?:19|20)\d\d\)))+`)
@@ -603,7 +603,13 @@ func findEpisode(lower string) (episodeToken, bool) {
 	}
 	if m := reSeasonEpisodeWords.FindStringSubmatchIndex(lower); m != nil {
 		sequence := numericText(lower[m[4]:m[5]])
-		return episodeToken{start: m[2], end: m[3], sequence: sequence, index: packedEpisode(lower[m[6]:m[7]], lower[m[8]:m[9]], atoi(sequence))}, true
+		token := episodeToken{start: m[2], end: m[3], sequence: sequence, index: packedEpisode(lower[m[6]:m[7]], lower[m[8]:m[9]], atoi(sequence))}
+		if token.index > 999 {
+			// A season's episode runs to three digits: four are the absolute
+			// number ("One Piece Temporada 1 Episodio 1071").
+			token.sequence, token.absolute = "", token.index
+		}
+		return token, true
 	}
 	if m := reTemporadaEpisode.FindStringSubmatchIndex(lower); m != nil {
 		token := episodeToken{start: m[2], end: m[3], sequence: numericText(lower[m[4]:m[5]]), index: atoi(lower[m[6]:m[7]])}
@@ -629,11 +635,12 @@ func findShorthandEpisode(lower string) (episodeToken, bool) {
 }
 
 // packedEpisode returns the episode number digits name after an episode
-// word. "Cap" packs the season into a three-digit number ("Cap.209": season
-// 2, episode 9); when its first digit is season, the episode is the rest.
+// word. "Cap" packs the season in front of a two-digit episode ("Cap.209":
+// season 2, episode 9; "Cap.1002": season 10, episode 2); when the digits
+// open with season, the episode is the last two.
 func packedEpisode(word, digits string, season int) int {
-	if word == "cap" && len(digits) == 3 && atoi(digits[:1]) == season {
-		return atoi(digits[1:])
+	if s := strconv.Itoa(season); word == "cap" && len(digits) == len(s)+2 && strings.HasPrefix(digits, s) {
+		return atoi(digits[len(s):])
 	}
 	return atoi(digits)
 }
@@ -1636,7 +1643,7 @@ func noiseBeforeYear(lower string) int {
 		case isTag([]string{word}):
 			afterTag = true
 		case editionTags[word] || languageTags[word] || word == "dc" && i > 1 && editionTags[prev]:
-			if wordsEnd < 0 || afterTag {
+			if wordsEnd < 0 || afterTag || strings.ContainsAny(lower[tokens[i][1]:end], "[(") {
 				wordsEnd = end // the end of the first run of words after the title
 			}
 			afterTag = false

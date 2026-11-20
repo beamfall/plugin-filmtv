@@ -598,6 +598,20 @@ func parseCorpus() []parseCase {
 			resolvable: true,
 		},
 		{
+			name:       "bracketed-language-tag-after-kept-edition-word",
+			path:       "South Park - Bigger, Longer & Uncut [ENG 1080p BluRay] (1999).mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "South Park - Bigger, Longer & Uncut", Year: 1999, Class: "movie"},
+			resolvable: true,
+		},
+		{
+			name:       "unclosed-site-bracket-before-provider-id",
+			path:       "/downloads/[www.example.org Wedding - 001 [tmdbid-123].mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "[www example org Wedding - 001", Class: "movie", ProviderIDs: map[string]string{"tmdb": "123"}, HintSource: "filename"},
+			resolvable: true,
+		},
+		{
 			name:       "site-group-marks-fansub-episode",
 			path:       "/downloads/[www.example.org] Naruto - 001.mkv",
 			wantOK:     true,
@@ -891,6 +905,13 @@ func parseCorpus() []parseCase {
 			path:       "/tv/Juego de Tronos/Season 2/Juego de Tronos - Temp.2 [Cap.209].mkv",
 			wantOK:     true,
 			want:       sdk.ParsedMedia{Title: "Juego de Tronos", Class: "episode", Sequence: "2", Index: 9},
+			resolvable: true,
+		},
+		{
+			name:       "spanish-packed-cap-two-digit-season",
+			path:       "/tv/Anatomia de Grey/Season 10/Anatomia de Grey - Temp.10 [Cap.1002].mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Anatomia de Grey", Class: "episode", Sequence: "10", Index: 2},
 			resolvable: true,
 		},
 		{
