@@ -100,6 +100,21 @@ func TestYearPickerKeepsYearNamedTitles(t *testing.T) {
 		{"/tv/Fringe 2008–2013 0001.mkv", sdk.ParsedMedia{Title: "Fringe", Year: 2008}, true},
 		{"/tv/Project X2000 1999 0001.mkv", sdk.ParsedMedia{Title: "Project X2000 1999", Class: "episode", Index: 1, AbsoluteOrdinal: 1}, true},
 		{"/tv/Café1999 0001.mkv", sdk.ParsedMedia{Title: "Café1999", Class: "episode", Index: 1, AbsoluteOrdinal: 1}, true},
+		// CORE-2726: checksum folders, scene tags before checksums and release
+		// tags, letters of any script around a year.
+		{"/tv/[DEADBEEF]/Season 01/S01E01.mkv", sdk.ParsedMedia{}, false},
+		{"/tv/Show [DEADBEEF]/Season 01/S01E01.mkv", sdk.ParsedMedia{Title: "Show", Class: "episode", Sequence: "1", Index: 1}, true},
+		{"/movies/(2007) PROPER.[DEADBEEF].mkv", sdk.ParsedMedia{}, false},
+		{"/movies/(2007) PROPER.mkv", sdk.ParsedMedia{}, false},
+		{"/movies/(2007) PROPER.[DEADBEEF].1080p.mkv", sdk.ParsedMedia{}, false},
+		{"/movies/[REC] (2007) PROPER.[DEADBEEF].1080p.mkv", sdk.ParsedMedia{Title: "[REC]", Class: "movie", Year: 2007}, true},
+		{"/movies/[REC] (2007) REPACK [DEADBEEF] x264.mkv", sdk.ParsedMedia{Title: "[REC]", Class: "movie", Year: 2007}, true},
+		{"/movies/(2007) Proper Uncut [DEADBEEF].mkv", sdk.ParsedMedia{Title: "Proper Uncut", Class: "movie", Year: 2007}, true},
+		{"/tv/Show (2011) Café1999 0001.mkv", sdk.ParsedMedia{Title: "Show", Year: 2011}, true},
+		{"/tv/Show (2011) Café1999 0001.mkv", sdk.ParsedMedia{Title: "Show", Year: 2011}, true},
+		{"/movies/Amélie2001.mkv", sdk.ParsedMedia{Title: "Amélie2001", Class: "movie"}, true},
+		{"/movies/Amélie (2001).mkv", sdk.ParsedMedia{Title: "Amélie", Class: "movie", Year: 2001}, true},
+		{"/movies/2001été (2019).mkv", sdk.ParsedMedia{Title: "2001été", Class: "movie", Year: 2019}, true},
 		// Controls: a title before the year keeps the old reading.
 		{"/movies/1917 (2019).mkv", sdk.ParsedMedia{Title: "1917", Class: "movie", Year: 2019}, true},
 		{"/movies/2001 A Space Odyssey (1968).mkv", sdk.ParsedMedia{Title: "2001 A Space Odyssey", Class: "movie", Year: 1968}, true},

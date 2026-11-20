@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/beamfall/plugin-filmtv/internal/mediaimport"
@@ -272,6 +273,9 @@ func parseName(path string) (nameParse, bool) {
 		switch {
 		case year.leading:
 			titleStart = year.end
+			if !isEpisode && sceneTagNoise(lower[year.end:]) {
+				cut = year.end // "(2007) PROPER.[DEADBEEF]" has no title
+			}
 		case year.start < cut:
 			cut = year.start
 		}
@@ -775,13 +779,25 @@ func endsInBareYear(series string) bool {
 	return hasTitleText(before)
 }
 
-// endsInYearWord reports whether s ends in a year number that no ASCII letter
-// or digit runs into ("X2000" does not), the word boundary findYear uses.
+// endsInYearWord reports whether s ends in a year number that no letter or
+// digit runs into ("X2000" and "Café1999" do not), the word boundary findYear
+// uses.
 func endsInYearWord(s string) bool {
-	if len(s) < 4 || !isYearNumber(s[len(s)-4:]) {
-		return false
-	}
-	return len(s) == 4 || !isASCIIAlnum(s[len(s)-5])
+	return len(s) >= 4 && isYearNumber(s[len(s)-4:]) && yearBounded(s, len(s)-4, len(s))
+}
+
+// yearBounded reports whether s[start:end], a run of digits, is a word of its
+// own: no letter, digit or combining mark of any script touches it ("Café1999"
+// holds no year).
+func yearBounded(s string, start, end int) bool {
+	before, _ := utf8.DecodeLastRuneInString(s[:start])
+	after, _ := utf8.DecodeRuneInString(s[end:])
+	return !isWordRune(before) && !isWordRune(after)
+}
+
+// isWordRune reports whether r is a letter, digit or combining mark.
+func isWordRune(r rune) bool {
+	return unicode.IsLetter(r) || unicode.IsDigit(r) || unicode.IsMark(r)
 }
 
 // findAirDate locates the first calendar-valid air date in the ASCII-folded
@@ -878,7 +894,7 @@ func seriesFromFolder(folder string) (string, int) {
 		return "", 0
 	}
 	year := findYear(series, asciiLower(series), -1)
-	title := cleanTitle(year.title(series))
+	title := cleanTitle(reChecksum.ReplaceAllString(year.title(series), " "))
 	if title == "" {
 		return "", 0
 	}
@@ -996,7 +1012,7 @@ func findYear(name, lower string, episodeCut int) yearToken {
 	for _, m := range reYear.FindAllStringSubmatchIndex(strings.ReplaceAll(lower, "_", " "), -1) {
 		digitsStart, digitsEnd := m[2], m[3]
 		year := atoi(lower[digitsStart:digitsEnd])
-		if year < 1900 || year > 2099 || digitsStart < groupsEnd {
+		if year < 1900 || year > 2099 || digitsStart < groupsEnd || !yearBounded(lower, digitsStart, digitsEnd) {
 			continue
 		}
 		if digitsEnd < len(lower) {
@@ -1071,9 +1087,8 @@ func onlyNoiseAfter(name, lower string, start, end int) bool {
 		return true
 	}
 	rest := lower[start:]
-	if words := tokenSpans(rest); len(words) > 0 && sceneTags[rest[words[0][0]:words[0][1]]] &&
-		cleanTitle(reChecksum.ReplaceAllString(rest[words[0][1]:], "")) == "" {
-		rest = reChecksum.ReplaceAllStringFunc(rest, func(c string) string { return strings.Repeat(" ", len(c)) })
+	if sceneTagNoise(rest) {
+		rest = blankChecksums(rest)
 	}
 	noise := firstNoiseToken(rest, false)
 	return noise >= 0 && cleanTitle(name[start:start+noise]) == ""
@@ -1081,6 +1096,33 @@ func onlyNoiseAfter(name, lower string, start, end int) bool {
 
 // sceneTags are the release words only a scene release uses, never a title.
 var sceneTags = map[string]bool{"proper": true, "repack": true, "rerip": true}
+
+// sceneTagNoise reports whether lower, the ASCII-folded text after a year,
+// opens with a scene tag that only checksums and release noise follow, from
+// a tag on ("PROPER.[DEADBEEF]", "PROPER.[DEADBEEF].1080p"). A release word
+// that can be a title keeps the tag a title ("Proper Uncut [DEADBEEF]").
+func sceneTagNoise(lower string) bool {
+	rest := blankChecksums(lower)
+	words := tokenSpans(rest)
+	if len(words) == 0 || !sceneTags[rest[words[0][0]:words[0][1]]] {
+		return false
+	}
+	if len(words) == 1 {
+		return true
+	}
+	after := rest[words[1][0]:]
+	tokens := tokenSpans(after)
+	first := make([]string, 0, 2)
+	for _, span := range tokens[:min(2, len(tokens))] {
+		first = append(first, after[span[0]:span[1]])
+	}
+	return isTag(first) && firstNoiseToken(after, false) == 0
+}
+
+// blankChecksums replaces each checksum bracket in s with spaces of its width.
+func blankChecksums(s string) string {
+	return reChecksum.ReplaceAllStringFunc(s, func(c string) string { return strings.Repeat(" ", len(c)) })
+}
 
 // hasTitleText reports whether s, the text before a year, holds any title:
 // anything that survives title cleanup outside the leading release-group
