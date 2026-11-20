@@ -54,6 +54,7 @@ func TestAlternateTitle(t *testing.T) {
 		{"multiword-edition-qualifier", "/movies/Бразилия (4K Remastered) (1985).mkv", movie("Бразилия (4K Remastered)", 1985), ""},
 		{"unlisted-region-qualifier", "/movies/Офис (DE) 2004.mkv", movie("Офис (DE)", 2004), ""},
 		{"curly-apostrophe-edition", "/movies/Бразилия (Director’s Cut) 1985.mkv", movie("Бразилия (Director’s Cut)", 1985), ""},
+		{"hyphenated-edition", "/movies/Бразилия (4K-Remastered) 1985.mkv", movie("Бразилия (4K-Remastered)", 1985), ""},
 		{"limited-edition", "/movies/Бразилия (Limited Edition) 1985.mkv", movie("Бразилия (Limited Edition)", 1985), ""},
 		// A title ending in an edition word reads as an edition: accepted.
 		{"title-ending-in-cut", "/movies/Тёмная сторона (In the Cut) 2003.mkv", movie("Тёмная сторона (In the Cut)", 2003), ""},

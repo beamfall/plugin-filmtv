@@ -514,14 +514,17 @@ var editionWords = map[string]bool{"cut": true, "edition": true, "version": true
 // an editionWords word. A title ending in one of those words ("In the Cut")
 // is taken for an edition too.
 func isTitleQualifier(s string) bool {
-	if len(s) <= 3 && strings.IndexFunc(s, func(r rune) bool { return r < 'A' || r > 'Z' }) < 0 {
+	if s != "" && len(s) <= 3 && strings.IndexFunc(s, func(r rune) bool { return r < 'A' || r > 'Z' }) < 0 {
 		return true
 	}
 	lower := strings.ToLower(strings.ReplaceAll(s, "’", "'"))
 	if _, ok := releaseWords[lower]; ok {
 		return true
 	}
-	words := strings.Fields(lower)
+	// Words split as the filename tokenizer splits them ("4K-Remastered").
+	words := strings.FieldsFunc(lower, func(r rune) bool {
+		return r != '\'' && !unicode.IsLetter(r) && !unicode.IsDigit(r)
+	})
 	return len(words) > 0 && editionWords[words[len(words)-1]]
 }
 
