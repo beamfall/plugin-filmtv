@@ -24,7 +24,12 @@ rate rising.
   resolved field that regresses fails, a marked field that starts passing fails until the marks
   are rewritten, and each field's rate has a documented floor at or below the current rate.
 
+- Two misreads the set found are fixed: `S01E1056` was cut to episode 105 and is now the absolute
+  episode 1056, as an episode above 999 after season and episode words already is; and a channel
+  layout (`AC3 5.1x2`) was read as season 1, episode 2. A year before an `NxM` code
+  (`Doctor.Who.2005.8x11`) still leaves it a season code.
+
 ## Impact
 
-Test data and a test only; no parser change. PTT's names are graded as written, with `.mkv`
+No SDK change. The other misses are marked, not fixed: their parser gaps have their own tickets. PTT's names are graded as written, with `.mkv`
 appended when they carry no video extension.

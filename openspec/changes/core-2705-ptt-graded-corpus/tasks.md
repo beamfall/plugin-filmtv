@@ -2,6 +2,7 @@
 
 - [ ] 1.1 Import PTT's library-shaped fixtures with provenance and licence
 - [ ] 1.2 Grade title, year, season and episode with marks and per-field floors
+- [ ] 1.3 Read a four-digit SxxEyyyy episode whole and skip channel layouts as NxM codes
 
 ## 2. Prove
 
