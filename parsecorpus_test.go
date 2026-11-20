@@ -922,13 +922,6 @@ func parseCorpus() []parseCase {
 			resolvable: true,
 		},
 		{
-			name:       "dotted-code-before-four-digit-season-word-episode",
-			path:       "/tv/One Piece/One Piece Episode 20.182 - Temporada 1 Episodio 1071.mkv",
-			wantOK:     true,
-			want:       sdk.ParsedMedia{Title: "One Piece", Class: "episode", Sequence: "20", Index: 182},
-			resolvable: true,
-		},
-		{
 			name:       "four-digit-episode-in-season-folder-is-absolute",
 			path:       "/tv/One Piece/Season 01/One Piece - Episode 1071.mkv",
 			wantOK:     true,

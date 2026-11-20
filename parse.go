@@ -318,10 +318,11 @@ func parseName(path string) (nameParse, bool) {
 	if !isEpisode {
 		episode, isEpisode = seriesCodeEpisode(path, lower)
 	}
+	fromAbsolute := false
 	if !isEpisode {
 		episode, isEpisode = absoluteEpisode(path, name, lower)
+		fromAbsolute = isEpisode
 	}
-	fromAbsolute := isEpisode && episode.absolute > 0
 	// An "Episode S.EE" code anywhere, or an episode word in a season folder
 	// ("Episode 14"), is read when no other marker is, and otherwise only
 	// against an absolute number, which may be part of the title: the first
