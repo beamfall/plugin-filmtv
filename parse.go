@@ -28,6 +28,12 @@ type Parser struct{}
 // New returns a ready Parser.
 func New() *Parser { return &Parser{} }
 
+// episodeWords are the words that name an episode number: English, French
+// ("épisode"), Italian ("episodio"), Spanish ("capítulo", "cap"), German
+// ("Folge") and the short "ep". Names are ASCII-folded only, so an accented
+// letter is matched in either case.
+const episodeWords = `[e\x{e9}\x{c9}]pisode|episodio|cap[i\x{ed}\x{cd}]tulo|cap|folge|ep`
+
 var (
 	// SxxEyy, also written "S01.E01" or "S01 E01". The multi-episode tail
 	// (E02, -E02, -S01E02, ...) is read by episodeChain, not this pattern.
@@ -36,8 +42,25 @@ var (
 	// the previous one: an optional separator, an optional repeated season, Eyy.
 	// Groups: the repeated season (empty when absent), the episode.
 	reEpisodeChainLink = regexp.MustCompile(`^[-+._ ]?(?:s(\d{1,2}))?e(\d{1,3})`)
-	// "season X episode Y" long form.
-	reSeasonEpisodeWords = regexp.MustCompile(`season[ ._]*(\d{1,2})[ ._,-]*episode[ ._]*(\d{1,3})`)
+	// "season X episode Y" long form, in English or another language's words
+	// ("Saison 01 Episode 38", "Temporada 1 Capítulo 25", "Staffel 2 Folge 3",
+	// "Temp.2 [Cap.209]"). The pair is evidence enough on its own; a lone
+	// season or episode word is not (seasonFolderEpisode). Groups: the token,
+	// the season, the episode word, the episode.
+	reSeasonEpisodeWords = regexp.MustCompile(`(?:^|[^\pL\pN])((?:season|saison|temporada|temp|staffel|stagione|sezon)[ ._]*(\d{1,2})[ ._,()\[\]-]*(` + episodeWords + `)[ ._]*(\d{1,3}))`)
+	// A "TxxEyy" code, the Spanish and Portuguese SxxEyy (T for temporada),
+	// with both numbers padded so a title word ("T2") never matches. Groups:
+	// the token, the season, the episode.
+	reTemporadaEpisode = regexp.MustCompile(`(?:^|[^\pL\pN])(t(\d{2})e(\d{2,3}))(?:$|[^\pL\pN])`)
+	// "Episode S.EE" ("Episode 1.22"): a season and a padded episode number
+	// after an episode word. Groups: the token, the season, the episode.
+	reEpisodeDotted = regexp.MustCompile(`(?:^|[^\pL\pN])([e\x{e9}\x{c9}]pisode[ ._]+(\d{1,2})\.(\d{2,3}))(?:$|[^\pL\pN])`)
+	// An episode number with no season: after an episode word ("Ep 14",
+	// "Folge 3", "Cap.209") or a bare "e" ("E10"), or before "seriya" ("08
+	// seriya"). Read only in a season folder, which supplies the season
+	// (seasonFolderEpisode). Groups: the token, the episode word, its
+	// number, the bare-e number, the seriya number.
+	reEpisodeOnly = regexp.MustCompile(`(?:^|[^\pL\pN])((` + episodeWords + `)[ ._]*(\d{1,3})|e(\d{2,3})|(\d{1,3})[ ._]*seriya)(?:$|[^\pL\pN])`)
 	// XxYY shorthand (e.g. 3x07); guarded so a resolution like 1920x1080 never
 	// matches (those numbers are far larger than a season/episode). A range
 	// ("1x01-1x02-1x03") is read by episodeChain with reSeasonXChainLink.
@@ -255,6 +278,9 @@ func parseName(path string) (nameParse, bool) {
 	if !isEpisode {
 		episode, isEpisode = absoluteEpisode(path, name, lower)
 	}
+	if !isEpisode {
+		episode, isEpisode = seasonFolderEpisode(path, lower)
+	}
 	episodeCut := -1
 	if isEpisode {
 		parsed.Class = "episode"
@@ -374,7 +400,8 @@ type episodeToken struct {
 
 // findEpisode locates the season/episode marker in the ASCII-folded name. The
 // forms are tried in order of how unambiguous they are: SxxEyy, "season X
-// episode Y", XxYY, then an air date.
+// episode Y" in any of its languages, TxxEyy, "Episode S.EE", XxYY, then an
+// air date.
 func findEpisode(lower string) (episodeToken, bool) {
 	if m := reSeasonEpisode.FindStringSubmatchIndex(lower); m != nil {
 		token := episodeToken{start: m[0], end: m[1], sequence: numericText(lower[m[2]:m[3]]), index: atoi(lower[m[4]:m[5]])}
@@ -384,7 +411,13 @@ func findEpisode(lower string) (episodeToken, bool) {
 		return token, true
 	}
 	if m := reSeasonEpisodeWords.FindStringSubmatchIndex(lower); m != nil {
-		return episodeToken{start: m[0], end: m[1], sequence: numericText(lower[m[2]:m[3]]), index: atoi(lower[m[4]:m[5]])}, true
+		sequence := numericText(lower[m[4]:m[5]])
+		return episodeToken{start: m[2], end: m[3], sequence: sequence, index: packedEpisode(lower[m[6]:m[7]], lower[m[8]:m[9]], atoi(sequence))}, true
+	}
+	for _, re := range []*regexp.Regexp{reTemporadaEpisode, reEpisodeDotted} {
+		if m := re.FindStringSubmatchIndex(lower); m != nil {
+			return episodeToken{start: m[2], end: m[3], sequence: numericText(lower[m[4]:m[5]]), index: atoi(lower[m[6]:m[7]])}, true
+		}
 	}
 	if m := reSeasonX.FindStringSubmatchIndex(lower); m != nil {
 		token := episodeToken{start: m[0], end: m[1], sequence: numericText(lower[m[2]:m[3]]), index: atoi(lower[m[4]:m[5]])}
@@ -394,6 +427,44 @@ func findEpisode(lower string) (episodeToken, bool) {
 		return token, true
 	}
 	return findAirDate(lower)
+}
+
+// packedEpisode returns the episode number digits name after an episode
+// word. "Cap" packs the season into a three-digit number ("Cap.209": season
+// 2, episode 9); when its first digit is season, the episode is the rest.
+func packedEpisode(word, digits string, season int) int {
+	if word == "cap" && len(digits) == 3 && atoi(digits[:1]) == season {
+		return atoi(digits[1:])
+	}
+	return atoi(digits)
+}
+
+// seasonFolderEpisode reads an episode number with no season of its own
+// ("Ep 14", "E10", "08 seriya") in a season folder, whose season it takes
+// (0 for "Specials"). Elsewhere a lone episode word or "E10" can be a film
+// title, so it is not read.
+func seasonFolderEpisode(path, lower string) (episodeToken, bool) {
+	season, inSeasonFolder := seasonFolderNumber(path)
+	if !inSeasonFolder {
+		return episodeToken{}, false
+	}
+	m := reEpisodeOnly.FindStringSubmatchIndex(lower)
+	if m == nil || !episodeContext(path, lower, cleanTitle(lower[:m[2]]), formBareCode) {
+		return episodeToken{}, false
+	}
+	var index int
+	switch {
+	case m[4] >= 0:
+		index = packedEpisode(lower[m[4]:m[5]], lower[m[6]:m[7]], season)
+	case m[8] >= 0:
+		index = atoi(lower[m[8]:m[9]])
+	default:
+		index = atoi(lower[m[10]:m[11]])
+	}
+	if index == 0 {
+		return episodeToken{}, false
+	}
+	return episodeToken{start: m[2], end: m[3], sequence: strconv.Itoa(season), index: index}, true
 }
 
 // bareSeasonEpisode reads a season-by-episode code with a bare "e" ("1e01")

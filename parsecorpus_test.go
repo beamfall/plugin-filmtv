@@ -648,6 +648,43 @@ func parseCorpus() []parseCase {
 			want:       sdk.ParsedMedia{Title: "The Emperor's New Groove", Class: "movie", Year: 2000},
 			resolvable: true,
 		},
+		// --- Season and episode words of other languages (CORE-2702). ---
+		{
+			name:       "french-season-episode-words",
+			path:       "/tv/Anubis/Season 01/Anubis saison 01 episode 38.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Anubis", Class: "episode", Sequence: "1", Index: 38},
+			resolvable: true,
+		},
+		{
+			name:       "spanish-packed-cap",
+			path:       "/tv/Juego de Tronos/Season 2/Juego de Tronos - Temp.2 [Cap.209].mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Juego de Tronos", Class: "episode", Sequence: "2", Index: 9},
+			resolvable: true,
+		},
+		{
+			name:       "bare-e-in-season-folder",
+			path:       "/tv/Mob Psycho 100/Season 2/Mob.Psycho.100.II.E10.720p.WEB.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Mob Psycho 100 II", Class: "episode", Sequence: "2", Index: 10},
+			resolvable: true,
+		},
+		{
+			name:       "film-named-temporada",
+			path:       "/movies/Temporada (2015).mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Temporada", Class: "movie", Year: 2015},
+			resolvable: true,
+		},
+		{
+			name: "film-named-like-a-bare-e-code",
+			path: "/downloads/E10.mkv",
+			// A bare "E10" outside a season folder is a title.
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "E10", Class: "movie"},
+			resolvable: true,
+		},
 		// Episode token BEFORE the title, outside a season folder: the xXYY
 		// match sits at index 0, so the title cut is empty and the parser
 		// refuses. Documented limitation.
