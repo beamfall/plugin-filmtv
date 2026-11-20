@@ -124,6 +124,9 @@ func TestYearPickerKeepsYearNamedTitles(t *testing.T) {
 		{"/movies/(2007) PROPER.H.264.mkv", sdk.ParsedMedia{}, false},
 		{"/movies/(2007) PROPER.REPACK.H.264-GRP.mkv", sdk.ParsedMedia{}, false},
 		{"/movies/[REC] (2007) PROPER.REPACK.1080p.mkv", sdk.ParsedMedia{Title: "[REC]", Class: "movie", Year: 2007}, true},
+		{"/movies/[REC] (2007) PROPER.1080p.REPACK.REPACK.mkv", sdk.ParsedMedia{Title: "[REC]", Class: "movie", Year: 2007}, true},
+		// A release word after the technical tags is noise there too.
+		{"/movies/(2007) Proper.H.264.Uncut.mkv", sdk.ParsedMedia{}, false},
 		{"/tv/Fringe/Season 01/[Group] (2007) PROPER.1080p.S01E01 - Pilot.mkv", sdk.ParsedMedia{Title: "Fringe", Class: "episode", Year: 2007, Sequence: "1", Index: 1}, true},
 		// Show folders read the same way: a checksum hides no year-shaped
 		// title, and a bare year before scene noise names no series.

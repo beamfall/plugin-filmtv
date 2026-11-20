@@ -7,8 +7,8 @@ brackets and release tags follow SHALL be release noise. When a bracketed title 
 year, that title stays the title. When nothing stands before the year, the name SHALL have no title
 and SHALL NOT parse. Further scene tags, a tag split in two (`H.264`) and a release group
 hyphenated onto the last tag are part of that noise; an episode marker ends it. A release
-word that can be a title, or any other word after the noise, SHALL keep the scene tag as the title,
-with or without a checksum. A show folder SHALL follow the same rule.
+word that can be a title directly after the scene tag, or any word after the noise that is not
+release noise, SHALL keep the scene tag as the title, with or without a checksum. A show folder SHALL follow the same rule.
 
 #### Scenario: Scene tag
 

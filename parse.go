@@ -1129,7 +1129,7 @@ func sceneTagNoise(lower string) bool {
 		return false
 	}
 	for i < len(words) {
-		if !endsTitle(words[i:]) {
+		if !sceneTags[words[i]] && !endsTitle(words[i:]) {
 			return false
 		}
 		if i+1 < len(words) && releaseNoise[words[i]+words[i+1]] {
