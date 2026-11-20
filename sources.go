@@ -41,10 +41,7 @@ type watchRowStreamer func(
 
 const filmTVImportPageItems = 256
 
-// dbWatchSource adapts a foreign-DB reader to sdk.Source. It carries only
-// watch-state (Plex/Emby/Jellyfin DBs record resume position + completion);
-// ratings/collections from those servers are a later JSON-export importer
-// (mediaimport.ParseOrderedLists / the rating parsers), declared separately.
+// dbWatchSource adapts a foreign-DB watch-state reader to sdk.Source.
 type dbWatchSource struct {
 	read   watchRowReader
 	stream watchRowStreamer
@@ -63,16 +60,7 @@ func (s dbWatchSource) Items(ctx context.Context) ([]sdk.ForeignItem, error) {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		items = append(items, sdk.ForeignItem{
-			Path: row.Path,
-			WatchState: sdk.WatchState{
-				Present:         true,
-				PositionSeconds: int(row.PositionSeconds),
-				DurationSeconds: int(row.DurationSeconds),
-				Watched:         row.Watched,
-				OccurredAt:      row.LastPlayed,
-			},
-		})
+		items = append(items, watchRowForeignItem(row))
 	}
 	return items, nil
 }
@@ -113,15 +101,65 @@ func watchRowForeignItem(row foreignimport.WatchRow) sdk.ForeignItem {
 	}
 }
 
-// NewPlexSource returns the Plex migration Source over a Plex library database
-// export file. Plex carries watch-state (metadata_item_settings /
-// view_offset); the resolver maps (filmtv, "plex") here.
-func NewPlexSource(dbPath string) sdk.Source { //nolint:staticcheck // deliberate SDK 0.x compatibility path for pre-streaming consumers
-	return dbWatchSource{
-		read:   foreignimport.ReadPlexContext,
-		stream: streamPlexWatchRows,
-		dbPath: dbPath,
+type plexSource struct{ dbWatchSource }
+
+func (plexSource) Categories() []string {
+	return []string{sdk.CategoryWatchState, sdk.CategoryRatings, sdk.CategoryCollections}
+}
+
+// ItemsBySourceUser supplies Core with account-specific playback state and ratings.
+// Library-wide collection memberships are available under each source-user key.
+func (s plexSource) ItemsBySourceUser(ctx context.Context) (map[string][]sdk.ForeignItem, error) {
+	accounts, memberships, err := foreignimport.ReadPlexByAccount(ctx, s.dbPath)
+	if err != nil {
+		return nil, err
 	}
+	collectionItems := make([]sdk.ForeignItem, 0, len(memberships))
+	for _, member := range memberships {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		collectionItems = append(collectionItems, sdk.ForeignItem{
+			Path: member.Path,
+			CollectionMember: sdk.CollectionMember{
+				Present:  true,
+				Name:     member.Name,
+				Position: member.Position,
+			},
+		})
+	}
+	byUser := make(map[string][]sdk.ForeignItem, len(accounts))
+	for account, rows := range accounts {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		items := make([]sdk.ForeignItem, 0, len(rows)+len(collectionItems))
+		for _, row := range rows {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+			item := sdk.ForeignItem{Path: row.Path}
+			if row.HasWatchState {
+				item = watchRowForeignItem(row.WatchRow)
+			}
+			if row.Rating != nil {
+				item.Rating = sdk.Rating{Present: true, Value: *row.Rating, Scale: 10}
+			}
+			items = append(items, item)
+		}
+		byUser[account] = append(items, collectionItems...)
+	}
+	return byUser, nil
+}
+
+// NewPlexSource returns the Plex migration Source over a Plex library database
+// export file. Items and Stream provide the legacy watch-state path.
+func NewPlexSource(dbPath string) sdk.Source { //nolint:staticcheck // deliberate SDK 0.x compatibility path for pre-streaming consumers
+	return plexSource{dbWatchSource: dbWatchSource{
+		read:   foreignimport.ReadPlexContext,
+		stream: foreignimport.StreamPlexWatchRows,
+		dbPath: dbPath,
+	}}
 }
 
 // NewEmbySource returns the Emby migration Source over an Emby `library.db`.
@@ -147,61 +185,6 @@ func NewJellyfinSource(dbPath string) sdk.Source { //nolint:staticcheck // delib
 		},
 		dbPath: dbPath,
 	}
-}
-
-func streamPlexWatchRows(
-	ctx context.Context,
-	path string,
-	visit func(foreignimport.WatchRow) error,
-) error {
-	db, err := openFilmTVReadOnly(path)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = db.Close() }()
-	rows, err := db.QueryContext(ctx, `
-		SELECT mp.file,
-		       COALESCE(mis.view_offset, 0),
-		       COALESCE(mis.view_count, 0),
-		       COALESCE(mis.last_viewed_at, 0),
-		       COALESCE(mi.duration, 0)
-		FROM media_parts mp
-		JOIN media_items mi ON mi.id = mp.media_item_id
-		JOIN metadata_items md ON md.id = mi.metadata_item_id
-		LEFT JOIN metadata_item_settings mis ON mis.guid = md.guid
-		WHERE mp.file IS NOT NULL AND mp.file <> ''
-		  AND (COALESCE(mis.view_offset, 0) > 0 OR COALESCE(mis.view_count, 0) > 0)
-		ORDER BY mp.file`)
-	if err != nil {
-		return fmt.Errorf("query plex watch-state: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-	for rows.Next() {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		var file string
-		var offsetMS, viewCount, lastViewedAt, durationMS int64
-		if err := rows.Scan(&file, &offsetMS, &viewCount, &lastViewedAt, &durationMS); err != nil {
-			return fmt.Errorf("scan plex row: %w", err)
-		}
-		row := foreignimport.WatchRow{
-			Path:            file,
-			Watched:         viewCount > 0,
-			PositionSeconds: offsetMS / 1000,
-			DurationSeconds: durationMS / 1000,
-		}
-		if lastViewedAt > 0 {
-			row.LastPlayed = time.Unix(lastViewedAt, 0).UTC()
-		}
-		if err := visit(row); err != nil {
-			return err
-		}
-	}
-	if err := rows.Err(); err != nil {
-		return fmt.Errorf("iterate plex rows: %w", err)
-	}
-	return nil
 }
 
 func streamEmbyWatchRows(

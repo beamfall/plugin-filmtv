@@ -1,10 +1,10 @@
-// Package foreignimport reads watch-state, keyed by file path, from a
+// Package foreignimport reads migration records, keyed by file path, from a
 // predecessor media server's own SQLite database (Plex / Emby / Jellyfin) for
 // the Migration Wizard. It is the Film & TV plugin's
 // private SQLite reader: the plugin owns its modernc.org/sqlite dependency
 // rather than forcing it onto every plugin through the SDK.
 //
-// It returns neutral, path-keyed WatchRows; it imports no plugin-sdk, parse, or
+// It returns neutral, path-keyed rows; it imports no plugin-sdk, parse, or
 // mediaimport code (a leaf). The Film & TV import sources map these rows onto
 // sdk.ForeignItem — the foreign-server-name vocabulary lives here and in the
 // plugin's ImporterSpec, never in core or in the SDK.
@@ -87,18 +87,29 @@ func escapeSQLiteURIPath(path string) string {
 // one row per file path — each matches independently in Beamfall's chain
 // (Plex stores view state in metadata_item_settings/view_offset).
 //
-// Plex's metadata_item_settings watch-state is server-global, not per-Plex-user
-// — the importer maps it to the operator's chosen Beamfall Profile; per-user
-// Plex history is not imported yet.
+// This compatibility reader returns watch rows without grouping by account.
 func ReadPlex(path string) ([]WatchRow, error) {
 	return ReadPlexContext(context.Background(), path)
 }
 
 // ReadPlexContext is ReadPlex with cancellation propagated to SQLite.
 func ReadPlexContext(ctx context.Context, path string) ([]WatchRow, error) {
-	db, err := openReadOnly(path)
+	var out []WatchRow
+	err := StreamPlexWatchRows(ctx, path, func(row WatchRow) error {
+		out = append(out, row)
+		return nil
+	})
 	if err != nil {
 		return nil, err
+	}
+	return out, nil
+}
+
+// StreamPlexWatchRows visits the compatibility watch rows in file path order.
+func StreamPlexWatchRows(ctx context.Context, path string, visit func(WatchRow) error) error {
+	db, err := openReadOnly(path)
+	if err != nil {
+		return err
 	}
 	defer func() { _ = db.Close() }()
 
@@ -113,46 +124,160 @@ func ReadPlexContext(ctx context.Context, path string) ([]WatchRow, error) {
 		JOIN metadata_items md ON md.id = mi.metadata_item_id
 		LEFT JOIN metadata_item_settings mis ON mis.guid = md.guid
 		WHERE mp.file IS NOT NULL AND mp.file <> ''
-		  AND (COALESCE(mis.view_offset, 0) > 0 OR COALESCE(mis.view_count, 0) > 0)`)
+		  AND (COALESCE(mis.view_offset, 0) > 0 OR COALESCE(mis.view_count, 0) > 0)
+		ORDER BY mp.file COLLATE BINARY`)
 	if err != nil {
-		return nil, fmt.Errorf("query plex watch-state: %w", err)
+		return fmt.Errorf("query plex watch-state: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
-	var out []WatchRow
 	for rows.Next() {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		var (
 			file                string
 			offsetMS, viewCount int64
 			lastViewedAt, durMS int64
 		)
 		if err := rows.Scan(&file, &offsetMS, &viewCount, &lastViewedAt, &durMS); err != nil {
-			return nil, fmt.Errorf("scan plex row: %w", err)
+			return fmt.Errorf("scan plex row: %w", err)
 		}
-		row := WatchRow{
-			Path:            file,
-			Watched:         viewCount > 0,
-			PositionSeconds: offsetMS / 1000,
-			DurationSeconds: durMS / 1000,
+		if err := visit(plexWatchRow(file, offsetMS, viewCount, lastViewedAt, durMS)); err != nil {
+			return err
 		}
-		if lastViewedAt > 0 {
-			row.LastPlayed = time.Unix(lastViewedAt, 0).UTC()
-		}
-		out = append(out, row)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate plex rows: %w", err)
+		return fmt.Errorf("iterate plex rows: %w", err)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
-	return out, nil
+	return nil
+}
+
+func plexWatchRow(file string, offsetMS, viewCount, lastViewedAt, durationMS int64) WatchRow {
+	row := WatchRow{
+		Path:            file,
+		Watched:         viewCount > 0,
+		PositionSeconds: offsetMS / 1000,
+		DurationSeconds: durationMS / 1000,
+	}
+	if lastViewedAt > 0 {
+		row.LastPlayed = time.Unix(lastViewedAt, 0).UTC()
+	}
+	return row
+}
+
+// PlexAccountItem holds one account's settings for a file. A nil Rating means unrated.
+type PlexAccountItem struct {
+	WatchRow
+	HasWatchState bool
+	Rating        *float64
+}
+
+// PlexCollectionMember is a file's position in a library-wide collection.
+type PlexCollectionMember struct {
+	Path     string
+	Name     string
+	Position int
+}
+
+// ReadPlexByAccount returns account settings keyed by source-user ID and the
+// collections shared by those accounts. Accounts with no settings are included.
+func ReadPlexByAccount(ctx context.Context, path string) (map[string][]PlexAccountItem, []PlexCollectionMember, error) {
+	db, err := openReadOnly(path)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer func() { _ = db.Close() }()
+	accounts, err := readPlexAccountItems(ctx, db)
+	if err != nil {
+		return nil, nil, err
+	}
+	collections, err := readPlexCollectionMembers(ctx, db)
+	if err != nil {
+		return nil, nil, err
+	}
+	return accounts, collections, nil
+}
+
+func readPlexAccountItems(ctx context.Context, db *sql.DB) (map[string][]PlexAccountItem, error) {
+	rows, err := db.QueryContext(ctx, `
+		WITH account_files AS (
+			SELECT mis.account_id, mp.file, mis.view_offset, mis.view_count,
+			       mis.last_viewed_at, mi.duration, mis.rating
+			FROM metadata_item_settings mis
+			JOIN metadata_items md ON md.guid = mis.guid
+			JOIN media_items mi ON mi.metadata_item_id = md.id
+			JOIN media_parts mp ON mp.media_item_id = mi.id
+			WHERE mp.file <> ''
+			  AND (mis.view_offset > 0 OR mis.view_count > 0 OR mis.rating IS NOT NULL)
+		)
+		SELECT COALESCE(a.name, '') || '#' || a.id, COALESCE(f.file, ''),
+		       COALESCE(f.view_offset, 0), COALESCE(f.view_count, 0),
+		       COALESCE(f.last_viewed_at, 0), COALESCE(f.duration, 0), f.rating
+		FROM accounts a
+		LEFT JOIN account_files f ON f.account_id = a.id
+		ORDER BY a.id, f.file COLLATE BINARY`)
+	if err != nil {
+		return nil, fmt.Errorf("query plex account settings: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	accounts := make(map[string][]PlexAccountItem)
+	for rows.Next() {
+		var account, file string
+		var offsetMS, viewCount, lastViewedAt, durationMS int64
+		var rating *float64
+		if err := rows.Scan(&account, &file, &offsetMS, &viewCount, &lastViewedAt, &durationMS, &rating); err != nil {
+			return nil, fmt.Errorf("scan plex account settings: %w", err)
+		}
+		if file == "" {
+			accounts[account] = nil
+			continue
+		}
+		accounts[account] = append(accounts[account], PlexAccountItem{
+			WatchRow:      plexWatchRow(file, offsetMS, viewCount, lastViewedAt, durationMS),
+			HasWatchState: offsetMS > 0 || viewCount > 0,
+			Rating:        rating,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate plex account settings: %w", err)
+	}
+	return accounts, nil
+}
+
+func readPlexCollectionMembers(ctx context.Context, db *sql.DB) ([]PlexCollectionMember, error) {
+	rows, err := db.QueryContext(ctx, `
+		SELECT mp.file, tags.tag, COALESCE(taggings."index", 0)
+		FROM tags
+		JOIN taggings ON taggings.tag_id = tags.id
+		JOIN metadata_items md ON md.id = taggings.metadata_item_id
+		JOIN media_items mi ON mi.metadata_item_id = md.id
+		JOIN media_parts mp ON mp.media_item_id = mi.id
+		WHERE tags.tag_type = 2 AND tags.tag <> '' AND mp.file <> ''
+		ORDER BY mp.file COLLATE BINARY, tags.id, taggings."index"`)
+	if err != nil {
+		return nil, fmt.Errorf("query plex collections: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var members []PlexCollectionMember
+	for rows.Next() {
+		var member PlexCollectionMember
+		if err := rows.Scan(&member.Path, &member.Name, &member.Position); err != nil {
+			return nil, fmt.Errorf("scan plex collection membership: %w", err)
+		}
+		members = append(members, member)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate plex collection memberships: %w", err)
+	}
+	return members, nil
 }
 
 // ReadJellyfin reads watch-state keyed by file path from a Jellyfin
 // `library.db`. Jellyfin keeps the file path on `TypedBaseItems.Path` and per-
 // user playback state on `UserDatas` (`PlaybackPositionTicks`, `Played`,
 // `LastPlayedDate`) joined on `UserDataKey`. The importer reads the
-// aggregate (any user's) state and maps it to the operator's Profile, matching
-// the Plex behaviour; per-user selection is not supported yet.
+// aggregate (any user's) state and maps it to the operator's Profile.
 func ReadJellyfin(path string) ([]WatchRow, error) {
 	return ReadJellyfinContext(context.Background(), path)
 }
