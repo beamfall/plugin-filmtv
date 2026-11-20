@@ -152,6 +152,11 @@ type providerIDTag struct {
 // query and the scorer's input.
 const EpisodeTitleField = "episode-title"
 
+// AlternateTitleField is the plugin-declared Media field that carries the
+// second title of a dual-titled name ("Голубая волна | Blue Crush"): the title
+// in another script, kept beside the Latin one ParsedMedia.Title searches by.
+const AlternateTitleField = "alternate-title"
+
 // AirDateField is the declared date Media field that carries an episode's air
 // date. The parser fills it for a dated episode ("Show 2023-03-01.mkv");
 // identification fills it from the provider.
@@ -219,10 +224,17 @@ func (p *Parser) ParseWithContext(path string, probe sdk.ParseProbe, _ sdk.Parse
 // field. It reads the path only, so it agrees with Parse on what is an episode.
 func (p *Parser) ParseMediaFields(path string, _ sdk.ParseProbe) []sdk.ParsedTextField {
 	name, ok := parseName(path)
-	if !ok || name.parsed.Class != "episode" || name.episodeTitle == "" {
+	if !ok {
 		return nil
 	}
-	return []sdk.ParsedTextField{{Name: EpisodeTitleField, Text: name.episodeTitle}}
+	var fields []sdk.ParsedTextField
+	if name.parsed.Class == "episode" && name.episodeTitle != "" {
+		fields = append(fields, sdk.ParsedTextField{Name: EpisodeTitleField, Text: name.episodeTitle})
+	}
+	if name.alternateTitle != "" {
+		fields = append(fields, sdk.ParsedTextField{Name: AlternateTitleField, Text: name.alternateTitle})
+	}
+	return fields
 }
 
 // ParseTypedMediaFields implements sdk.TypedMediaFieldParser, which Core
@@ -230,26 +242,31 @@ func (p *Parser) ParseMediaFields(path string, _ sdk.ParseProbe) []sdk.ParsedTex
 // dated episode, its air date as the AirDateField date.
 func (p *Parser) ParseTypedMediaFields(path string, _ sdk.ParseProbe) []sdk.ParsedField {
 	name, ok := parseName(path)
-	if !ok || name.parsed.Class != "episode" {
+	if !ok {
 		return nil
 	}
 	var fields []sdk.ParsedField
-	if name.episodeTitle != "" {
+	if name.parsed.Class == "episode" && name.episodeTitle != "" {
 		fields = append(fields, sdk.ParsedField{Name: EpisodeTitleField, Text: name.episodeTitle})
 	}
-	if !name.airDate.IsZero() {
+	if name.parsed.Class == "episode" && !name.airDate.IsZero() {
 		fields = append(fields, sdk.ParsedField{Name: AirDateField, Date: name.airDate})
+	}
+	if name.alternateTitle != "" {
+		fields = append(fields, sdk.ParsedField{Name: AlternateTitleField, Text: name.alternateTitle})
 	}
 	return fields
 }
 
 // nameParse is the path-only parse of one file name: the parsed fields
-// (without provider hints) and, for an episode, its own title when the name
-// carries one and its air date when it is a dated episode.
+// (without provider hints), the alternate title of a dual-titled name and,
+// for an episode, its own title when the name carries one and its air date
+// when it is a dated episode.
 type nameParse struct {
-	parsed       sdk.ParsedMedia
-	episodeTitle string
-	airDate      time.Time
+	parsed         sdk.ParsedMedia
+	alternateTitle string
+	episodeTitle   string
+	airDate        time.Time
 }
 
 // imageExtensions are the artwork files a library keeps beside its media
@@ -412,14 +429,78 @@ func parseName(path string) (nameParse, bool) {
 	if parsed.Title == "" {
 		return nameParse{}, false
 	}
+	var alternate string
+	parsed.Title, alternate = splitAlternateTitle(parsed.Title)
 	if !isEpisode {
-		return nameParse{parsed: parsed}, true
+		return nameParse{parsed: parsed, alternateTitle: alternate}, true
 	}
 	return nameParse{
-		parsed:       parsed,
-		episodeTitle: episodeTitle(name[episode.end:], lower[episode.end:]),
-		airDate:      episode.airDate,
+		parsed:         parsed,
+		alternateTitle: alternate,
+		episodeTitle:   episodeTitle(name[episode.end:], lower[episode.end:]),
+		airDate:        episode.airDate,
 	}, true
+}
+
+// alternateTitleBars separate the two titles of a dual-titled name. A file
+// name cannot hold "/", so the slash of "Голубая волна / Blue Crush" is
+// written on disk as a bar or a full-width slash or bar.
+const alternateTitleBars = "|／｜"
+
+// splitAlternateTitle splits a dual-titled name into the title to search by
+// and the alternate title (CORE-2703): when title is two titles, one only in
+// Latin script and the other with letters of another script, split by one
+// alternateTitleBars rune or with one in parentheses at the end of the other,
+// the Latin one is the title. Any other title stays whole, with no alternate.
+func splitAlternateTitle(title string) (string, string) {
+	if i := strings.IndexAny(title, alternateTitleBars); i >= 0 {
+		_, size := utf8.DecodeRuneInString(title[i:])
+		return latinTitleFirst(title, cleanTitle(title[:i]), cleanTitle(title[i+size:]))
+	}
+	if inner, ok := strings.CutSuffix(title, ")"); ok {
+		if open := strings.LastIndexByte(inner, '('); open > 0 {
+			return latinTitleFirst(title, cleanTitle(inner[:open]), cleanTitle(inner[open+1:]))
+		}
+	}
+	return title, ""
+}
+
+// latinTitleFirst returns the Latin one of the two titles a and b and the
+// other, or title whole when they are not one Latin title and one title in
+// another script. A part that still holds a bar or a parenthesis is not one
+// title, so title stays whole.
+func latinTitleFirst(title, a, b string) (string, string) {
+	if strings.ContainsAny(a+b, alternateTitleBars+"()") {
+		return title, ""
+	}
+	switch {
+	case latinOnly(a) && hasOtherScript(b):
+		return a, b
+	case latinOnly(b) && hasOtherScript(a):
+		return b, a
+	}
+	return title, ""
+}
+
+// latinOnly reports whether s has letters and every one is Latin script.
+func latinOnly(s string) bool {
+	letters := false
+	for _, r := range s {
+		if unicode.IsLetter(r) {
+			if !unicode.Is(unicode.Latin, r) {
+				return false
+			}
+			letters = true
+		}
+	}
+	return letters
+}
+
+// hasOtherScript reports whether s has a letter that is not Latin script.
+func hasOtherScript(s string) bool {
+	return strings.ContainsFunc(s, func(r rune) bool {
+		return unicode.IsLetter(r) && !unicode.Is(unicode.Latin, r)
+	})
 }
 
 // episodeToken is one recognised season/episode marker: its byte span in the

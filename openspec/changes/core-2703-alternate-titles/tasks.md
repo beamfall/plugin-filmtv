@@ -6,7 +6,7 @@
 ## 2. Prove
 
 - [ ] 2.1 Corpus cases for each form, both-Latin and non-Latin-only controls, and the field
-- [ ] 2.2 `openspec validate --all --strict` passes
+- [x] 2.2 `openspec validate --all --strict` passes
 - [ ] 2.3 `script/gate.sh` passes on the lane head
 
 ## 3. Close

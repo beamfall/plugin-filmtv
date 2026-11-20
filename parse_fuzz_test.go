@@ -67,6 +67,8 @@ func FuzzParseFilename(f *testing.F) {
 		"Media/TV/Movies/Bond - 007.mkv",
 		"TV/Show/Season 2/Show 1e01.mkv",
 		"Show/season01-banner.jpg",
+		"Голубая волна | Blue Crush (2002) DVDRip.mkv",
+		"千と千尋の神隠し (Spirited Away) 2001.mkv",
 		"",
 	} {
 		f.Add(seed)
@@ -108,11 +110,16 @@ func FuzzParseFilename(f *testing.F) {
 			t.Fatalf("Parse(%q) returned an index end that is not after the index: %+v", path, got)
 		}
 		for _, field := range fields {
-			if got.Class != "episode" || len(fields) != 1 || field.Name != EpisodeTitleField {
+			if field.Name == AlternateTitleField {
+				// The searched title of a dual-titled name is the Latin one.
+				if !latinOnly(got.Title) || !hasOtherScript(field.Text) {
+					t.Fatalf("Parse(%q) = %q with alternate title %q", path, got.Title, field.Text)
+				}
+			} else if got.Class != "episode" || field.Name != EpisodeTitleField {
 				t.Fatalf("ParseMediaFields(%q) = %+v for class %q", path, fields, got.Class)
 			}
 			if field.Text == "" || field.Text != cleanTitle(field.Text) {
-				t.Fatalf("ParseMediaFields(%q) returned an unclean episode title %q", path, field.Text)
+				t.Fatalf("ParseMediaFields(%q) returned an unclean field %+v", path, field)
 			}
 		}
 		// A file under a TV library folder that is no episode keeps no class:
@@ -128,6 +135,7 @@ func FuzzParseFilename(f *testing.F) {
 		dated := false
 		for _, field := range typed {
 			switch {
+			case field.Name == AlternateTitleField && field.Date.IsZero() && field.Text != "" && field.Text == cleanTitle(field.Text):
 			case got.Class != "episode":
 				t.Fatalf("ParseTypedMediaFields(%q) = %+v for class %q", path, typed, got.Class)
 			case field.Name == AirDateField && !field.Date.IsZero() && field.Text == "":

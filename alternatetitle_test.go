@@ -1,0 +1,88 @@
+package filmtv_test
+
+import (
+	"reflect"
+	"testing"
+
+	sdk "github.com/beamfall/plugin-sdk"
+
+	filmtv "github.com/beamfall/plugin-filmtv"
+)
+
+// TestAlternateTitle pins dual-titled names (CORE-2703): a Latin title and a
+// title in another script, split by a bar or a full-width slash or bar, or
+// with one in parentheses at the end of the other, parse to the Latin title,
+// and the other is the AlternateTitleField Media field. Any other title stays
+// whole, with no alternate title.
+func TestAlternateTitle(t *testing.T) {
+	parser := filmtv.New()
+	movie := func(title string, year int) sdk.ParsedMedia {
+		return sdk.ParsedMedia{Title: title, Class: "movie", Year: year}
+	}
+	cases := []struct {
+		name      string
+		path      string
+		want      sdk.ParsedMedia
+		alternate string
+	}{
+		{"bar", "/movies/Голубая волна | Blue Crush (2002) DVDRip.mkv", movie("Blue Crush", 2002), "Голубая волна"},
+		{"dotted-bar", "/movies/Голубая.волна.|.Blue.Crush.2002.DVDRip.mkv", movie("Blue Crush", 2002), "Голубая волна"},
+		{"full-width-slash", "/movies/Голубая волна ／ Blue Crush (2002).mkv", movie("Blue Crush", 2002), "Голубая волна"},
+		{"full-width-bar", "/movies/Мост｜Bridge 2010.mkv", movie("Bridge", 2010), "Мост"},
+		{"latin-first", "/movies/Blue Crush | Голубая волна (2002).mkv", movie("Blue Crush", 2002), "Голубая волна"},
+		{"latin-in-parentheses", "/movies/О мышах и людях (Of Mice and Men) 1992.mkv", movie("Of Mice and Men", 1992), "О мышах и людях"},
+		{"japanese-then-latin", "/movies/千と千尋の神隠し (Spirited Away) 2001.mkv", movie("Spirited Away", 2001), "千と千尋の神隠し"},
+		{"native-in-parentheses", "/movies/Spirited Away (千と千尋の神隠し) 2001.mkv", movie("Spirited Away", 2001), "千と千尋の神隠し"},
+		{"accented-latin", "/movies/Амели | Le Fabuleux Destin d'Amélie Poulain (2001).mkv", movie("Le Fabuleux Destin d'Amélie Poulain", 2001), "Амели"},
+		{
+			"episode-series", "/tv/Сериал | The Show S01E02 - Pilot.mkv",
+			sdk.ParsedMedia{Title: "The Show", Class: "episode", Sequence: "1", Index: 2}, "Сериал",
+		},
+		// Controls: no Latin title, two Latin titles, or not two titles.
+		{"non-latin-only", "/movies/Жихарка (2007).mkv", movie("Жихарка", 2007), ""},
+		{"non-latin-in-parentheses", "/movies/Ёжик в тумане (Ёжик) 1975.mkv", movie("Ёжик в тумане (Ёжик)", 1975), ""},
+		{"both-latin-parentheses", "/movies/Star Wars (Special Edition) 1977.mkv", movie("Star Wars (Special Edition)", 1977), ""},
+		{"both-latin-bar", "/movies/Face|Off (1997).mkv", movie("Face|Off", 1997), ""},
+		{"digits-in-parentheses", "/movies/Жихарка (2).mkv", movie("Жихарка (2)", 0), ""},
+		{"nested-parentheses", "/movies/Наруто (ТВ) (Naruto) 2002.mkv", movie("Наруто (ТВ) (Naruto)", 2002), ""},
+		{"three-titles", "/movies/Мост | Bridge | Brücke 2010.mkv", movie("Мост | Bridge | Brücke", 2010), ""},
+		{"empty-side", "/movies/| Blue Crush (2002).mkv", movie("| Blue Crush", 2002), ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := parser.Parse(tc.path, sdk.ParseProbe{})
+			if !ok || !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("Parse(%q) = %+v, %v; want %+v", tc.path, got, ok, tc.want)
+			}
+			var alternate string
+			for _, field := range parser.ParseMediaFields(tc.path, sdk.ParseProbe{}) {
+				if field.Name == filmtv.AlternateTitleField {
+					alternate = field.Text
+				}
+			}
+			var typed string
+			for _, field := range parser.ParseTypedMediaFields(tc.path, sdk.ParseProbe{}) {
+				if field.Name == filmtv.AlternateTitleField {
+					typed = field.Text
+				}
+			}
+			if alternate != tc.alternate || typed != tc.alternate {
+				t.Errorf("alternate title of %q = %q (typed %q), want %q", tc.path, alternate, typed, tc.alternate)
+			}
+		})
+	}
+}
+
+// TestAlternateTitleFieldDeclared pins that the alternate title is a declared,
+// searchable text Media field: Core persists only declared Media fields.
+func TestAlternateTitleFieldDeclared(t *testing.T) {
+	for _, field := range filmtv.Bundle().MediaFields {
+		if field.Name == filmtv.AlternateTitleField {
+			if field.Type != "text" || !field.Searchable {
+				t.Fatalf("%s is declared as %+v, want searchable text", filmtv.AlternateTitleField, field)
+			}
+			return
+		}
+	}
+	t.Fatalf("bundle declares no %s Media field", filmtv.AlternateTitleField)
+}

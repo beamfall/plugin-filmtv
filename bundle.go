@@ -110,6 +110,11 @@ func Bundle() sdk.Bundle {
 			// episode code and this name.
 			{Name: EpisodeTitleField, Type: "text", Searchable: true,
 				Label: sdk.LocaleString{"en": "Episode Title", "fr": "Titre de l'épisode"}},
+			// The other title of a dual-titled name ("Голубая волна | Blue
+			// Crush"), read from the filename by the parser: the parsed title
+			// is the Latin one, so library search still finds the native one.
+			{Name: AlternateTitleField, Type: "text", Searchable: true,
+				Label: sdk.LocaleString{"en": "Alternate Title", "fr": "Titre alternatif"}},
 			// Set by Core's hydration seam once a file's local show and
 			// season containers are written (local.go).
 			{Name: HydratedField, Type: "flag",
