@@ -19,3 +19,17 @@ The Plex source SHALL advertise watch-state, ratings and collections. It SHALL e
 - **WHEN** the file has two collection taggings
 - **THEN** the source emits a membership for each collection with its own position
 - **AND** a tagging of another type does not create a collection membership
+
+### Requirement: Plex category selection
+
+The scoped Plex source SHALL limit imported items to the selected categories. Its compatibility item reader and stream SHALL emit watch state only when watch state is selected. The per-account reader SHALL emit items in the selected categories.
+
+#### Scenario: The caller supplies a nil selection
+
+- **WHEN** the scoped Plex source is constructed with a nil category selection
+- **THEN** the source selects watch state by default
+
+#### Scenario: The caller explicitly selects no categories
+
+- **WHEN** the scoped Plex source is constructed with a non-nil empty category selection
+- **THEN** the source selects no categories and emits no items through any reader
