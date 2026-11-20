@@ -25,10 +25,12 @@ Three kinds of release text stay in a film's title and spoil the provider search
   `VFQ`, `VF2`, `SweSub`) are release noise. `NORDiC`, `iTA`, `ENG` and `IMAX` end a title as
   `EXTENDED` does. `DC` is noise only right after an edition word (`Unrated.DC`), since it is also
   a title word (`Washington DC`); `FRENCH` and `GERMAN` stay title words (`The Good German`).
-- A run is kept when dropping it would leave the title ending in a joining mark
-  (`Bigger, Longer & Uncut (1999)`, `Пленка | Uncut (1997)`).
-- A leading `www.site.tld - ` is dropped before parsing. A bracketed `[www.site.tld]` is dropped
-  from a film title only, so it still marks a fansub episode as any leading group does.
+- Edition and language words are kept when dropping them would leave the title ending in a
+  joining mark (`Bigger, Longer & Uncut [1080p] (1999)`, `Пленка | Uncut (1997)`); the tags after
+  them are still dropped.
+- A leading `www.site.tld - `, `[www.site.tld]` or `(www.site.tld)` is dropped before parsing. A
+  bracketed one still marks a fansub episode as any leading group does
+  (`[www.site.org] Naruto - 001`).
 
 ## Impact
 

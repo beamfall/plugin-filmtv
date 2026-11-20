@@ -28,8 +28,8 @@ SHALL treat `DC` as noise only right after an edition word.
 
 ### Requirement: A leading site name is not title text
 
-The parser SHALL drop a leading `www.` site name followed by a spaced hyphen before reading the
-name, and a leading bracketed `www.` site name from a film title.
+The parser SHALL drop a leading `www.` site name, bracketed or followed by a spaced hyphen, before
+reading the title, and SHALL read a bracketed one as a release-group bracket for a fansub episode.
 
 #### Scenario: Site prefix
 
