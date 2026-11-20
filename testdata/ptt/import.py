@@ -106,9 +106,11 @@ def evidence(source, row):
 def is_library_file(name, fields, seen):
     if any(fields.get(k) or seen.get(k) for k in FLAGS):
         return False
-    seasons, episodes = fields.get("seasons", seen.get("seasons")), fields.get("episodes")
-    if seasons is not None and len(seasons) > 1:
+    # Graded and evidence season lists are read apart: either can show a pack.
+    lists = [s for s in (fields.get("seasons"), seen.get("seasons")) if s is not None]
+    if any(len(s) > 1 for s in lists):
         return False
+    seasons, episodes = any(lists), fields.get("episodes")
     if episodes is not None and (len(episodes) > 3 or seasons and not episodes):
         return False
     return not (seasons and episodes is None and not name.lower().endswith(VIDEO))
