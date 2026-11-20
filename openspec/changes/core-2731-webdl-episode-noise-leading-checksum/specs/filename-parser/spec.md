@@ -25,7 +25,7 @@ end of a title, not a tag followed by a hyphenated release group.
 When only release noise (scene tags, release tags, checksums) stands between a bare leading
 parenthesized year and an episode marker, the episode SHALL have no series name of its own and
 SHALL take it from the show folder. A release word that can be a title (`ReMastered`) SHALL stay
-the series name.
+the series name, and a title word among the noise (`[1080p] Fringe`) SHALL keep its series name.
 
 #### Scenario: Scene noise before an episode marker
 
@@ -42,11 +42,17 @@ the series name.
 - **WHEN** a file is `/tv/Fringe/Season 01/(2007) ReMastered.S01E01.mkv`
 - **THEN** it parses to title `ReMastered`, year 2007, class `episode`, season 1, episode 1
 
+#### Scenario: Series name after a bracketed tag
+
+- **WHEN** a file is `/downloads/(2007) [1080p] Fringe S01E01.mkv`
+- **THEN** it parses to title `Fringe`, year 2007, class `episode`, season 1, episode 1
+
 ### Requirement: A leading checksum is not a release group
 
-Checksum brackets alone at the start of a name SHALL NOT be release-group brackets or title words:
-a year-named title after them SHALL be the title, not the year, and they SHALL NOT end the title.
-They SHALL still count as episode context.
+Checksum brackets that open a name, up to its first other bracket or word, SHALL NOT be
+release-group brackets or title words: a year-named title after them SHALL be the title, not the
+year, and they SHALL NOT end the title. They SHALL still count as episode context. A checksum right
+after a leading year SHALL NOT end the title either, unless a release group is hyphenated onto it.
 
 #### Scenario: Leading checksum before a year-named title
 
@@ -62,6 +68,21 @@ They SHALL still count as episode context.
 
 - **WHEN** a file is `/downloads/[DEADBEEF] Naruto - 001.mkv`
 - **THEN** it parses to title `Naruto`, class `episode`, episode 1, absolute episode 1
+
+#### Scenario: Leading checksum before a bracketed title
+
+- **WHEN** a file is `/movies/[DEADBEEF] [REC] 2.mkv`
+- **THEN** it parses to title `[REC] 2`
+
+#### Scenario: Checksum after a leading year
+
+- **WHEN** a file is `/movies/(2007) [DEADBEEF] Zodiac.mkv`
+- **THEN** it parses to title `Zodiac`, year 2007
+
+#### Scenario: Release group hyphenated onto a checksum after a leading year
+
+- **WHEN** a file is `/movies/(2007) [DEADBEEF]-YIFY.mkv`
+- **THEN** it does not parse
 
 #### Scenario: Leading release group before a bare year
 

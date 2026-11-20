@@ -90,6 +90,9 @@ var (
 	// Release-group brackets in front of a series name ("[Group] Show - S01E01"),
 	// adjacent or separated ("[Fansub].[Group]").
 	reLeadingGroups = regexp.MustCompile(`^(?:[\s._-]*\[[^\]]*\])+`)
+	// reLeadingChecksums matches the checksum brackets that open a name, up to
+	// its first other bracket or word.
+	reLeadingChecksums = regexp.MustCompile(`(?i)^(?:[\s._-]*\[[0-9a-f]{8}\])+`)
 	// A video resolution token: 480p, 1080i, 2160p.
 	reResolution = regexp.MustCompile(`^\d{3,4}[pi]$`)
 	// A 4-digit year, optionally parenthesized; range-guarded to 1900–2099 in
@@ -273,9 +276,10 @@ func parseName(path string) (nameParse, bool) {
 		switch {
 		case year.leading:
 			titleStart = year.end
-			if isEpisode && onlyNoiseAfter(name, lower, year.end, cut) || !isEpisode && sceneTagNoise(lower[year.end:]) {
+			if isEpisode && episodeNoiseOnly(lower, year.end, cut) || !isEpisode && sceneTagNoise(lower[year.end:]) {
 				// "(2007) PROPER.[DEADBEEF]" has no title, and "(2007)
-				// PROPER.1080p.S01E01" no series name of its own.
+				// PROPER.1080p.S01E01" no series name of its own; "(2007)
+				// [1080p] Fringe S01E01" names Fringe.
 				cut = year.end
 			}
 		case year.start < cut:
@@ -296,7 +300,7 @@ func parseName(path string) (nameParse, bool) {
 			cut = titleStart + noiseStart
 		}
 		if checksum := reChecksum.FindStringIndex(lower[titleStart:cut]); checksum != nil {
-			cut = titleStart + checksum[0]
+			cut = titleStart + checksumCut(lower[titleStart:cut], checksum)
 		}
 	}
 	titleStart = min(titleStart, cut)
@@ -1152,16 +1156,51 @@ func opensWithSceneTag(lower string) bool {
 	return len(words) > 0 && sceneTags[rest[words[0][0]:words[0][1]]]
 }
 
-// blankLeadingChecksums blanks the release-group brackets that lead name
-// when they are only checksums, keeping its width: a checksum is neither a
-// release group nor the title, so "[DEADBEEF] 1923" is the film 1923 and
-// "[DEADBEEF] Naruto - 001" an episode of Naruto.
+// blankLeadingChecksums blanks the checksum brackets that open name, keeping
+// its width: a checksum is neither a release group nor the title, so
+// "[DEADBEEF] 1923" is the film 1923, "[DEADBEEF] [REC] 2" the film [REC] 2
+// and "[DEADBEEF] Naruto - 001" an episode of Naruto.
 func blankLeadingChecksums(name string) string {
-	groups := reLeadingGroups.FindString(name)
-	if groups == "" || !onlySeparators(reChecksum.ReplaceAllString(groups, "")) {
-		return name
+	n := len(reLeadingChecksums.FindString(name))
+	return strings.Repeat(" ", n) + name[n:]
+}
+
+// checksumCut returns where the checksum at checksum ends span, the title
+// text after any leading year. A checksum ends the title, but one that opens
+// span ("(2007) [DEADBEEF] Zodiac") has no title before it to end, so the
+// title runs to the next checksum; only a release group hyphenated onto it
+// ("(2007) [DEADBEEF]-YIFY") makes it the end.
+func checksumCut(span string, checksum []int) int {
+	if !onlySeparators(span[:checksum[0]]) || strings.HasPrefix(strings.TrimLeft(span[checksum[1]:], " "), "-") {
+		return checksum[0]
 	}
-	return strings.Repeat(" ", len(groups)) + name[len(groups):]
+	if next := reChecksum.FindStringIndex(span[checksum[1]:]); next != nil {
+		return checksum[1] + next[0]
+	}
+	return len(span)
+}
+
+// episodeNoiseOnly reports whether lower[start:end], the text between a
+// leading year and an episode marker, is release noise word by word, read
+// against the rest of the name: "PROPER.1080p" and "1080p.WEB-DL" name no
+// series, but "[1080p] Fringe" names Fringe and "ReMastered" itself. A
+// checksum is not a word.
+func episodeNoiseOnly(lower string, start, end int) bool {
+	rest := blankChecksums(lower[start:])
+	tokens := tokenSpans(rest)
+	words := make([]string, len(tokens))
+	for i, span := range tokens {
+		words[i] = rest[span[0]:span[1]]
+	}
+	for i := 0; i < len(words) && tokens[i][0] < end-start; i++ {
+		if !sceneTags[words[i]] && !endsTitle(words[i:]) {
+			return false
+		}
+		if i+1 < len(words) && releaseNoise[words[i]+words[i+1]] {
+			i++ // one tag split in two ("WEB-DL")
+		}
+	}
+	return true
 }
 
 // blankChecksums replaces each checksum bracket in s with spaces of its width.

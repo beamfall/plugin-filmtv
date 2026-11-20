@@ -165,6 +165,13 @@ func TestYearPickerKeepsYearNamedTitles(t *testing.T) {
 		{"/movies/(2007) [DEADBEEF]-YIFY.mkv", sdk.ParsedMedia{}, false},
 		{"/tv/Fringe/Season 01/(2007) 1080p.WEB-DL.S01E01 - Pilot.mkv", sdk.ParsedMedia{Title: "Fringe", Class: "episode", Year: 2007, Sequence: "1", Index: 1}, true},
 		{"/tv/Fringe/Season 01/(2007) ReMastered.S01E01.mkv", sdk.ParsedMedia{Title: "ReMastered", Class: "episode", Year: 2007, Sequence: "1", Index: 1}, true},
+		{"/downloads/(2007) [1080p] Fringe S01E01.mkv", sdk.ParsedMedia{Title: "Fringe", Class: "episode", Year: 2007, Sequence: "1", Index: 1}, true},
+		{"/tv/Fringe/Season 01/(2007) [DEADBEEF].S01E01.mkv", sdk.ParsedMedia{Title: "Fringe", Class: "episode", Year: 2007, Sequence: "1", Index: 1}, true},
+		{"/movies/(2007) [DEADBEEF] Zodiac.mkv", sdk.ParsedMedia{Title: "Zodiac", Class: "movie", Year: 2007}, true},
+		{"/movies/(2007) [DEADBEEF] Zodiac [CAFEBABE] Extra.mkv", sdk.ParsedMedia{Title: "Zodiac", Class: "movie", Year: 2007}, true},
+		{"/movies/(2007) [DEADBEEF] - YIFY.mkv", sdk.ParsedMedia{}, false},
+		{"/movies/[DEADBEEF] [REC] 2.mkv", sdk.ParsedMedia{Title: "[REC] 2", Class: "movie"}, true},
+		{"/movies/[DEADBEEF][CAFEBABE] Movie.mkv", sdk.ParsedMedia{Title: "Movie", Class: "movie"}, true},
 		// Controls: a title before the year keeps the old reading.
 		{"/movies/1917 (2019).mkv", sdk.ParsedMedia{Title: "1917", Class: "movie", Year: 2019}, true},
 		{"/movies/2001 A Space Odyssey (1968).mkv", sdk.ParsedMedia{Title: "2001 A Space Odyssey", Class: "movie", Year: 1968}, true},
