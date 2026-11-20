@@ -60,13 +60,16 @@ var (
 	// too ("3 10 to Yuma"). Groups: season, episode.
 	reLeadingNumbers = regexp.MustCompile(`^(\d{1,2})[ ._-]+(\d{2,3})(?:$|[ ._-])`)
 	// An absolute episode number after a series name: zero-padded to four
-	// digits ("Dealbreakers Talk Show 0001"), or to three after " - "
-	// ("Naruto - 001"). It ends the title, or an episode title follows it after
-	// " - " ("Show - 001 - Title"). The title cut may leave the separator or
-	// bracket that opened the release noise. Read only with episode context
+	// digits ("Dealbreakers Talk Show 0001"), or two to four digits after
+	// " - " ("Naruto - 001", "Mob Psycho 100 - 09", "One Piece - 1071"), where
+	// a release revision may follow ("Show - 12v2"). A single digit after
+	// " - " is no episode: it numbers a film sequel ("Movie - 2") as often.
+	// It ends the title, or an episode title follows it after " - " ("Show -
+	// 001 - Title"). The title cut may leave the separator or bracket that
+	// opened the release noise. Read only with episode context
 	// (episodeContext). Groups: the separator and digits of the four-digit
-	// form, the three-digit form.
-	reAbsoluteEpisode = regexp.MustCompile(`(?:([ ._-])(0\d{3})|[ ._]-[ ._](0\d{2}))(?:[ ._\-\[(]*$|[ ._]-[ ._])`)
+	// form, the digits of the dashed form.
+	reAbsoluteEpisode = regexp.MustCompile(`(?:([ ._-])(0\d{3})|[ ._]-[ ._](\d{2,4})(?:v\d{1,2})?)(?:[ ._\-\[(]*$|[ ._]-[ ._])`)
 	// A CRC32 checksum bracket an anime release carries ("[ABCD1234]"):
 	// release noise, and a sign the file is an episode.
 	reChecksum = regexp.MustCompile(`\[[0-9a-f]{8}\]`)

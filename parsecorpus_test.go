@@ -573,16 +573,32 @@ func parseCorpus() []parseCase {
 			resolvable: true,
 		},
 		// Absolute-numbered anime with fansub group + resolution brackets: the
-		// number is not zero-padded, and an unpadded number can end a film
-		// title, so only the bracketed resolution is cut as release noise and
-		// the group + absolute number leak into the title. Pinned as the
-		// current (unusable) parse so a future rule shows up as a rising rate.
+		// unpadded number after " - " is the absolute episode, because the
+		// group bracket gives episode context (CORE-2700).
 		{
 			name:       "absolute-anime-fansub-brackets",
 			path:       "[HorribleSubs] One Piece - 1015 [720p].mkv",
 			wantOK:     true,
-			want:       sdk.ParsedMedia{Title: "[HorribleSubs] One Piece - 1015", Class: "movie"},
-			resolvable: false,
+			want:       sdk.ParsedMedia{Title: "One Piece", Class: "episode", Index: 1015, AbsoluteOrdinal: 1015},
+			resolvable: true,
+		},
+		// The same unpadded form in a show's season folder, with no group
+		// bracket: the folder is the context.
+		{
+			name:       "absolute-anime-unpadded-in-season-folder",
+			path:       "/tv/Mob Psycho 100/Season 01/Mob Psycho 100 - 09 [1080p].mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Mob Psycho 100", Class: "episode", Index: 9, AbsoluteOrdinal: 9},
+			resolvable: true,
+		},
+		// A film whose name ends on " - <number>" with no episode context
+		// stays a film with its number.
+		{
+			name:       "film-dash-number-without-context",
+			path:       "Movie - 12.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Movie - 12", Class: "movie"},
+			resolvable: true,
 		},
 		// Episode token BEFORE the title, outside a season folder: the xXYY
 		// match sits at index 0, so the title cut is empty and the parser

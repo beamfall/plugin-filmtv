@@ -18,9 +18,10 @@ func TestEpisodeFormsDoNotMisreadFilms(t *testing.T) {
 		name, path string
 		want       sdk.ParsedMedia
 	}{
-		// A checksum tag holds "4E01"; it is release noise, never a code.
+		// A checksum tag holds "4E01"; it is release noise, never a code. The
+		// file is absolute episode 1, with no season.
 		{"checksum-is-not-a-season-code", "/media/Anime/Show - 01 [4E01A2B3].mkv",
-			sdk.ParsedMedia{Title: "Show - 01"}},
+			sdk.ParsedMedia{Title: "Show", Class: "episode", Index: 1, AbsoluteOrdinal: 1}},
 		// Two leading numbers outside a season folder are a film title.
 		{"leading-numbers-outside-season-folder", "/media/Movies/3 10 to Yuma.mkv",
 			sdk.ParsedMedia{Title: "3 10 to Yuma", Class: "movie"}},
@@ -45,6 +46,15 @@ func TestEpisodeFormsDoNotMisreadFilms(t *testing.T) {
 		{"numbered-film-title-dash-number", "Catch-22 - 001.mkv", sdk.ParsedMedia{Title: "Catch-22 - 001", Class: "movie"}},
 		{"numbered-show-title-dash-number", "The 4400 - 001.mkv", sdk.ParsedMedia{Title: "The 4400 - 001", Class: "movie"}},
 		{"film-library-dash-number", "/media/Movies/Bond - 007.mkv", sdk.ParsedMedia{Title: "Bond - 007", Class: "movie"}},
+		// An unpadded number after " - " needs the same context, and a single
+		// digit is a sequel number even in a folder named for the film.
+		{"dash-two-digits-in-film-name", "Movie - 12.mkv", sdk.ParsedMedia{Title: "Movie - 12", Class: "movie"}},
+		{"film-library-dash-two-digits", "/media/Movies/Saw - 10.mkv", sdk.ParsedMedia{Title: "Saw - 10", Class: "movie"}},
+		{"sequel-digit-in-its-folder", "/Videos/Rocky/Rocky - 2.mkv", sdk.ParsedMedia{Title: "Rocky - 2", Class: "movie"}},
+		{"sequel-digit-under-tv", "/media/TV/Show - 2.mkv", sdk.ParsedMedia{Title: "Show - 2"}},
+		{"trailing-number-in-film-title", "/media/Movies/Ocean's 11.mkv", sdk.ParsedMedia{Title: "Ocean's 11", Class: "movie"}},
+		{"trailing-number-with-year", "/media/Movies/Apollo 13 (1995).mkv", sdk.ParsedMedia{Title: "Apollo 13", Class: "movie", Year: 1995}},
+		{"resolution-after-dash-is-not-absolute", "/media/TV/Show - 1080p.mkv", sdk.ParsedMedia{Title: "Show"}},
 		// A camera clip stem is never a series, even under a TV folder.
 		{"camera-clip", "VID_0001.mp4", sdk.ParsedMedia{Title: "VID 0001", Class: "movie"}},
 		{"camera-still-clip", "DSC_0012.mov", sdk.ParsedMedia{Title: "DSC 0012", Class: "movie"}},
@@ -102,6 +112,18 @@ func TestEpisodeFormsReadWithContext(t *testing.T) {
 			sdk.ParsedMedia{Title: "Show", Class: "episode", Index: 1, AbsoluteOrdinal: 1}},
 		{"anime-group-and-dash-number", "/Downloads/[Grp] Show - 001.mkv",
 			sdk.ParsedMedia{Title: "Show", Class: "episode", Index: 1, AbsoluteOrdinal: 1}},
+		// The dashed form needs no zero padding: two to four digits, with an
+		// optional release revision (CORE-2700).
+		{"anime-unpadded-two-digits-in-season-folder", "/tv/Mob Psycho 100/Season 01/Mob Psycho 100 - 09 [1080p].mkv",
+			sdk.ParsedMedia{Title: "Mob Psycho 100", Class: "episode", Index: 9, AbsoluteOrdinal: 9}},
+		{"anime-unpadded-three-digits-with-title", "/tv/Naruto Shippuden/Naruto Shippuden - 107 - Strange Bedfellows.mkv",
+			sdk.ParsedMedia{Title: "Naruto Shippuden", Class: "episode", Index: 107, AbsoluteOrdinal: 107}},
+		{"anime-unpadded-four-digits-in-show-folder", "/tv/One Piece/One Piece - 1071.mkv",
+			sdk.ParsedMedia{Title: "One Piece", Class: "episode", Index: 1071, AbsoluteOrdinal: 1071}},
+		{"anime-unpadded-with-group-under-anime", "/anime/Kingdom/[Erai-raws] Kingdom 3rd Season - 02 [1080p].mkv",
+			sdk.ParsedMedia{Title: "Kingdom 3rd Season", Class: "episode", Index: 2, AbsoluteOrdinal: 2}},
+		{"anime-unpadded-with-revision", "/Downloads/[SubsPlease] Frieren - 12v2 (1080p) [ABCD1234].mkv",
+			sdk.ParsedMedia{Title: "Frieren", Class: "episode", Index: 12, AbsoluteOrdinal: 12}},
 		{"bare-e-in-season-folder", "/media/Show/Season 1/1e01-Pilot.mkv",
 			sdk.ParsedMedia{Title: "Show", Class: "episode", Sequence: "1", Index: 1}},
 		{"bare-e-under-tv-folder", "/media/TV/Show 1e01.mkv",
@@ -128,6 +150,9 @@ func TestEpisodeFormsReadWithContext(t *testing.T) {
 	}
 	if got := parser.MediaTitle("/media/Show/Show - 001 - Title.mkv", sdk.ParseProbe{}); got != "E01 · Title" {
 		t.Errorf("MediaTitle of an absolute episode with a title = %q, want %q", got, "E01 · Title")
+	}
+	if got := parser.MediaTitle("/tv/Naruto Shippuden/Naruto Shippuden - 107 - Strange Bedfellows.mkv", sdk.ParseProbe{}); got != "E107 · Strange Bedfellows" {
+		t.Errorf("MediaTitle of an unpadded absolute episode with a title = %q, want %q", got, "E107 · Strange Bedfellows")
 	}
 }
 
