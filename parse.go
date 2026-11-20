@@ -131,7 +131,7 @@ var (
 	reSitePrefix = regexp.MustCompile(`(?i)^\s*(?:[\[(]\s*www\.[a-z0-9-]+(?:\.[a-z0-9-]+)+\s*[\])]|www\.[a-z0-9-]+(?:\.[a-z0-9-]+)+\s+-)\s*`)
 	// reSiteGroup matches a site name in leading brackets: a release-group
 	// bracket for the fansub episode form ("[www.Site.org] Naruto - 001").
-	reSiteGroup = regexp.MustCompile(`(?i)^\s*\[\s*www\.`)
+	reSiteGroup = regexp.MustCompile(`(?i)^\s*\[\s*www\.[^\]]*\]`)
 	// reLeadingChecksums matches the checksum brackets and parenthesized
 	// year that open a name, up to its first other bracket or word.
 	reLeadingChecksums = regexp.MustCompile(`(?i)^(?:[\s._-]*(?:\[[0-9a-f]{8}\]|\((?:19|20)\d\d\)))+`)
@@ -1421,7 +1421,7 @@ func sceneTagNoise(lower string) bool {
 	rest := blankChecksums(lower)
 	tokens := tokenSpans(rest)
 	if n := len(tokens); n > 2 && tokens[n-2][1] == tokens[n-1][0]-1 && rest[tokens[n-2][1]] == '-' &&
-		!releaseNoise[rest[tokens[n-2][0]:tokens[n-2][1]]+rest[tokens[n-1][0]:tokens[n-1][1]]] {
+		!joinedNoise(rest[tokens[n-2][0]:tokens[n-2][1]], rest[tokens[n-1][0]:tokens[n-1][1]]) {
 		tokens = tokens[:n-1] // "-GRP", but "WEB-DL" is one tag
 	}
 	words := make([]string, len(tokens))
@@ -1439,7 +1439,7 @@ func sceneTagNoise(lower string) bool {
 		if !sceneTags[words[i]] && !endsTitle(words[i:]) {
 			return false
 		}
-		if i+1 < len(words) && releaseNoise[words[i]+words[i+1]] {
+		if i+1 < len(words) && joinedNoise(words[i], words[i+1]) {
 			i++ // one tag split in two ("H.264")
 		}
 		i++
@@ -1492,7 +1492,7 @@ func episodeNoiseOnly(lower string, start, end int) bool {
 		case sceneTags[word]:
 		case endsTitle(words[i:]):
 			tagged = tagged || isTag(words[i:])
-			if i+1 < len(tokens) && tokens[i+1][0] == tokens[i][1]+1 && strings.IndexByte("-.", span[tokens[i][1]]) >= 0 && releaseNoise[word+words[i+1]] {
+			if i+1 < len(tokens) && tokens[i+1][0] == tokens[i][1]+1 && strings.IndexByte("-.", span[tokens[i][1]]) >= 0 && joinedNoise(word, words[i+1]) {
 				i++ // one tag split in two ("WEB-DL", "H.264")
 			}
 		case joined && span[tokens[i][0]-1] == '.' && isChannelCount(words[i-1], word):
@@ -1624,19 +1624,22 @@ var (
 // them do not ("Bigger, Longer & Uncut [1080p] (1999)", "Пленка | Uncut (1997)").
 func noiseBeforeYear(lower string) int {
 	tokens := tokenSpans(lower)
-	end, wordsEnd := len(lower), -1
+	end, wordsEnd, afterTag := len(lower), -1, false
 	for i := len(tokens) - 1; i > 0; i-- {
 		word := lower[tokens[i][0]:tokens[i][1]]
 		prev := lower[tokens[i-1][0]:tokens[i-1][1]]
 		joined := i > 1 && strings.Trim(lower[tokens[i-1][1]:tokens[i][0]], ".-") == ""
 		switch {
-		case joined && releaseNoise[prev+word]:
-			i-- // "web-dl", "h.264"
+		case joined && (joinedNoise(prev, word) || isChannelCount(prev, word)):
+			i-- // "web-dl", "h.264", "dd5.1"
+			afterTag = true
 		case isTag([]string{word}):
+			afterTag = true
 		case editionTags[word] || languageTags[word] || word == "dc" && i > 1 && editionTags[prev]:
-			if wordsEnd < 0 {
-				wordsEnd = end
+			if wordsEnd < 0 || afterTag {
+				wordsEnd = end // the end of the first run of words after the title
 			}
+			afterTag = false
 		default:
 			i = 0
 			continue
@@ -1650,10 +1653,21 @@ func noiseBeforeYear(lower string) int {
 }
 
 // endsInJoiningMark reports whether s ends in a mark that joins it to more
-// title text ("Bigger, Longer &"), not one a title can end with ("Airplane!").
+// title text ("Bigger, Longer &", "Пленка ｜"), not one a title can end with
+// ("Airplane!").
 func endsInJoiningMark(s string) bool {
 	r, _ := utf8.DecodeLastRuneInString(s)
-	return strings.ContainsRune("&,|+/:;", r)
+	return strings.ContainsRune("&,|+/:;｜／", r)
+}
+
+// soloNoise are releaseNoise tags read only as one token: split in two they
+// are title words ("True French Cinema").
+var soloNoise = map[string]bool{"truefrench": true, "subfrench": true}
+
+// joinedNoise reports whether a and b are one releaseNoise tag split in two
+// ("WEB-DL", "H.264").
+func joinedNoise(a, b string) bool {
+	return releaseNoise[a+b] && !soloNoise[a+b]
 }
 
 // stripSitePrefix drops a torrent site's name from the front of name
@@ -1703,7 +1717,7 @@ func trailingGroup(lower string, prev, last [2]int) bool {
 		return false
 	}
 	group, word := lower[last[0]:last[1]], lower[prev[0]:prev[1]]
-	if reResolution.MatchString(group) || releaseNoise[group] || releaseNoise[word+group] {
+	if reResolution.MatchString(group) || releaseNoise[group] || joinedNoise(word, group) {
 		return false // "Movie-1080p", "Movie.WEB-DL"
 	}
 	_, isWord := releaseWords[word]
@@ -1750,7 +1764,7 @@ func endsTitle(words []string) bool {
 func isTag(words []string) bool {
 	word := words[0]
 	return reResolution.MatchString(word) || releaseNoise[word] ||
-		len(words) > 1 && releaseNoise[word+words[1]]
+		len(words) > 1 && joinedNoise(word, words[1])
 }
 
 // tagFollows reports whether words open with a releaseNoise tag, possibly
@@ -1759,7 +1773,7 @@ func isTag(words []string) bool {
 // says nothing about the word before.
 func tagFollows(words []string) bool {
 	for i, word := range words {
-		if releaseNoise[word] || i+1 < len(words) && releaseNoise[word+words[i+1]] {
+		if releaseNoise[word] || i+1 < len(words) && joinedNoise(word, words[i+1]) {
 			return true
 		}
 		if _, isWord := releaseWords[word]; !isWord {
