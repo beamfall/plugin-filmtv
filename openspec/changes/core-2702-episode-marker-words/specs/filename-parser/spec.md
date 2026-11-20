@@ -26,8 +26,8 @@ whose first digit is the season SHALL be that season and the last two digits the
 
 A `TxxEyy` code with a two-digit season and a two- or three-digit episode, and an episode word
 followed by `S.EE` (`Episode 1.22`, `Folge 2.04`), SHALL name a season and an episode in any
-folder. Neither SHALL match inside a longer word or number, and a bit depth (`Episode.1.10-bit`)
-SHALL NOT read as `S.EE`. When an absolute number, an `XxYY` code or an air date shares a name
+folder. Neither SHALL match inside a longer word or number, and a bit depth of 8, 10 or 12
+(`Episode.1.10-bit`) SHALL NOT read as `S.EE`. When an absolute number, an `XxYY` code or an air date shares a name
 with an `S.EE` code, the first SHALL win.
 
 #### Scenario: Temporada code
@@ -50,7 +50,7 @@ with an `S.EE` code, the first SHALL win.
 An episode word with a number (`Ep 14`, `Folge 12`, `Cap.105`), a bare `Eyy` and `N seriya` SHALL
 name an episode only in a season folder, which SHALL give the season (0 for `Specials`). Elsewhere
 they SHALL stay title text, so a film named with one of them stays a film. When an absolute
-number also appears, an episode word before it SHALL win; a bare `Eyy` or `N seriya` SHALL be
+number, an `XxYY` code or an air date also appears, the first SHALL win; a bare `Eyy` or `N seriya` SHALL be
 read only when the name holds no other marker.
 
 #### Scenario: Bare episode code in a season folder
