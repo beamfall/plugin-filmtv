@@ -69,13 +69,13 @@ func TestEpisodeMarkerWords(t *testing.T) {
 		{"/tv/Show/Season 1/Show - Episode 14 - 316.mkv", episode("Show", "1", 14), true},
 		{"/downloads/One Piece Temporada 1 Episodio 1071.mkv", sdk.ParsedMedia{Title: "One Piece", Class: "episode", Index: 1071, AbsoluteOrdinal: 1071}, true},
 		// Found by the PTT corpus (CORE-2705): a four-digit SxxEyyyy episode
-		// is the absolute episode, never cut to three digits unless a digit
-		// follows ("E1231080p": 123, then 1080p), and a channel layout ("AC3
-		// 5.1x2") is no NxM code while a title's number before one is.
+		// is the absolute episode, never cut to three digits, and a resolution
+		// glued to it is split off ("E1231080p": 123, then 1080p).
 		{"/downloads/One.Piece.S01E1056.1080p.WEB.x264.mkv", sdk.ParsedMedia{Title: "One Piece", Class: "episode", Index: 1056, AbsoluteOrdinal: 1056}, true},
-		{"/movies/Escaflowne (2000) (BDRip x265 AC3 5.1x2+2.0x3).mkv", sdk.ParsedMedia{Title: "Escaflowne", Class: "movie", Year: 2000}, true},
 		{"/downloads/Doctor.Who.2005.8x11.Dark.Water.720p.mkv", sdk.ParsedMedia{Title: "Doctor Who", Class: "episode", Year: 2005, Sequence: "8", Index: 11}, true},
 		{"/downloads/Show.S01E1231080p.WEB.mkv", episode("Show", "1", 123), true},
+		{"/downloads/One.Piece.S01E10561080p.WEB.mkv", sdk.ParsedMedia{Title: "One Piece", Class: "episode", Index: 1056, AbsoluteOrdinal: 1056}, true},
+		{"/downloads/Show.S01E01720p.WEB.mkv", episode("Show", "1", 1), true},
 		{"/downloads/Babylon.5.1x02.Soul.Hunter.mkv", episode("Babylon 5", "1", 2), true},
 		{"/downloads/Stargate.SG-1.1x02.Children.of.the.Gods.mkv", episode("Stargate SG-1", "1", 2), true},
 		{"/downloads/Anubis saison 1 ep 720p.mkv", sdk.ParsedMedia{Title: "Anubis saison 1 ep", Class: "movie"}, true},

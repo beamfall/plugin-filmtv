@@ -9,10 +9,11 @@ reads from it. This reads them from a PTT checkout without running PTT:
 Fields come from test_title.py (title), test_year.py (year, 0 for none),
 test_season.py and test_parser.py's season list (seasons), test_episodes.py
 (episodes) and test_main.py, which asserts the whole parse, so its absent year
-is 0. test_collection.py, test_adult.py and test_trash.py only mark a name
-complete, adult or trash. A name in several files merges its fields; two files
-that disagree stop the import, as does a checkout with local changes to the
-files read.
+is 0. Those are the graded fields. test_collection.py, test_adult.py,
+test_trash.py and test_parser.py's season list are read only as evidence that a
+name is a pack; they add no graded field. A name in several files merges its
+fields; two files that disagree stop the import, as does a checkout with local
+changes to the files read. A name with no graded field is left out.
 
 A case is a library file, and kept, unless its fields say otherwise (RULE).
 """
@@ -23,28 +24,34 @@ import pathlib
 import subprocess
 import sys
 
+VIDEO = (".mkv", ".mp4", ".avi", ".m4v")
+
 RULE = (
-    "A case is kept unless its fixtures mark it complete, adult or trash, "
-    "or declare more than one season, more than three episodes, a season with an "
-    "empty episode list, or a season with no episode list on a name without a video "
-    "file extension: those are packs, not library files."
+    "A case is kept unless any PTT fixture marks it complete, adult or trash, "
+    "or declares more than one season for it, or its graded fixtures declare more "
+    "than three episodes, a season with an empty episode list, or a season with no "
+    "episode list on a name not ending in " + ", ".join(VIDEO) + ": those are packs, "
+    "not library files."
 )
 
 SOURCES = {
-    "test_title.py": ("title",),
-    "test_year.py": ("year",),
-    "test_season.py": ("seasons",),
-    "test_episodes.py": ("episodes",),
+    "test_title.py": "title",
+    "test_year.py": "year",
+    "test_season.py": "seasons",
+    "test_episodes.py": "episodes",
     "test_main.py": None,
-    "test_parser.py": ("seasons",),
-    "test_collection.py": ("complete",),
-    "test_adult.py": ("adult",),
-    "test_trash.py": ("trash",),
+}
+
+# Files read only for pack evidence, and the evidence each row gives.
+EVIDENCE = {
+    "test_collection.py": "complete",
+    "test_adult.py": "adult",
+    "test_trash.py": "trash",
+    "test_parser.py": "seasons",
 }
 
 FLAGS = ("complete", "adult", "trash")
-
-VIDEO = (".mkv", ".mp4", ".avi", ".m4v")
+GRADED = ("title", "year", "seasons", "episodes")
 
 
 def literal(node):
@@ -84,19 +91,24 @@ def declared(source, row):
         fields["year"] = want.get("year") or 0
         fields.update({k: True for k in FLAGS if want.get(k)})
         return name, fields
-    key = SOURCES[source][0]
-    if key in FLAGS:
-        return name, {key: True} if row[1] else {}
     if source == "test_year.py":
         return name, {"year": row[1] if row[2] else 0}
-    return name, {key: row[1]}
+    return name, {SOURCES[source]: row[1]}
 
 
-def is_library_file(name, fields):
-    if any(fields.get(k) for k in FLAGS):
+def evidence(source, row):
+    """Return the release name and the pack evidence a fixture row gives."""
+    key = EVIDENCE[source]
+    if key in FLAGS:
+        return row[0], {key: True} if row[1] else {}
+    return row[0], {key: row[1]}
+
+
+def is_library_file(name, fields, seen):
+    if any(fields.get(k) or seen.get(k) for k in FLAGS):
         return False
     seasons, episodes = fields.get("seasons"), fields.get("episodes")
-    if seasons is not None and len(seasons) > 1:
+    if any(s is not None and len(s) > 1 for s in (seasons, seen.get("seasons"))):
         return False
     if episodes is not None and (len(episodes) > 3 or seasons and not episodes):
         return False
@@ -114,25 +126,26 @@ def version(root):
 def main(checkout):
     root = pathlib.Path(checkout)
     git = ["git", "-C", str(root)]
-    read = ["pyproject.toml", "LICENSE"] + [f"tests/{source}" for source in SOURCES]
+    read = ["pyproject.toml", "LICENSE"] + [f"tests/{source}" for source in (*SOURCES, *EVIDENCE)]
     if subprocess.check_output(git + ["status", "--porcelain", "--"] + read, text=True).strip():
         sys.exit("the PTT checkout has local changes to the files read; import from a clean commit")
-    merged, order = {}, []
-    for source in SOURCES:
-        for row in fixtures(root / "tests" / source):
-            name, fields = declared(source, row)
-            if name not in merged:
-                merged[name] = {}
-                order.append(name)
-            for key, value in fields.items():
-                if merged[name].get(key, value) != value:
-                    sys.exit(f"{source}: {name!r} {key} = {value!r}, another file says {merged[name][key]!r}")
-                merged[name][key] = value
+    merged, packs, order = {}, {}, []
+    for table, sources, read_row in ((merged, SOURCES, declared), (packs, EVIDENCE, evidence)):
+        for source in sources:
+            for row in fixtures(root / "tests" / source):
+                name, fields = read_row(source, row)
+                if name not in merged and name not in packs:
+                    order.append(name)
+                entry = table.setdefault(name, {})
+                for key, value in fields.items():
+                    if entry.get(key, value) != value:
+                        sys.exit(f"{source}: {name!r} {key} = {value!r}, another file says {entry[key]!r}")
+                    entry[key] = value
     cases = []
     for name in order:
-        fields = merged[name]
-        if is_library_file(name, fields):
-            cases.append({"name": name, **{k: fields[k] for k in ("title", "year", "seasons", "episodes") if k in fields}})
+        fields = merged.get(name, {})
+        if any(k in fields for k in GRADED) and is_library_file(name, fields, packs.get(name, {})):
+            cases.append({"name": name, **{k: fields[k] for k in GRADED if k in fields}})
     out = {
         "source": "https://github.com/dreulavelle/PTT",
         "version": version(root),

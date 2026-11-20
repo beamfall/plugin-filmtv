@@ -4,7 +4,7 @@
  "commit": "88429bb90acef55673f421f45038878809b1e577",
  "license": "MIT, Copyright (c) 2024 Spoked; see LICENSE in this directory",
  "license_text": "MIT License\n\nCopyright (c) 2024 Spoked\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n",
- "rule": "A case is kept unless its fixtures mark it complete, adult or trash, or declare more than one season, more than three episodes, no episode, or a season with no episode declared on a name without a video file extension: those are packs, not library files.",
+ "rule": "A case is kept unless any PTT fixture marks it complete, adult or trash, or declares more than one season for it, or its graded fixtures declare more than three episodes, a season with an empty episode list, or a season with no episode list on a name not ending in .mkv, .mp4, .avi, .m4v: those are packs, not library files.",
  "imported": 471,
  "cases": [
   {
@@ -684,9 +684,6 @@
   },
   {
    "name": "4-13 Cursed (HD)",
-   "seasons": [
-    4
-   ],
    "episodes": [
     13
    ]
@@ -749,6 +746,10 @@
    "episodes": [
     38
    ]
+  },
+  {
+   "name": "Archer.S02.1080p.BluRay.DTSMA.AVC.Remux",
+   "episodes": []
   },
   {
    "name": "BBC Indian Ocean with Simon Reeve 5of6 Sri Lanka to Bangladesh.avi",
@@ -824,7 +825,6 @@
   },
   {
    "name": "Dragon Ball Z Movie - 09 - Bojack Unbound - 1080p BluRay x264 DTS 5.1 -DDR",
-   "seasons": [],
    "episodes": []
   },
   {
@@ -907,9 +907,6 @@
   },
   {
    "name": "Lost.[Perdidos].6x05.HDTV.XviD.[www.DivxTotaL.com]",
-   "seasons": [
-    6
-   ],
    "episodes": [
     5
    ]
@@ -2047,21 +2044,6 @@
    "year": 0,
    "seasons": [],
    "episodes": []
-  },
-  {
-   "name": "[Erai-raws] Ninja Collection - 05 [720p][Multiple Subtitle].mkv"
-  },
-  {
-   "name": "The.Sopranos.S04E01.For.All.Debts.Public.and.Private.480p.WEB-DL.x264-Sticky83.mkv"
-  },
-  {
-   "name": "Body.Cam.S08E07.1080p.WEB.h264-EDITH[EZTVx.to].mkv"
-  },
-  {
-   "name": "Body Cam (2020) [1080p] [WEBRip] [5.1] [YTS] [YIFY]"
-  },
-  {
-   "name": "Guardians of the Galaxy (2014) 1080p BluRay 5.1 DTS-HD MA 7.1 [YTS] [YIFY]"
   }
  ]
 }

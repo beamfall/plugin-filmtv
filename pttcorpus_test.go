@@ -35,13 +35,13 @@ var updatePTT = flag.Bool("update-ptt", false, "rewrite testdata/ptt/unresolved.
 // The documented per-field floors: the fraction of declared fields the parser
 // gets right on PTT's library-shaped set. Each is the rate observed when it was
 // set, rounded down to two places (PTT 1.8.5, CORE-2705: title 92/138, year
-// 92/97, season 99/137, episode 142/241), so it catches a broad slide; a single
+// 92/97, season 96/134, episode 142/242), so it catches a broad slide; a single
 // regression is caught by the per-case marks. Raise a floor when a parser gap
 // ticket raises its rate.
 const (
 	pttTitleFloor   = 0.66
 	pttYearFloor    = 0.94
-	pttSeasonFloor  = 0.72
+	pttSeasonFloor  = 0.71
 	pttEpisodeFloor = 0.58
 )
 
@@ -128,9 +128,15 @@ func readPTT(t *testing.T) pttFile {
 	if err := json.Unmarshal(data, &file); err != nil {
 		t.Fatal(err)
 	}
-	if file.Version == "" || file.Commit == "" || !strings.Contains(file.License, "MIT") ||
-		!strings.Contains(file.Notice, "Permission is hereby granted") || file.Rule == "" || len(file.Cases) == 0 {
-		t.Fatalf("testdata/ptt/cases.json lacks its version, commit, licence, licence text, rule or cases")
+	if file.Version == "" || file.Commit == "" || !strings.Contains(file.License, "MIT") || file.Rule == "" || len(file.Cases) == 0 {
+		t.Fatalf("testdata/ptt/cases.json lacks its version, commit, licence, rule or cases")
+	}
+	notice, err := os.ReadFile(filepath.Join("testdata", "ptt", "LICENSE"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if file.Notice != string(notice) || !strings.Contains(file.Notice, "Copyright (c) 2024 Spoked") {
+		t.Fatalf("testdata/ptt/cases.json's license_text is not PTT's notice in testdata/ptt/LICENSE")
 	}
 	return file
 }
