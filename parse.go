@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/beamfall/plugin-filmtv/internal/mediaimport"
@@ -758,21 +759,31 @@ func findAbsoluteEpisode(path, title, lowerTitle, lower string) (episodeToken, b
 
 // endsInBareYear reports whether series, the text before an absolute number,
 // ends in a bare year after title text ("Class of 1999 II 2001 ",
-// "Space:1999 "). A year that ends a run of years ("Fringe 2008-2013") is
-// not one.
+// "Space:1999 "). A year that ends a run of years ("Fringe 2008-2013",
+// "Fringe 2008–2013") is not one.
 func endsInBareYear(series string) bool {
 	trimmed := strings.TrimRight(series, " ._-")
-	if len(trimmed) < 5 || !isYearNumber(trimmed[len(trimmed)-4:]) {
+	if !endsInYearWord(trimmed) {
 		return false
 	}
 	before := trimmed[:len(trimmed)-4]
-	if c := before[len(before)-1]; isASCIIAlnum(c) || c == '(' {
+	if r, _ := utf8.DecodeLastRuneInString(before); r == '(' || before == "" {
 		return false
 	}
-	if prev := strings.TrimRight(before, " ._-"); len(prev) >= 4 && isYearNumber(prev[len(prev)-4:]) {
+	if endsInYearWord(strings.TrimRight(before, " ._-–—")) {
 		return false
 	}
 	return hasTitleText(before)
+}
+
+// endsInYearWord reports whether s ends in a year number that no letter or
+// digit runs into ("X2000" and "Café1999" do not).
+func endsInYearWord(s string) bool {
+	if len(s) < 4 || !isYearNumber(s[len(s)-4:]) {
+		return false
+	}
+	r, _ := utf8.DecodeLastRuneInString(s[:len(s)-4])
+	return !unicode.IsLetter(r) && !unicode.IsDigit(r)
 }
 
 // findAirDate locates the first calendar-valid air date in the ASCII-folded
