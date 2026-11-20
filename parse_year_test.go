@@ -91,6 +91,10 @@ func TestYearPickerKeepsYearNamedTitles(t *testing.T) {
 		{"/tv/Show - 2011 - [Disc - 12 - Bonus].mkv", sdk.ParsedMedia{Title: "Show", Year: 2011}, true},
 		{"/tv/Class of 1999 II 2001 0001.mkv", sdk.ParsedMedia{Title: "Class of 1999 II 2001", Class: "episode", Index: 1, AbsoluteOrdinal: 1}, true},
 		{"/movies/[Group] (2013) Proper Uncut [DEADBEEF].mkv", sdk.ParsedMedia{Title: "Proper Uncut", Class: "movie", Year: 2013}, true},
+		// Review round 2: a leading release year, a colon, a run of years.
+		{"/tv/(1975) Space 1999 0001.mkv", sdk.ParsedMedia{Title: "Space 1999", Class: "episode", Year: 1975, Index: 1, AbsoluteOrdinal: 1}, true},
+		{"/tv/Space:1999 0001.mkv", sdk.ParsedMedia{Title: "Space:1999", Class: "episode", Index: 1, AbsoluteOrdinal: 1}, true},
+		{"/tv/Fringe 2008-2013 0001.mkv", sdk.ParsedMedia{Title: "Fringe", Year: 2008}, true},
 		// Controls: a title before the year keeps the old reading.
 		{"/movies/1917 (2019).mkv", sdk.ParsedMedia{Title: "1917", Class: "movie", Year: 2019}, true},
 		{"/movies/2001 A Space Odyssey (1968).mkv", sdk.ParsedMedia{Title: "2001 A Space Odyssey", Class: "movie", Year: 1968}, true},

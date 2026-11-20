@@ -727,16 +727,20 @@ func findAbsoluteEpisode(path, title, lowerTitle, lower string) (episodeToken, b
 			form = formUnderscored
 		}
 	}
-	// "Space 1999 0001": a bare year right before the number names the
-	// series, whichever year the series name holds first.
-	seriesYear := form != formDashed && endsInBareYear(series)
-	if year.found() && !year.leading && !seriesYear {
-		if form != formDashed {
+	seriesYear := false
+	if year.found() && !year.leading {
+		switch {
+		case form == formDashed:
+			form = formDashedYear
+		case endsInBareYear(series):
+			// "Space 1999 0001": a bare year right before the number names
+			// the series, whichever year the series name holds first.
+			seriesYear = true
+		default:
 			// After any other year only the dashed anime form reads as an
 			// episode.
 			return episodeToken{}, false
 		}
-		form = formDashedYear
 	}
 	if !seriesYear {
 		series = year.title(series)
@@ -753,14 +757,22 @@ func findAbsoluteEpisode(path, title, lowerTitle, lower string) (episodeToken, b
 }
 
 // endsInBareYear reports whether series, the text before an absolute number,
-// ends in a bare year after title text ("Class of 1999 II 2001 ").
+// ends in a bare year after title text ("Class of 1999 II 2001 ",
+// "Space:1999 "). A year that ends a run of years ("Fringe 2008-2013") is
+// not one.
 func endsInBareYear(series string) bool {
 	trimmed := strings.TrimRight(series, " ._-")
 	if len(trimmed) < 5 || !isYearNumber(trimmed[len(trimmed)-4:]) {
 		return false
 	}
 	before := trimmed[:len(trimmed)-4]
-	return strings.ContainsRune(" ._-", rune(before[len(before)-1])) && hasTitleText(before)
+	if c := before[len(before)-1]; isASCIIAlnum(c) || c == '(' {
+		return false
+	}
+	if prev := strings.TrimRight(before, " ._-"); len(prev) >= 4 && isYearNumber(prev[len(prev)-4:]) {
+		return false
+	}
+	return hasTitleText(before)
 }
 
 // findAirDate locates the first calendar-valid air date in the ASCII-folded
