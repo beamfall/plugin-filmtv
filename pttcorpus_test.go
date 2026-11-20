@@ -35,14 +35,14 @@ var updatePTT = flag.Bool("update-ptt", false, "rewrite testdata/ptt/unresolved.
 // The documented per-field floors: the fraction of declared fields the parser
 // gets right on PTT's library-shaped set. Each is the rate observed when it was
 // set, rounded down to two places (PTT 1.8.5, CORE-2705: title 92/138, year
-// 93/98, season 97/124, episode 145/243), so it catches a broad slide; a single
+// 92/97, season 99/137, episode 142/241), so it catches a broad slide; a single
 // regression is caught by the per-case marks. Raise a floor when a parser gap
 // ticket raises its rate.
 const (
 	pttTitleFloor   = 0.66
 	pttYearFloor    = 0.94
-	pttSeasonFloor  = 0.78
-	pttEpisodeFloor = 0.59
+	pttSeasonFloor  = 0.72
+	pttEpisodeFloor = 0.58
 )
 
 var pttFields = []string{"title", "year", "season", "episode"}
@@ -59,6 +59,7 @@ type pttFile struct {
 	Version string    `json:"version"`
 	Commit  string    `json:"commit"`
 	License string    `json:"license"`
+	Notice  string    `json:"license_text"`
 	Rule    string    `json:"rule"`
 	Cases   []pttCase `json:"cases"`
 }
@@ -79,13 +80,15 @@ func normalTitle(title string) string {
 }
 
 // pttGrade reports, for each field the case declares, whether the parse
-// matches it.
+// matches it. A name the parser rejects gets every declared field wrong.
 func pttGrade(c pttCase, got sdk.ParsedMedia, ok bool) map[string]bool {
-	if !ok {
-		got = sdk.ParsedMedia{}
-	}
 	episode := got.Class == "episode"
 	graded := map[string]bool{}
+	defer func() {
+		for field := range graded {
+			graded[field] = graded[field] && ok
+		}
+	}()
 	if c.Title != nil {
 		graded["title"] = normalTitle(got.Title) == normalTitle(*c.Title)
 	}
@@ -109,7 +112,7 @@ func pttGrade(c pttCase, got sdk.ParsedMedia, ok bool) map[string]bool {
 				end = got.Index
 			}
 			graded["episode"] = episode && (got.Index == first && end == last ||
-				first == last && got.AbsoluteOrdinal == first)
+				first == last && got.AbsoluteOrdinal == first && end == got.Index)
 		}
 	}
 	return graded
@@ -125,8 +128,9 @@ func readPTT(t *testing.T) pttFile {
 	if err := json.Unmarshal(data, &file); err != nil {
 		t.Fatal(err)
 	}
-	if file.Version == "" || file.Commit == "" || !strings.Contains(file.License, "MIT") || file.Rule == "" || len(file.Cases) == 0 {
-		t.Fatalf("testdata/ptt/cases.json lacks its version, commit, licence, rule or cases")
+	if file.Version == "" || file.Commit == "" || !strings.Contains(file.License, "MIT") ||
+		!strings.Contains(file.Notice, "Permission is hereby granted") || file.Rule == "" || len(file.Cases) == 0 {
+		t.Fatalf("testdata/ptt/cases.json lacks its version, commit, licence, licence text, rule or cases")
 	}
 	return file
 }
@@ -180,6 +184,10 @@ func TestPTTCorpus(t *testing.T) {
 
 	floors := map[string]float64{"title": pttTitleFloor, "year": pttYearFloor, "season": pttSeasonFloor, "episode": pttEpisodeFloor}
 	for _, field := range pttFields {
+		if declared[field] == 0 {
+			t.Errorf("no PTT case declares %s", field)
+			continue
+		}
 		rate := float64(pass[field]) / float64(declared[field])
 		t.Logf("PTT %s: %.4f (%d/%d), floor %.2f", field, rate, pass[field], declared[field], floors[field])
 		if rate < floors[field] {

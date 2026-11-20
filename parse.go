@@ -77,6 +77,9 @@ var (
 	// matches (those numbers are far larger than a season/episode). A range
 	// ("1x01-1x02-1x03") is read by episodeChain with reSeasonXChainLink.
 	reSeasonX = regexp.MustCompile(`\b(\d{1,2})x(\d{1,3})\b`)
+	// reAudioCodecEnd matches an audio codec ending the text in front of a
+	// channel layout ("AC3 5.1", "DDP5.1", "TrueHD.7.1").
+	reAudioCodecEnd = regexp.MustCompile(`(?:^|[^a-z0-9])(?:e?ac-?3|aac|ddp?|dd\+|dts(?:-?hd)?(?:-?ma)?|truehd|flac|opus|atmos|l?pcm|mp3)[ ._-]?$`)
 	// One further XxYY token of a multi-episode shorthand range. Groups: the
 	// season, the episode.
 	reSeasonXChainLink = regexp.MustCompile(`^-(\d{1,2})x(\d{1,3})`)
@@ -595,6 +598,9 @@ type episodeToken struct {
 // Y" in any of its languages, then TxxEyy.
 func findEpisode(lower string) (episodeToken, bool) {
 	if m := reSeasonEpisode.FindStringSubmatchIndex(lower); m != nil {
+		if m[5]-m[4] == 4 && m[5] < len(lower) && isDigit(lower[m[5]]) {
+			m[1], m[5] = m[1]-1, m[5]-1 // "S01E1231080p": episode 123, then 1080p
+		}
 		token := episodeToken{start: m[0], end: m[1], sequence: numericText(lower[m[2]:m[3]]), index: atoi(lower[m[4]:m[5]])}
 		last, end := episodeChain(lower, token.end, reEpisodeChainLink, token.sequence)
 		token.end = end
@@ -620,7 +626,7 @@ func findEpisode(lower string) (episodeToken, bool) {
 // marker led by an episode word may precede (parseName).
 func findShorthandEpisode(lower string) (episodeToken, bool) {
 	for _, m := range reSeasonX.FindAllStringSubmatchIndex(lower, -1) {
-		if afterChannelCount(lower, m[0]) {
+		if isChannelLayout(lower, m[0], m[1]) {
 			continue
 		}
 		token := episodeToken{start: m[0], end: m[1], sequence: numericText(lower[m[2]:m[3]]), index: atoi(lower[m[4]:m[5]])}
@@ -711,11 +717,17 @@ func absoluteIfLong(token episodeToken) episodeToken {
 	return token
 }
 
-// afterChannelCount reports that a season number at start follows a lone
-// digit and a dot: it is a channel layout's ("DD5.1e01", "AC3 5.1x2"), not a
-// season. A year before the dot ("2005.8x11") is no channel count.
-func afterChannelCount(lower string, start int) bool {
-	return start >= 2 && lower[start-1] == '.' && isDigit(lower[start-2]) && (start == 2 || !isDigit(lower[start-3]))
+// isChannelLayout reports that the XxYY code at lower[start:end] reads a
+// channel layout's count ("AC3 5.1x2", "5.1x2+2.0x3"), not a season: it
+// follows a digit and a dot, and an audio codec leads the layout or a "+" joins
+// it to another. A title's number before the dot is no layout ("Babylon.5.1x02",
+// "Doctor.Who.2005.8x11").
+func isChannelLayout(lower string, start, end int) bool {
+	if start < 2 || lower[start-1] != '.' || !isDigit(lower[start-2]) {
+		return false
+	}
+	before := lower[:start-2]
+	return reAudioCodecEnd.MatchString(before) || strings.HasSuffix(before, "+") || strings.HasPrefix(lower[end:], "+")
 }
 
 // bareSeasonEpisode reads a season-by-episode code with a bare "e" ("1e01")
@@ -725,7 +737,7 @@ func afterChannelCount(lower string, start int) bool {
 // "Specials" overrides it (season 0).
 func bareSeasonEpisode(path, lower string) (episodeToken, bool) {
 	for _, m := range reSeasonE.FindAllStringSubmatchIndex(lower, -1) {
-		if afterChannelCount(lower, m[2]) {
+		if m[2] >= 2 && lower[m[2]-1] == '.' && isDigit(lower[m[2]-2]) {
 			continue
 		}
 		if !episodeContext(path, lower, cleanTitle(lower[:m[2]]), formBareCode) {

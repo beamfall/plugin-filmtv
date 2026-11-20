@@ -3,8 +3,9 @@
  "version": "1.8.5",
  "commit": "88429bb90acef55673f421f45038878809b1e577",
  "license": "MIT, Copyright (c) 2024 Spoked; see LICENSE in this directory",
- "rule": "A case is kept unless its fixtures mark it complete, adult or trash, or declare more than one season, a season with no episode declared, or more than three episodes: those are packs, not library files.",
- "imported": 431,
+ "license_text": "MIT License\n\nCopyright (c) 2024 Spoked\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n",
+ "rule": "A case is kept unless its fixtures mark it complete, adult or trash, or declare more than one season, more than three episodes, no episode, or a season with no episode declared on a name without a video file extension: those are packs, not library files.",
+ "imported": 471,
  "cases": [
   {
    "name": "La famille bélier",
@@ -241,10 +242,6 @@
    "episodes": []
   },
   {
-   "name": "Harry Potter All Movies Collection 2001-2011 720p Dual KartiKing",
-   "year": 0
-  },
-  {
    "name": "04. Practice Two (1324mb 1916x1080 50fps 1970kbps x265 deef).mkv",
    "year": 0
   },
@@ -279,6 +276,12 @@
    ],
    "episodes": [
     1
+   ]
+  },
+  {
+   "name": "2 сезон 24 серия.avi",
+   "seasons": [
+    2
    ]
   },
   {
@@ -331,12 +334,24 @@
    ]
   },
   {
+   "name": "Bron - S4 - 720P - SweSub.mp4",
+   "seasons": [
+    4
+   ]
+  },
+  {
    "name": "clny.3x11m720p.es[www.planetatorrent.com].mkv",
    "seasons": [
     3
    ],
    "episodes": [
     11
+   ]
+  },
+  {
+   "name": "DARKER THAN BLACK - S00E04 - Darker Than Black Gaiden OVA 3.mkv",
+   "seasons": [
+    0
    ]
   },
   {
@@ -434,6 +449,18 @@
    "seasons": []
   },
   {
+   "name": "S011E16.mkv",
+   "seasons": [
+    11
+   ]
+  },
+  {
+   "name": "Seizoen 22 - Zon & Maan Ultra Legendes/afl.18 Je ogen op de bal houden!.mp4",
+   "seasons": [
+    22
+   ]
+  },
+  {
    "name": "Smallville (1x02 Metamorphosis).avi",
    "seasons": [
     1
@@ -506,6 +533,12 @@
    ]
   },
   {
+   "name": "[Erai-raws] Granblue Fantasy The Animation Season 2 - 08 [1080p][Multiple Subtitle].mkv",
+   "seasons": [
+    2
+   ]
+  },
+  {
    "name": "[Erai-raws] Granblue Fantasy The Animation Season 2 - 10 [1080p][Multiple Subtitle].mkv",
    "seasons": [
     2
@@ -515,12 +548,30 @@
    ]
   },
   {
+   "name": "[Erai-raws] Shingeki no Kyojin Season 3 - 11 (BD 1080p Hi10 FLAC) [1FA13150].mkv",
+   "seasons": [
+    3
+   ]
+  },
+  {
+   "name": "[FFA] Kiratto Pri☆chan Season 3 - 11 [1080p][HEVC].mkv",
+   "seasons": [
+    3
+   ]
+  },
+  {
    "name": "[HR] Boku no Hero Academia 87 (S4-24) [1080p HEVC Multi-Subs] HR-GZ",
    "seasons": [
     4
    ],
    "episodes": [
     24
+   ]
+  },
+  {
+   "name": "[SCY] Attack on Titan Season 3 - 11 (BD 1080p Hi10 FLAC) [1FA13150].mkv",
+   "seasons": [
+    3
    ]
   },
   {
@@ -578,6 +629,12 @@
    ]
   },
   {
+   "name": "Сезон 5/Серия 11.mkv",
+   "seasons": [
+    5
+   ]
+  },
+  {
    "name": "Vikkatakavi 01E06.mkv",
    "seasons": [
     1
@@ -627,6 +684,9 @@
   },
   {
    "name": "4-13 Cursed (HD)",
+   "seasons": [
+    4
+   ],
    "episodes": [
     13
    ]
@@ -689,10 +749,6 @@
    "episodes": [
     38
    ]
-  },
-  {
-   "name": "Archer.S02.1080p.BluRay.DTSMA.AVC.Remux",
-   "episodes": []
   },
   {
    "name": "BBC Indian Ocean with Simon Reeve 5of6 Sri Lanka to Bangladesh.avi",
@@ -768,6 +824,7 @@
   },
   {
    "name": "Dragon Ball Z Movie - 09 - Bojack Unbound - 1080p BluRay x264 DTS 5.1 -DDR",
+   "seasons": [],
    "episodes": []
   },
   {
@@ -850,6 +907,9 @@
   },
   {
    "name": "Lost.[Perdidos].6x05.HDTV.XviD.[www.DivxTotaL.com]",
+   "seasons": [
+    6
+   ],
    "episodes": [
     5
    ]
@@ -1246,10 +1306,6 @@
    "episodes": [
     4
    ]
-  },
-  {
-   "name": "[F-D] Fairy Tail Season 1 - 6 + Extras [480P][Dual-Audio]",
-   "episodes": []
   },
   {
    "name": "[Final8]Suisei no Gargantia - 05 (BD 10-bit 1920x1080 x264 FLAC)[E0B15ACF].mkv",
@@ -1991,6 +2047,21 @@
    "year": 0,
    "seasons": [],
    "episodes": []
+  },
+  {
+   "name": "[Erai-raws] Ninja Collection - 05 [720p][Multiple Subtitle].mkv"
+  },
+  {
+   "name": "The.Sopranos.S04E01.For.All.Debts.Public.and.Private.480p.WEB-DL.x264-Sticky83.mkv"
+  },
+  {
+   "name": "Body.Cam.S08E07.1080p.WEB.h264-EDITH[EZTVx.to].mkv"
+  },
+  {
+   "name": "Body Cam (2020) [1080p] [WEBRip] [5.1] [YTS] [YIFY]"
+  },
+  {
+   "name": "Guardians of the Galaxy (2014) 1080p BluRay 5.1 DTS-HD MA 7.1 [YTS] [YIFY]"
   }
  ]
 }

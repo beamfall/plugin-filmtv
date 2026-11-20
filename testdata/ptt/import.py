@@ -7,10 +7,12 @@ reads from it. This reads them from a PTT checkout without running PTT:
     python3 -I testdata/ptt/import.py <PTT checkout> > testdata/ptt/cases.json
 
 Fields come from test_title.py (title), test_year.py (year, 0 for none),
-test_season.py (seasons), test_episodes.py (episodes) and test_main.py, which
-asserts the whole parse, so its absent year is 0. A name in several files
-merges its fields; two files that disagree stop the import. The files on
-adult, site, trash and release tags are not read.
+test_season.py and test_parser.py's season list (seasons), test_episodes.py
+(episodes) and test_main.py, which asserts the whole parse, so its absent year
+is 0. test_collection.py, test_adult.py and test_trash.py only mark a name
+complete, adult or trash. A name in several files merges its fields; two files
+that disagree stop the import, as does a checkout with local changes to the
+files read.
 
 A case is a library file, and kept, unless its fields say otherwise (RULE).
 """
@@ -23,8 +25,9 @@ import sys
 
 RULE = (
     "A case is kept unless its fixtures mark it complete, adult or trash, "
-    "or declare more than one season, a season with no episode declared, "
-    "or more than three episodes: those are packs, not library files."
+    "or declare more than one season, more than three episodes, a season with an "
+    "empty episode list, or a season with no episode list on a name without a video "
+    "file extension: those are packs, not library files."
 )
 
 SOURCES = {
@@ -33,7 +36,15 @@ SOURCES = {
     "test_season.py": ("seasons",),
     "test_episodes.py": ("episodes",),
     "test_main.py": None,
+    "test_parser.py": ("seasons",),
+    "test_collection.py": ("complete",),
+    "test_adult.py": ("adult",),
+    "test_trash.py": ("trash",),
 }
+
+FLAGS = ("complete", "adult", "trash")
+
+VIDEO = (".mkv", ".mp4", ".avi", ".m4v")
 
 
 def literal(node):
@@ -50,13 +61,18 @@ def literal(node):
 
 
 def fixtures(path):
-    """Yield the parametrize rows of every test in a PTT test file."""
+    """Yield the parametrize rows of every test in a PTT test file, and the
+    test_cases list of test_parser.py's test_season_parser."""
     for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
         if not isinstance(node, ast.FunctionDef):
             continue
         for decorator in node.decorator_list:
             if isinstance(decorator, ast.Call) and getattr(decorator.func, "attr", "") == "parametrize":
                 yield from literal(decorator.args[1])
+        if path.name == "test_parser.py" and node.name == "test_season_parser":
+            for stmt in node.body:
+                if isinstance(stmt, ast.Assign) and getattr(stmt.targets[0], "id", "") == "test_cases":
+                    yield from literal(stmt.value)
 
 
 def declared(source, row):
@@ -66,22 +82,25 @@ def declared(source, row):
         want = row[1]
         fields = {k: want[k] for k in ("title", "seasons", "episodes") if k in want}
         fields["year"] = want.get("year") or 0
-        fields.update({k: True for k in ("complete", "adult", "trash") if want.get(k)})
+        fields.update({k: True for k in FLAGS if want.get(k)})
         return name, fields
+    key = SOURCES[source][0]
+    if key in FLAGS:
+        return name, {key: True} if row[1] else {}
     if source == "test_year.py":
         return name, {"year": row[1] if row[2] else 0}
-    return name, {SOURCES[source][0]: row[1]}
+    return name, {key: row[1]}
 
 
-def is_library_file(fields):
-    if any(fields.get(k) for k in ("complete", "adult", "trash")):
+def is_library_file(name, fields):
+    if any(fields.get(k) for k in FLAGS):
         return False
     seasons, episodes = fields.get("seasons"), fields.get("episodes")
     if seasons is not None and len(seasons) > 1:
         return False
-    if seasons and not episodes:
+    if episodes is not None and (len(episodes) > 3 or seasons and not episodes):
         return False
-    return episodes is None or len(episodes) <= 3
+    return not (seasons and episodes is None and not name.lower().endswith(VIDEO))
 
 
 def version(root):
@@ -94,6 +113,10 @@ def version(root):
 
 def main(checkout):
     root = pathlib.Path(checkout)
+    git = ["git", "-C", str(root)]
+    read = ["pyproject.toml", "LICENSE"] + [f"tests/{source}" for source in SOURCES]
+    if subprocess.check_output(git + ["status", "--porcelain", "--"] + read, text=True).strip():
+        sys.exit("the PTT checkout has local changes to the files read; import from a clean commit")
     merged, order = {}, []
     for source in SOURCES:
         for row in fixtures(root / "tests" / source):
@@ -108,14 +131,14 @@ def main(checkout):
     cases = []
     for name in order:
         fields = merged[name]
-        if is_library_file(fields):
+        if is_library_file(name, fields):
             cases.append({"name": name, **{k: fields[k] for k in ("title", "year", "seasons", "episodes") if k in fields}})
-    git = ["git", "-C", str(root)]
     out = {
         "source": "https://github.com/dreulavelle/PTT",
         "version": version(root),
         "commit": subprocess.check_output(git + ["rev-parse", "HEAD"], text=True).strip(),
         "license": "MIT, Copyright (c) 2024 Spoked; see LICENSE in this directory",
+        "license_text": (root / "LICENSE").read_text(encoding="utf-8"),
         "rule": RULE,
         "imported": len(order),
         "cases": cases,

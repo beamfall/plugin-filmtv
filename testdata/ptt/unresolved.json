@@ -17,6 +17,9 @@
  "102 - The Invitation.avi": [
   "episode"
  ],
+ "2 сезон 24 серия.avi": [
+  "season"
+ ],
  "2-06. Девичья сила.mkv": [
   "episode",
   "season"
@@ -42,7 +45,8 @@
   "episode"
  ],
  "4-13 Cursed (HD)": [
-  "episode"
+  "episode",
+  "season"
  ],
  "4-13 Cursed (HD).m4v": [
   "episode",
@@ -73,6 +77,9 @@
  ],
  "Breaking Bad S02 03.mkv": [
   "episode"
+ ],
+ "Bron - S4 - 720P - SweSub.mp4": [
+  "season"
  ],
  "CSI Crime Scene Investigation S01 720p WEB DL DD5 1 H 264 LiebeIst[rartv]": [
   "title"
@@ -109,9 +116,6 @@
  ],
  "Grimm.INTEGRAL.MULTI.COMPLETE.BLURAY-BMTH": [
   "title"
- ],
- "Harry Potter All Movies Collection 2001-2011 720p Dual KartiKing": [
-  "year"
  ],
  "Heidi Audio Latino DVDRip [cap. 3 Al 18]": [
   "episode",
@@ -201,8 +205,14 @@
  "S01 - E03 - Fifty-Fifty.mkv": [
   "episode"
  ],
+ "S011E16.mkv": [
+  "season"
+ ],
  "S03E13_91.avi": [
   "episode"
+ ],
+ "Seizoen 22 - Zon & Maan Ultra Legendes/afl.18 Je ogen op de bal houden!.mp4": [
+  "season"
  ],
  "Show Something [.01.] 720p.mkv": [
   "episode"
@@ -298,10 +308,16 @@
   "title"
  ],
  "[DVDRip-ITA]The Fast and the Furious: Tokyo Drift [CR-Bt]": [
-  "title"
+  "episode",
+  "season",
+  "title",
+  "year"
  ],
  "[Eng Sub] Rebirth Ep #36 [8CF3ADFA].mkv": [
   "episode"
+ ],
+ "[Erai-raws] Granblue Fantasy The Animation Season 2 - 08 [1080p][Multiple Subtitle].mkv": [
+  "season"
  ],
  "[Erai-raws] Granblue Fantasy The Animation Season 2 - 10 [1080p][Multiple Subtitle].mkv": [
   "season"
@@ -309,8 +325,14 @@
  "[Erai-raws] Kingdom 3rd Season - 02 [1080p].mkv": [
   "title"
  ],
+ "[Erai-raws] Shingeki no Kyojin Season 3 - 11 (BD 1080p Hi10 FLAC) [1FA13150].mkv": [
+  "season"
+ ],
  "[Exiled-Destiny]_Tokyo_Underground_Ep02v2_(41858470).mkv": [
   "episode"
+ ],
+ "[FFA] Kiratto Pri☆chan Season 3 - 11 [1080p][HEVC].mkv": [
+  "season"
  ],
  "[Final8]Suisei no Gargantia - 05 (BD 10-bit 1920x1080 x264 FLAC)[E0B15ACF].mkv": [
   "episode"
@@ -345,6 +367,9 @@
  ],
  "[NC-Raws] 间谍过家家 / SPY×FAMILY - 04 (B-Global 1920x1080 HEVC AAC MKV)": [
   "title"
+ ],
+ "[SCY] Attack on Titan Season 3 - 11 (BD 1080p Hi10 FLAC) [1FA13150].mkv": [
+  "season"
  ],
  "[Seed-Raws] 劇場版 ペンギン・ハイウェイ Penguin Highway The Movie (BD 1280x720 AVC AACx4 [5.1+2.0+2.0+2.0]).mp4": [
   "title"
@@ -431,6 +456,9 @@
  ],
  "Разрушители легенд. MythBusters. Сезон 15. Эпизод 09. Скрытая угроза (2015).avi": [
   "episode",
+  "season"
+ ],
+ "Сезон 5/Серия 11.mkv": [
   "season"
  ],
  "Серия 11.mkv": [
