@@ -40,6 +40,8 @@ func TestYearPickerKeepsYearNamedTitles(t *testing.T) {
 		{"/movies/$ (1971).mkv", sdk.ParsedMedia{Title: "$", Class: "movie", Year: 1971}, true},
 		{"/movies/[REC].2007.mkv", sdk.ParsedMedia{Title: "[REC]", Class: "movie", Year: 2007}, true},
 		{"/movies/[REC] (2007) PROPER.1080p.mkv", sdk.ParsedMedia{Title: "[REC]", Class: "movie", Year: 2007}, true},
+		{"/movies/[REC] (2007) [DEADBEEF].mkv", sdk.ParsedMedia{Title: "[REC]", Class: "movie", Year: 2007}, true},
+		{"/tv/[REC] (2007) [DEADBEEF]/Season 01/S01E01.mkv", sdk.ParsedMedia{Title: "[REC]", Class: "episode", Year: 2007, Sequence: "1", Index: 1}, true},
 		{"/movies/[Group] (2013) DV [DEADBEEF].mkv", sdk.ParsedMedia{Title: "DV", Class: "movie", Year: 2013}, true},
 		{"/incoming/[Group] (2018) ReMastered S01E01.mkv", sdk.ParsedMedia{Title: "ReMastered", Class: "episode", Year: 2018, Sequence: "1", Index: 1}, true},
 		{"/movies/[REC] 2007-2008-2009.mkv", sdk.ParsedMedia{Title: "[REC]", Class: "movie", Year: 2007}, true},

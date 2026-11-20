@@ -994,11 +994,11 @@ func findYear(name, lower string, episodeCut int) yearToken {
 
 // onlyNoiseAfter reports whether name[start:end], the text after a leading
 // year, holds no title: nothing, or release noise from its first word on
-// ("PROPER.1080p"). Noise is read against the whole rest of the name, so a
-// release word that is the title ("ReMastered S01E01", "DV [DEADBEEF]") stays
-// a title.
+// ("PROPER.1080p"); a checksum is not a title. Noise is read against the
+// whole rest of the name, so a release word that is the title ("ReMastered
+// S01E01", "DV [DEADBEEF]") stays a title.
 func onlyNoiseAfter(name, lower string, start, end int) bool {
-	if cleanTitle(name[min(start, end):end]) == "" {
+	if cleanTitle(reChecksum.ReplaceAllString(lower[min(start, end):end], "")) == "" {
 		return true
 	}
 	noise := firstNoiseToken(lower[start:], false)
