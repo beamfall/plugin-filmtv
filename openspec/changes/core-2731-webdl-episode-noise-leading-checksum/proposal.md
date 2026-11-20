@@ -22,7 +22,8 @@ CORE-2726's Codex review left four parser gaps:
   noise and at the end of a title (`Movie.WEB-DL` parsed as `Movie WEB-DL`).
 - An episode whose name is only release noise after a bare leading year takes its series name from
   the show folder.
-- Checksum brackets alone at the start of a name are blanked before parsing: they are not a release
+- Checksum brackets that open a name, on either side of a leading parenthesized year, are blanked
+  before parsing: they are not a release
   group, so a year-named title after them is the title, not the year, and they do not end the
   title. They still count as episode context (`[DEADBEEF] Naruto - 001`).
 - Decision: a checksum keeps a release word before it in the title. It ends the title the way a

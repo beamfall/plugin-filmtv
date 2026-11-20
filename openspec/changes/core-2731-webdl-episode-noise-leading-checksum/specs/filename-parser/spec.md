@@ -25,8 +25,7 @@ end of a title, not a tag followed by a hyphenated release group.
 When only release noise (scene tags, release tags, checksums) stands between a bare leading
 parenthesized year and an episode marker, the episode SHALL have no series name of its own and
 SHALL take it from the show folder. A release word that can be a title (`ReMastered`) SHALL stay
-the series name. When a title word follows release tags (`1080p.Fringe`), the series name SHALL start
-at that word.
+the series name, and so SHALL any text that is not release noise throughout (`[1080p] Fringe`).
 
 #### Scenario: Scene noise before an episode marker
 
@@ -48,24 +47,19 @@ at that word.
 - **WHEN** a file is `/downloads/(2007) [1080p] Fringe S01E01.mkv`
 - **THEN** it parses to title `Fringe`, year 2007, class `episode`, season 1, episode 1
 
-#### Scenario: Series name after a bare tag
-
-- **WHEN** a file is `/tv/Fringe/Season 01/(2007) 1080p.Fringe.S01E01.mkv`
-- **THEN** it parses to title `Fringe`, year 2007, class `episode`, season 1, episode 1
-
 #### Scenario: Audio tag and release group before an episode marker
 
-- **WHEN** a file is `/tv/Fringe/Season 01/(2007) DD5.1.S01E01.mkv` or
-  `/tv/Fringe/Season 01/(2007) PROPER.WEB-DL-GRP.S01E01.mkv`
-- **THEN** it parses to title `Fringe`, year 2007, class `episode`, season 1, episode 1
+- **WHEN** a file is `/tv/Other/Season 01/(2007) DD5.1.S01E01.mkv` or
+  `/tv/Other/Season 01/(2007) PROPER.WEB-DL-GRP.S01E01.mkv`
+- **THEN** it parses to title `Other`, year 2007, class `episode`, season 1, episode 1
 
 ### Requirement: A leading checksum is not a release group
 
 Checksum brackets that open a name, up to its first other bracket or word, SHALL NOT be
 release-group brackets or title words: a year-named title after them SHALL be the title, not the
-year, and they SHALL NOT end the title. They SHALL still count as episode context. Checksums right
-after a leading year SHALL be read the same way. A release group hyphenated onto them SHALL leave
-the name with no title.
+year, and they SHALL NOT end the title. They SHALL still count as episode context. Checksums on
+either side of a leading parenthesized year SHALL be read the same way. A release group hyphenated
+directly onto them SHALL leave the name with no title.
 
 #### Scenario: Leading checksum before a year-named title
 
