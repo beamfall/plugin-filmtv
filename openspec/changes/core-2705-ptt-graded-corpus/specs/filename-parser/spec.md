@@ -17,19 +17,19 @@ fixtures declare, and each field SHALL have a documented floor rate at or below 
 
 ### Requirement: The imported corpus records its source and rule
 
-The PTT fixture file SHALL record the PTT version, commit and licence it came from, and SHALL keep
-cases by a written rule that drops packs, adult and trash cases.
+The PTT fixture file SHALL record the PTT version and commit it came from and PTT's copyright and
+MIT notice, and SHALL keep cases by a written rule that drops packs, adult and trash cases.
 
 #### Scenario: Packs stay out
 
-- **WHEN** a PTT fixture declares two seasons, a season with no episode, or more than three episodes
+- **WHEN** any PTT fixture marks a name complete, or declares two seasons, more than three episodes, or a season with an empty episode list
 - **THEN** the import leaves it out of the graded set
 
 ### Requirement: A season code's episode is read whole and a channel layout is no season code
 
-The parser SHALL read every digit of an `SxxEyyyy` episode, reading one above 999 as the absolute
-episode, and SHALL NOT read an `NxM` code whose season follows a lone digit and a dot as a
-season and episode.
+The parser SHALL read every digit of an `SxxEyyyy` episode not followed by another digit, reading
+one above 999 as the absolute episode, and SHALL NOT read an `NxM` code as a season and episode
+when it follows a digit and a dot and an audio codec leads it or a `+` joins it to another layout.
 
 #### Scenario: Four-digit episode after a season code
 
@@ -39,4 +39,4 @@ season and episode.
 #### Scenario: Channel layout
 
 - **WHEN** the parser reads `Escaflowne (2000) (BDRip x265 AC3 5.1x2+2.0x3).mkv`
-- **THEN** it parses to the film `Escaflowne` (2000), and `Doctor.Who.2005.8x11.Dark.Water.720p.mkv` still parses to season 8, episode 11
+- **THEN** it parses to the film `Escaflowne` (2000), while `Doctor.Who.2005.8x11.Dark.Water.720p.mkv` and `Babylon.5.1x02.Soul.Hunter.mkv` still parse to season codes
