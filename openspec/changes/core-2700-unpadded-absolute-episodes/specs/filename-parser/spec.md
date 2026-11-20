@@ -4,8 +4,9 @@
 
 With episode context, the filename parser SHALL read two to four digits after a spaced hyphen at the
 end of the name, before release noise, or before ` - ` and an episode title, as the absolute episode
-number, with an optional release revision `v<n>` after the digits. It SHALL return class `episode`,
-the series name as the title, and the number as both `Index` and `AbsoluteOrdinal`.
+number, with an optional release revision (`v` and one or two digits) after the digits. It SHALL
+return class `episode`, the series name as the title, and the number as both `Index` and
+`AbsoluteOrdinal`.
 
 #### Scenario: Two digits in a season folder
 
@@ -27,10 +28,32 @@ the series name as the title, and the number as both `Index` and `AbsoluteOrdina
 - **WHEN** a file is `/Downloads/[SubsPlease] Frieren - 12v2 (1080p) [ABCD1234].mkv`
 - **THEN** it parses to title `Frieren`, absolute episode 12
 
+### Requirement: A year does not hide an absolute episode number
+
+A year in the series name or in the episode title SHALL NOT prevent the absolute episode reading, and
+a year in the series name SHALL be returned as the year. A dashed four-digit number from 1900 to 2099
+SHALL be read as a year, not as an episode number.
+
+#### Scenario: Year in the series name
+
+- **WHEN** a file is `/anime/Hunter x Hunter (2011)/Hunter x Hunter (2011) - 12.mkv`
+- **THEN** it parses to title `Hunter x Hunter`, year 2011, absolute episode 12
+
+#### Scenario: Year in the episode title
+
+- **WHEN** a file is `/tv/Show - 12 - Class of 1999.mkv`
+- **THEN** it parses to title `Show`, no year, absolute episode 12, episode title `Class of 1999`
+
+#### Scenario: Dashed year
+
+- **WHEN** a file is `/tv/Show/Show - 2015.mkv`
+- **THEN** it parses to title `Show`, year 2015, and no episode
+
 ### Requirement: Film numbers after a hyphen stay in the title
 
 The parser SHALL NOT read a single digit after a spaced hyphen as an absolute episode, and SHALL NOT
-read any number after a spaced hyphen as one without episode context or in a film library.
+read any number after a spaced hyphen as one without episode context or under a film library
+folder, a season folder below the film library included.
 
 #### Scenario: Sequel number
 
@@ -40,4 +63,9 @@ read any number after a spaced hyphen as one without episode context or in a fil
 #### Scenario: Film library
 
 - **WHEN** a file is `/media/Movies/Saw - 10.mkv`
+- **THEN** it parses to title `Saw - 10`, class `movie`
+
+#### Scenario: Season folder in a film library
+
+- **WHEN** a file is `/media/Movies/Specials/Saw - 10.mkv`
 - **THEN** it parses to title `Saw - 10`, class `movie`

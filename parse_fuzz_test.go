@@ -24,6 +24,10 @@ func FuzzParseFilename(f *testing.F) {
 		"Night Harbor (2004) - [Director's Cut].mkv",
 		"Night Harbor (2004) - 2160p HDR.mkv",
 		"Synthetic Daily 2023-03-01.mkv",
+		"/tv/One Piece/One Piece - 1071.mkv",
+		"/anime/Hunter x Hunter (2011)/Hunter x Hunter (2011) - 12.mkv",
+		"/tv/Show - 12 - Class of 1999.mkv",
+		"/Downloads/[SubsPlease] Frieren - 12v2 (1080p) [ABCD1234].mkv",
 		"Synthetic_Daily_2024_02_29 - Guest Night.mkv",
 		"The IT Crowd/Season 1/1e01-Yesterday's Jam.mkv",
 		"Synthetic Show/Season 3/3 01 From Hell.mkv",
@@ -121,7 +125,13 @@ func FuzzParseFilename(f *testing.F) {
 		if title := parser.MediaTitle(path, sdk.ParseProbe{}); (title != "") != (got.Class == "episode") {
 			t.Fatalf("MediaTitle(%q) = %q for class %q", path, title, got.Class)
 		}
-		if got.Index < 0 || got.Index > 999 || got.IndexEnd < 0 || got.IndexEnd > 999 {
+		// An absolute episode number runs to four digits ("One Piece - 1071");
+		// a season's episode index to three.
+		maxIndex := 999
+		if got.AbsoluteOrdinal != 0 {
+			maxIndex = 9999
+		}
+		if got.Index < 0 || got.Index > maxIndex || got.IndexEnd < 0 || got.IndexEnd > 999 {
 			t.Fatalf("Parse(%q) returned an out-of-contract index: %+v", path, got)
 		}
 	})

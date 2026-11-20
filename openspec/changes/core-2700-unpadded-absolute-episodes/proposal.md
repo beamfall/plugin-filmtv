@@ -19,6 +19,10 @@ parse.
 - The form still needs episode context, as before: a season folder, a tv or anime library folder, a
   checksum tag, a leading group bracket, or a show folder named like the series.
 - A single digit after ` - ` is never read as an episode: it numbers film sequels (`Rocky - 2`).
+- The absolute number is read before the year, so a year in the series name
+  (`Hunter x Hunter (2011) - 12`) or the episode title (`Show - 12 - Class of 1999`) no longer hides
+  it. A dashed four-digit number from 1900 to 2099 stays a year.
+- A film library folder now rules out a season folder below it (`/Movies/Specials/Saw - 10`).
 - Films in a film library and names with no episode context keep their number in the title.
 
 ## Impact

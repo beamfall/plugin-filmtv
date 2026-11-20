@@ -247,6 +247,9 @@ func parseName(path string) (nameParse, bool) {
 	if !isEpisode {
 		episode, isEpisode = seriesCodeEpisode(path, lower)
 	}
+	if !isEpisode {
+		episode, isEpisode = absoluteEpisode(path, name, lower)
+	}
 	episodeCut := -1
 	if isEpisode {
 		parsed.Class = "episode"
@@ -254,6 +257,7 @@ func parseName(path string) (nameParse, bool) {
 			parsed.Sequence = episode.sequence
 			parsed.Index = episode.index
 			parsed.IndexEnd = episode.indexEnd
+			parsed.AbsoluteOrdinal = episode.absolute
 		}
 		episodeCut = episode.start
 		cut = episodeCut
@@ -283,20 +287,6 @@ func parseName(path string) (nameParse, bool) {
 		}
 		if checksum := reChecksum.FindStringIndex(lower[:cut]); checksum != nil {
 			cut = checksum[0]
-		}
-	}
-
-	// 3b. Absolute episode number. A name with no other episode token and no
-	// year whose series name is followed by a zero-padded number is an
-	// absolute-numbered episode when the path says it is TV: it carries an
-	// index and an absolute ordinal but no season.
-	if !isEpisode && parsed.Year == 0 {
-		if token, ok := findAbsoluteEpisode(path, name[:cut], lower[:cut], lower); ok {
-			episode, isEpisode = token, true
-			parsed.Class = "episode"
-			parsed.Index = token.index
-			parsed.AbsoluteOrdinal = token.index
-			cut = token.start
 		}
 	}
 
@@ -350,7 +340,10 @@ type episodeToken struct {
 	start, end      int
 	sequence        string
 	index, indexEnd int
-	airDate         time.Time
+	// absolute is the absolute episode number of an absolute-numbered
+	// episode, which then has no sequence; 0 otherwise.
+	absolute int
+	airDate  time.Time
 }
 
 // findEpisode locates the season/episode marker in the ASCII-folded name. The
@@ -597,11 +590,13 @@ const (
 
 // episodeContext reports whether path carries evidence beyond the bare
 // numbers in its name that it is an episode of series. lower is the whole
-// ASCII-folded name, release noise included. The evidence, strongest first:
+// ASCII-folded name, release noise included. A film library folder
+// ("Movies") as the nearest library folder above the file rules out all
+// context, a season folder below it included. The evidence, strongest first:
 //
 //   - a season folder;
-//   - the nearest TV or film library folder above the file: a film folder
-//     ("Movies") rules the rest out, a TV folder ("TV", "Anime") is context;
+//   - the nearest library folder above the file being a TV folder ("TV",
+//     "Anime");
 //   - a CRC32 checksum bracket, or a release-group bracket in front of the
 //     anime " - 001" form;
 //   - a show folder named for series, except for an underscored counter.
@@ -613,14 +608,15 @@ func episodeContext(path, lower, series string, form weakForm) bool {
 	if cameraPrefixes[asciiLower(series)] {
 		return false
 	}
+	dir := filepath.Dir(path)
+	library := nearestLibraryFolder(dir)
+	if library == "film" {
+		return false
+	}
 	if _, inSeasonFolder := seasonFolderNumber(path); inSeasonFolder {
 		return true
 	}
-	dir := filepath.Dir(path)
-	library := nearestLibraryFolder(dir)
 	switch {
-	case library == "film":
-		return false
 	case library == "tv", form != formCompactCode && reChecksum.MatchString(lower):
 		return true
 	case form == formDashed && reLeadingGroups.MatchString(lower):
@@ -652,13 +648,35 @@ func nearestLibraryFolder(dir string) string {
 // ASCII-folded copy. lower is the whole folded name, whose checksum bracket
 // counts as context although the title stops before it. The number must
 // follow a series name of its own, and path must give episode context.
+// absoluteEpisode reads an absolute episode number in name, the file name
+// without its extension, and lower, its ASCII-folded copy. It runs before the
+// year is read, on the name up to its release noise, so a year in the series
+// name ("Show (2011) - 12") or in the episode title ("Show - 12 - Class of
+// 1999") leaves the number readable.
+func absoluteEpisode(path, name, lower string) (episodeToken, bool) {
+	cut := len(name)
+	if noiseStart := firstNoiseToken(lower, true); noiseStart >= 0 {
+		cut = noiseStart
+	}
+	if checksum := reChecksum.FindStringIndex(lower[:cut]); checksum != nil {
+		cut = checksum[0]
+	}
+	token, ok := findAbsoluteEpisode(path, name[:cut], lower[:cut], lower)
+	token.absolute = token.index
+	return token, ok
+}
+
 func findAbsoluteEpisode(path, title, lowerTitle, lower string) (episodeToken, bool) {
 	m := reAbsoluteEpisode.FindStringSubmatchIndex(lowerTitle)
 	if m == nil {
 		return episodeToken{}, false
 	}
 	series := title[:m[0]]
-	series = cleanTitle(series[len(reLeadingGroups.FindString(series)):])
+	series = series[len(reLeadingGroups.FindString(series)):]
+	if _, yearStart := findYear(series, asciiLower(series), -1); yearStart >= 0 {
+		series = series[:yearStart]
+	}
+	series = cleanTitle(series)
 	form, digits := formDashed, m[6:8]
 	if m[4] >= 0 {
 		form, digits = formNumbered, m[4:6]
@@ -670,7 +688,8 @@ func findAbsoluteEpisode(path, title, lowerTitle, lower string) (episodeToken, b
 		return episodeToken{}, false
 	}
 	index := atoi(lowerTitle[digits[0]:digits[1]])
-	if index == 0 {
+	if index == 0 || form == formDashed && digits[1]-digits[0] == 4 && index >= 1900 && index <= 2099 {
+		// A dashed four-digit number in the year range is a year ("Show - 2015").
 		return episodeToken{}, false
 	}
 	return episodeToken{start: m[0], end: m[1], index: index}, true

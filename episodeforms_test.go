@@ -55,6 +55,11 @@ func TestEpisodeFormsDoNotMisreadFilms(t *testing.T) {
 		{"trailing-number-in-film-title", "/media/Movies/Ocean's 11.mkv", sdk.ParsedMedia{Title: "Ocean's 11", Class: "movie"}},
 		{"trailing-number-with-year", "/media/Movies/Apollo 13 (1995).mkv", sdk.ParsedMedia{Title: "Apollo 13", Class: "movie", Year: 1995}},
 		{"resolution-after-dash-is-not-absolute", "/media/TV/Show - 1080p.mkv", sdk.ParsedMedia{Title: "Show"}},
+		// A film library rules out a season folder below it.
+		{"film-library-over-season-folder", "/media/Movies/Specials/Saw - 10.mkv", sdk.ParsedMedia{Title: "Saw - 10", Class: "movie"}},
+		// A dashed number in the year range is a year, even in a show folder.
+		{"dash-year-in-show-folder", "/tv/Show/Show - 2015.mkv", sdk.ParsedMedia{Title: "Show", Year: 2015}},
+		{"film-year-then-dash-number", "Movie (2019) - 12.mkv", sdk.ParsedMedia{Title: "Movie", Class: "movie", Year: 2019}},
 		// A camera clip stem is never a series, even under a TV folder.
 		{"camera-clip", "VID_0001.mp4", sdk.ParsedMedia{Title: "VID 0001", Class: "movie"}},
 		{"camera-still-clip", "DSC_0012.mov", sdk.ParsedMedia{Title: "DSC 0012", Class: "movie"}},
@@ -124,6 +129,12 @@ func TestEpisodeFormsReadWithContext(t *testing.T) {
 			sdk.ParsedMedia{Title: "Kingdom 3rd Season", Class: "episode", Index: 2, AbsoluteOrdinal: 2}},
 		{"anime-unpadded-with-revision", "/Downloads/[SubsPlease] Frieren - 12v2 (1080p) [ABCD1234].mkv",
 			sdk.ParsedMedia{Title: "Frieren", Class: "episode", Index: 12, AbsoluteOrdinal: 12}},
+		// A year in the series name or in the episode title leaves the
+		// absolute number readable.
+		{"anime-series-year", "/anime/Hunter x Hunter (2011)/Hunter x Hunter (2011) - 12.mkv",
+			sdk.ParsedMedia{Title: "Hunter x Hunter", Class: "episode", Year: 2011, Index: 12, AbsoluteOrdinal: 12}},
+		{"anime-year-in-episode-title", "/tv/Show - 12 - Class of 1999.mkv",
+			sdk.ParsedMedia{Title: "Show", Class: "episode", Index: 12, AbsoluteOrdinal: 12}},
 		{"bare-e-in-season-folder", "/media/Show/Season 1/1e01-Pilot.mkv",
 			sdk.ParsedMedia{Title: "Show", Class: "episode", Sequence: "1", Index: 1}},
 		{"bare-e-under-tv-folder", "/media/TV/Show 1e01.mkv",
@@ -153,6 +164,9 @@ func TestEpisodeFormsReadWithContext(t *testing.T) {
 	}
 	if got := parser.MediaTitle("/tv/Naruto Shippuden/Naruto Shippuden - 107 - Strange Bedfellows.mkv", sdk.ParseProbe{}); got != "E107 · Strange Bedfellows" {
 		t.Errorf("MediaTitle of an unpadded absolute episode with a title = %q, want %q", got, "E107 · Strange Bedfellows")
+	}
+	if got := parser.MediaTitle("/tv/Show - 12 - Class of 1999.mkv", sdk.ParseProbe{}); got != "E12 · Class of 1999" {
+		t.Errorf("MediaTitle of an absolute episode with a year in its title = %q, want %q", got, "E12 · Class of 1999")
 	}
 }
 
