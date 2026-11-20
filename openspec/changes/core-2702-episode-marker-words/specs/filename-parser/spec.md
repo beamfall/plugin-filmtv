@@ -50,8 +50,8 @@ with an `S.EE` code, the first SHALL win.
 An episode word with a number (`Ep 14`, `Folge 12`, `Cap.105`), a bare `Eyy` and `N seriya` SHALL
 name an episode only in a season folder, which SHALL give the season (0 for `Specials`). Elsewhere
 they SHALL stay title text, so a film named with one of them stays a film. When an absolute
-number, an `XxYY` code or an air date also appears, the first marker in the name SHALL win,
-unless it is all of an absolute number's series name.
+number also appears, an episode word before it SHALL win; a bare `Eyy` or `N seriya` SHALL be
+read only when the name holds no other marker.
 
 #### Scenario: Bare episode code in a season folder
 
