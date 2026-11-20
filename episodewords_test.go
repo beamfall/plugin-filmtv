@@ -60,6 +60,20 @@ func TestEpisodeMarkerWords(t *testing.T) {
 		{"/movies/Ep 14.mkv", sdk.ParsedMedia{Title: "Ep 14", Class: "movie"}, true},
 		{"/movies/Folge 12 (2010).mkv", sdk.ParsedMedia{Title: "Folge 12", Class: "movie", Year: 2010}, true},
 		// A season word must start a word.
+		// Review cases: the first marker wins over a later one, an episode
+		// number never runs into a letter or digit, and a bit depth is no
+		// "Episode S.EE" code.
+		{"/movies/Star.Wars.Episode.1.10-bit.1080p.mkv", sdk.ParsedMedia{Title: "Star Wars Episode 1", Class: "movie"}, true},
+		{"/anime/Naruto/Naruto - 014 - Episode 1.14.mkv", sdk.ParsedMedia{Title: "Naruto", Class: "episode", Index: 14, AbsoluteOrdinal: 14}, true},
+		{"/tv/Pokemon/Season 3/Pokemon 3x01 - Episode 3.01.mkv", episode("Pokemon", "3", 1), true},
+		{"/tv/Show/Season 1/Show - Episode 14 - 316.mkv", episode("Show", "1", 14), true},
+		{"/downloads/One Piece Temporada 1 Episodio 1071.mkv", episode("One Piece", "1", 1071), true},
+		{"/downloads/Anubis saison 1 ep 720p.mkv", sdk.ParsedMedia{Title: "Anubis saison 1 ep", Class: "movie"}, true},
+		{"/downloads/Dark Folge 2.04.mkv", episode("Dark", "2", 4), true},
+		{"/downloads/Fringe.T01E01-E02.Pilot.mkv", sdk.ParsedMedia{Title: "Fringe", Class: "episode", Sequence: "1", Index: 1, IndexEnd: 2}, true},
+		{"/downloads/Show Saison 2 E\u0301pisode 4.mkv", episode("Show", "2", 4), true},
+		{"/tv/Show/Season 3/Show Folge-03.mkv", episode("Show", "3", 3), true},
+		{"/tv/Show/Season 1/Show - 05 - The Cap 3 Heist.mkv", sdk.ParsedMedia{Title: "Show", Class: "episode", Index: 5, AbsoluteOrdinal: 5}, true},
 		{"/downloads/Contemp 2 Ep 3.mkv", sdk.ParsedMedia{Title: "Contemp 2 Ep 3", Class: "movie"}, true},
 		// Episode zero is no episode.
 		{"/tv/Show/Season 1/Show Ep 0.mkv", sdk.ParsedMedia{Title: "Show Ep 0"}, true},
