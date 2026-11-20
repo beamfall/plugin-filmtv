@@ -34,6 +34,20 @@ func TestYearPickerKeepsYearNamedTitles(t *testing.T) {
 		{"/movies/2001.A.Space.Odyssey.1080p.mkv", sdk.ParsedMedia{Title: "2001 A Space Odyssey", Class: "movie"}, true},
 		{"/tv/1923/Season 01/1923.S01E01.mkv", sdk.ParsedMedia{Title: "1923", Class: "episode", Sequence: "1", Index: 1}, true},
 		{"/movies/(2000).avi", sdk.ParsedMedia{}, false},
+		// A leading year must leave a title: otherwise the text before it is the title.
+		{"/movies/[REC] (2007).mkv", sdk.ParsedMedia{Title: "[REC]", Class: "movie", Year: 2007}, true},
+		{"/movies/[REC] (2007) 1080p BluRay.mkv", sdk.ParsedMedia{Title: "[REC]", Class: "movie", Year: 2007}, true},
+		{"/movies/$ (1971).mkv", sdk.ParsedMedia{Title: "$", Class: "movie", Year: 1971}, true},
+		{"/movies/[REC].2007.mkv", sdk.ParsedMedia{Title: "[REC]", Class: "movie", Year: 2007}, true},
+		{"/movies/[Group (1999)] (2000) The Emperor's New Groove.avi", sdk.ParsedMedia{Title: "The Emperor's New Groove", Class: "movie", Year: 2000}, true},
+		// Underscores separate years like dots; a tight rising range is a run of years.
+		{"/movies/2012_2009_1080p.mkv", sdk.ParsedMedia{Title: "2012", Class: "movie", Year: 2009}, true},
+		{"/movies/Fringe 2008-2013.mkv", sdk.ParsedMedia{Title: "Fringe", Class: "movie", Year: 2008}, true},
+		// Episodes: the show folder settles a bare-year series name.
+		{"/tv/Doctor Who (2005)/Season 01/2005.S01E01.mkv", sdk.ParsedMedia{Title: "Doctor Who", Class: "episode", Year: 2005, Sequence: "1", Index: 1}, true},
+		{"/incoming/Fringe 2008-2013/Fringe 0001.mkv", sdk.ParsedMedia{Title: "Fringe", Class: "episode", Index: 1, AbsoluteOrdinal: 1}, true},
+		{"/tv/Show/Season 01/(2000) Show 0001.mkv", sdk.ParsedMedia{Title: "Show", Class: "episode", Year: 2000, Index: 1, AbsoluteOrdinal: 1}, true},
+		{"/tv/1923 - 12.mkv", sdk.ParsedMedia{Title: "1923", Class: "episode", Index: 12, AbsoluteOrdinal: 12}, true},
 		// Controls: a title before the year keeps the old reading.
 		{"/movies/1917 (2019).mkv", sdk.ParsedMedia{Title: "1917", Class: "movie", Year: 2019}, true},
 		{"/movies/2001 A Space Odyssey (1968).mkv", sdk.ParsedMedia{Title: "2001 A Space Odyssey", Class: "movie", Year: 1968}, true},

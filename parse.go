@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode"
 	"unicode/utf8"
 
 	"github.com/beamfall/plugin-filmtv/internal/mediaimport"
@@ -267,7 +266,8 @@ func parseName(path string) (nameParse, bool) {
 	// 2. Year (see findYear). The title ends at the year, or starts after a
 	// leading parenthesized one ("(2000) Title").
 	titleStart := 0
-	if year := findYear(name, lower, episodeCut); year.found() {
+	year := findYear(name, lower, episodeCut)
+	if year.found() {
 		parsed.Year = year.year
 		switch {
 		case year.leading:
@@ -294,6 +294,14 @@ func parseName(path string) (nameParse, bool) {
 		}
 	}
 	titleStart = min(titleStart, cut)
+	if year.leading && cleanTitle(name[titleStart:cut]) == "" && cleanTitle(name[:year.start]) != "" {
+		// Nothing but noise follows a leading year ("[REC] (2007) 1080p"), so the
+		// bracket before it is the title and the year ends it.
+		titleStart, cut = 0, year.start
+		if !isEpisode {
+			parsed.VersionLabel = versionLabel(name, year.start)
+		}
+	}
 
 	// 4. Title cleanup: take everything before the cut, normalise separators.
 	// For an episode this is the series name: a release-group bracket in front
@@ -304,6 +312,13 @@ func parseName(path string) (nameParse, bool) {
 		rawTitle = rawTitle[len(reLeadingGroups.FindString(rawTitle)):]
 	}
 	parsed.Title = cleanTitle(rawTitle)
+	if isEpisode && parsed.Year == 0 && isYearNumber(parsed.Title) {
+		// "Doctor Who (2005)/Season 01/2005.S01E01": a bare year as the whole
+		// series name is the show folder's year when that folder carries it.
+		if series, folderYear := seriesFromFolders(path); folderYear == atoi(parsed.Title) {
+			parsed.Title, parsed.Year = series, folderYear
+		}
+	}
 	if isEpisode && parsed.Title == "" {
 		var folderYear int
 		if parsed.Title, folderYear = seriesFromFolders(path); folderYear > 0 {
@@ -693,7 +708,7 @@ func findAbsoluteEpisode(path, title, lowerTitle, lower string) (episodeToken, b
 			form = formUnderscored
 		}
 	}
-	if year.found() {
+	if year.found() && !year.leading {
 		// After a year only the dashed anime form reads as an episode.
 		if form != formDashed {
 			return episodeToken{}, false
@@ -903,20 +918,28 @@ func (y yearToken) title(s string) string {
 }
 
 // findYear reads the release year of a name. Years from 1900 to 2099 count,
-// except a resolution (2160p, 1080i) and a token at or after episodeCut (part
-// of an SxxEyy match). A parenthesized year with title text before it wins
-// ("1917 (2019)"); otherwise a parenthesized year with none before it leads
-// the name ("(2000) Title"). Otherwise the year is the first standalone one
-// with title text before it that is not directly followed by another year:
-// "2012.2009" and "Blade.Runner.2049.2017" keep their first number as title
-// text, and a lone leading year ("2012") is no year at all.
+// except a resolution (2160p, 1080i), a token inside the leading release-group
+// brackets, and a token at or after episodeCut (part of an SxxEyy match). A
+// parenthesized year with title text before it wins ("1917 (2019)");
+// otherwise a parenthesized year with none before it leads the name ("(2000)
+// Title"). Otherwise the year is the first standalone one with title text
+// before it that is not directly followed by another year: "2012.2009" and
+// "Blade.Runner.2049.2017" keep their first number as title text, and a lone
+// leading year ("2012") is no year at all. A tight rising range ("Fringe
+// 2008-2013") is a run of years, not a title number: its first year is the
+// year. When no standalone year has title text before it, one after only
+// release-group brackets is the year ("[REC].2007").
 func findYear(name, lower string, episodeCut int) yearToken {
+	groupsEnd := len(reLeadingGroups.FindString(name))
+	// "_" is a separator, but a word character to \b: blank it for the scan.
+	// The replacement keeps every byte offset.
+	scan := strings.ReplaceAll(lower, "_", " ")
 	var candidates []yearToken
 	var parens []bool
-	for _, m := range reYear.FindAllStringSubmatchIndex(lower, -1) {
+	for _, m := range reYear.FindAllStringSubmatchIndex(scan, -1) {
 		digitsStart, digitsEnd := m[2], m[3]
 		year := atoi(lower[digitsStart:digitsEnd])
-		if year < 1900 || year > 2099 {
+		if year < 1900 || year > 2099 || digitsStart < groupsEnd {
 			continue
 		}
 		if digitsEnd < len(lower) {
@@ -951,23 +974,38 @@ func findYear(name, lower string, episodeCut int) yearToken {
 	if leading.found() {
 		return leading
 	}
+	bracketed := yearToken{}
 	for i, c := range candidates {
-		if !hasTitleText(name[:c.start]) {
-			continue
+		if i+1 < len(candidates) && !parens[i+1] {
+			next := candidates[i+1]
+			between := name[c.end:next.start]
+			if onlySeparators(between) && (between != "-" || next.year <= c.year) {
+				continue
+			}
 		}
-		if i+1 < len(candidates) && !parens[i+1] && onlySeparators(name[c.end:candidates[i+1].start]) {
-			continue
+		if hasTitleText(name[:c.start]) {
+			return c
 		}
-		return c
+		if !bracketed.found() && groupsEnd > 0 {
+			bracketed = c
+		}
 	}
-	return yearToken{}
+	return bracketed
 }
 
 // hasTitleText reports whether s, the text before a year, holds any title:
-// a letter or digit outside the leading release-group brackets.
+// anything but separators outside the leading release-group brackets.
 func hasTitleText(s string) bool {
-	s = s[len(reLeadingGroups.FindString(s)):]
-	return strings.IndexFunc(s, func(r rune) bool { return unicode.IsLetter(r) || unicode.IsDigit(r) }) >= 0
+	return !onlySeparators(s[len(reLeadingGroups.FindString(s)):])
+}
+
+// isYearNumber reports whether s is a four-digit number from 1900 to 2099.
+func isYearNumber(s string) bool {
+	if len(s) != 4 || strings.IndexFunc(s, func(r rune) bool { return r < '0' || r > '9' }) >= 0 {
+		return false
+	}
+	year := atoi(s)
+	return year >= 1900 && year <= 2099
 }
 
 // onlySeparators reports whether s, the text between two years, is only
