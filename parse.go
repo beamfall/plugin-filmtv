@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/beamfall/plugin-filmtv/internal/mediaimport"
@@ -263,16 +264,19 @@ func parseName(path string) (nameParse, bool) {
 		cut = episodeCut
 	}
 
-	// 2. Year. Prefer a parenthesized year; otherwise the first standalone year
-	// token. Skip tokens part of an SxxEyy match and tokens that are really a
-	// resolution (followed by p/i, e.g. 2160p). Range-guard to 1900–2099.
-	if year, yearStart := findYear(name, lower, episodeCut); year > 0 {
-		parsed.Year = year
-		if yearStart >= 0 && yearStart < cut {
-			cut = yearStart
+	// 2. Year (see findYear). The title ends at the year, or starts after a
+	// leading parenthesized one ("(2000) Title").
+	titleStart := 0
+	if year := findYear(name, lower, episodeCut); year.found() {
+		parsed.Year = year.year
+		switch {
+		case year.leading:
+			titleStart = year.end
+		case year.start < cut:
+			cut = year.start
 		}
-		if !isEpisode {
-			parsed.VersionLabel = versionLabel(name, yearStart)
+		if !isEpisode && !year.leading {
+			parsed.VersionLabel = versionLabel(name, year.start)
 		}
 	}
 
@@ -282,19 +286,20 @@ func parseName(path string) (nameParse, bool) {
 	// Family"), so once a year/episode token has already bounded the title, a
 	// noise token elsewhere in the string must not truncate it further.
 	if cut == len(name) {
-		if noiseStart := firstNoiseToken(lower, true); noiseStart >= 0 {
-			cut = noiseStart
+		if noiseStart := firstNoiseToken(lower[titleStart:], true); noiseStart >= 0 {
+			cut = titleStart + noiseStart
 		}
-		if checksum := reChecksum.FindStringIndex(lower[:cut]); checksum != nil {
-			cut = checksum[0]
+		if checksum := reChecksum.FindStringIndex(lower[titleStart:cut]); checksum != nil {
+			cut = titleStart + checksum[0]
 		}
 	}
+	titleStart = min(titleStart, cut)
 
 	// 4. Title cleanup: take everything before the cut, normalise separators.
 	// For an episode this is the series name: a release-group bracket in front
 	// of it is dropped, and a file that carries no series name of its own
 	// ("S01E01 - Earthfall") takes the one of the folder above its season folder.
-	rawTitle := name[:cut]
+	rawTitle := name[titleStart:cut]
 	if isEpisode {
 		rawTitle = rawTitle[len(reLeadingGroups.FindString(rawTitle)):]
 	}
@@ -679,11 +684,8 @@ func findAbsoluteEpisode(path, title, lowerTitle, lower string) (episodeToken, b
 	}
 	series := title[:m[0]]
 	series = series[len(reLeadingGroups.FindString(series)):]
-	_, yearStart := findYear(series, asciiLower(series), -1)
-	if yearStart >= 0 {
-		series = series[:yearStart]
-	}
-	series = cleanTitle(series)
+	year := findYear(series, asciiLower(series), -1)
+	series = cleanTitle(year.title(series))
 	form, digits := formDashed, m[6:8]
 	if m[4] >= 0 {
 		form, digits = formNumbered, m[4:6]
@@ -691,7 +693,7 @@ func findAbsoluteEpisode(path, title, lowerTitle, lower string) (episodeToken, b
 			form = formUnderscored
 		}
 	}
-	if yearStart >= 0 {
+	if year.found() {
 		// After a year only the dashed anime form reads as an episode.
 		if form != formDashed {
 			return episodeToken{}, false
@@ -802,15 +804,12 @@ func seriesFromFolder(folder string) (string, int) {
 	if series == "." || series == string(filepath.Separator) || strings.ContainsRune(series, filepath.Separator) {
 		return "", 0
 	}
-	year, yearStart := findYear(series, asciiLower(series), -1)
-	if yearStart >= 0 {
-		series = series[:yearStart]
-	}
-	title := cleanTitle(series)
+	year := findYear(series, asciiLower(series), -1)
+	title := cleanTitle(year.title(series))
 	if title == "" {
 		return "", 0
 	}
-	return title, year
+	return title, year.year
 }
 
 func providerIDHints(path string) (map[string]string, sdk.ParseHintSource) {
@@ -880,45 +879,101 @@ func removeProviderIDTags(name string) string {
 	return name
 }
 
-// findYear returns the chosen year and its start index in name, or (0, -1).
-// Parenthesized years win; otherwise the earliest plausible token wins. A token
-// inside the SxxEyy match (episodeCut..) or followed by p/i is skipped.
-func findYear(name, lower string, episodeCut int) (int, int) {
-	matches := reYear.FindAllStringSubmatchIndex(lower, -1)
-	bestStart, bestYear := -1, 0
-	parenStart, parenYear := -1, 0
-	for _, m := range matches {
+// yearToken is the release year read from a name: the year, the byte span of
+// its token (parentheses included), and whether it leads the name. The title
+// of a name is the text before its year, or the text after a leading one.
+type yearToken struct {
+	year, start, end int
+	leading          bool
+}
+
+// found reports whether the name carries a release year.
+func (y yearToken) found() bool { return y.year > 0 }
+
+// title returns the part of s, the name y was read from, that holds the title.
+func (y yearToken) title(s string) string {
+	switch {
+	case !y.found():
+		return s
+	case y.leading:
+		return s[y.end:]
+	default:
+		return s[:y.start]
+	}
+}
+
+// findYear reads the release year of a name. Years from 1900 to 2099 count,
+// except a resolution (2160p, 1080i) and a token at or after episodeCut (part
+// of an SxxEyy match). A parenthesized year with title text before it wins
+// ("1917 (2019)"); otherwise a parenthesized year with none before it leads
+// the name ("(2000) Title"). Otherwise the year is the first standalone one
+// with title text before it that is not directly followed by another year:
+// "2012.2009" and "Blade.Runner.2049.2017" keep their first number as title
+// text, and a lone leading year ("2012") is no year at all.
+func findYear(name, lower string, episodeCut int) yearToken {
+	var candidates []yearToken
+	var parens []bool
+	for _, m := range reYear.FindAllStringSubmatchIndex(lower, -1) {
 		digitsStart, digitsEnd := m[2], m[3]
 		year := atoi(lower[digitsStart:digitsEnd])
 		if year < 1900 || year > 2099 {
 			continue
 		}
-		// Skip a resolution like 2160p/1080i (digit run followed by p or i).
 		if digitsEnd < len(lower) {
 			if c := lower[digitsEnd]; c == 'p' || c == 'i' {
 				continue
 			}
 		}
-		// Skip a year that is part of the episode token (SxxEyy ranges etc.).
 		if episodeCut >= 0 && digitsStart >= episodeCut {
 			continue
 		}
-		// Parenthesized? The matched span (m[0]..m[1]) includes the parens; cut
-		// the title at the '(' so it does not leak into the title.
-		if m[0] < digitsStart && name[m[0]] == '(' {
-			if parenStart < 0 {
-				parenStart, parenYear = m[0], year
-			}
+		paren := m[0] < digitsStart && name[m[0]] == '('
+		start := digitsStart
+		if paren {
+			start = m[0]
+		}
+		candidates = append(candidates, yearToken{year: year, start: start, end: m[1]})
+		parens = append(parens, paren)
+	}
+	leading := yearToken{}
+	for i, c := range candidates {
+		if !parens[i] {
 			continue
 		}
-		if bestStart < 0 {
-			bestStart, bestYear = digitsStart, year
+		if hasTitleText(name[:c.start]) {
+			return c
+		}
+		if !leading.found() {
+			leading = c
+			leading.leading = true
 		}
 	}
-	if parenStart >= 0 {
-		return parenYear, parenStart
+	if leading.found() {
+		return leading
 	}
-	return bestYear, bestStart
+	for i, c := range candidates {
+		if !hasTitleText(name[:c.start]) {
+			continue
+		}
+		if i+1 < len(candidates) && !parens[i+1] && onlySeparators(name[c.end:candidates[i+1].start]) {
+			continue
+		}
+		return c
+	}
+	return yearToken{}
+}
+
+// hasTitleText reports whether s, the text before a year, holds any title:
+// a letter or digit outside the leading release-group brackets.
+func hasTitleText(s string) bool {
+	s = s[len(reLeadingGroups.FindString(s)):]
+	return strings.IndexFunc(s, func(r rune) bool { return unicode.IsLetter(r) || unicode.IsDigit(r) }) >= 0
+}
+
+// onlySeparators reports whether s, the text between two years, is only
+// spaces, dots, underscores and hyphens.
+func onlySeparators(s string) bool {
+	return strings.Trim(s, " ._-") == ""
 }
 
 // reNotVersion matches a " - <label>" suffix, lowercased with spaces, dots,

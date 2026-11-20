@@ -600,6 +600,30 @@ func parseCorpus() []parseCase {
 			want:       sdk.ParsedMedia{Title: "Movie - 12", Class: "movie"},
 			resolvable: true,
 		},
+		// A film named after a year (CORE-2701): the leading year is title
+		// text and the later one is the release year; a leading parenthesized
+		// year is the year, with the title after it.
+		{
+			name:       "leading-year-title-dotted",
+			path:       "/movies/2012.2009.1080p.BluRay.x264.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "2012", Class: "movie", Year: 2009},
+			resolvable: true,
+		},
+		{
+			name:       "leading-year-title-spaced-with-noise",
+			path:       "/movies/2019 After The Fall Of New York 1983 REMASTERED BDRip x264-GHOULS.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "2019 After The Fall Of New York", Class: "movie", Year: 1983},
+			resolvable: true,
+		},
+		{
+			name:       "leading-parenthesized-year",
+			path:       "/movies/(2000) The Emperor's New Groove.avi",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "The Emperor's New Groove", Class: "movie", Year: 2000},
+			resolvable: true,
+		},
 		// Episode token BEFORE the title, outside a season folder: the xXYY
 		// match sits at index 0, so the title cut is empty and the parser
 		// refuses. Documented limitation.
