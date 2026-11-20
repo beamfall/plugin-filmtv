@@ -468,18 +468,20 @@ func splitAlternateTitle(title string) (string, string) {
 		return latinTitleFirst(title, a, b)
 	}
 	last, size := utf8.DecodeLastRuneInString(title)
-	if last != ')' && last != '）' {
+	opener := "("
+	if last == '）' {
+		opener = "（"
+	} else if last != ')' {
 		return title, ""
 	}
 	inner := title[:len(title)-size]
-	open := strings.LastIndexAny(inner, "(（")
+	open := strings.LastIndex(inner, opener)
 	if open <= 0 {
 		return title, ""
 	}
-	_, openSize := utf8.DecodeRuneInString(inner[open:])
-	a, b := cleanTitle(inner[:open]), cleanTitle(inner[open+openSize:])
-	// Nested parentheses, or a region or edition qualifier ("Офис (US)",
-	// "Бразилия (Director's Cut)"), are no second title.
+	a, b := cleanTitle(inner[:open]), cleanTitle(inner[open+len(opener):])
+	// Nested or unmatched parentheses, or a region or edition qualifier
+	// ("Офис (US)", "Бразилия (Director's Cut)"), are no second title.
 	if strings.ContainsAny(a+b, alternateTitleParens) || isTitleQualifier(b) {
 		return title, ""
 	}
@@ -499,23 +501,30 @@ func latinTitleFirst(title, a, b string) (string, string) {
 	return title, ""
 }
 
-// editionWords end an edition qualifier ("Director's Cut", "Special
-// Edition").
-var editionWords = map[string]bool{"cut": true, "edition": true, "version": true, "remaster": true}
+// qualifierWords are the words of an edition qualifier ("Director's Cut",
+// "Special Edition") besides the releaseWords.
+var qualifierWords = map[string]bool{
+	"cut": true, "edition": true, "version": true, "remaster": true, "restored": true,
+	"director's": true, "directors": true, "theatrical": true, "special": true,
+	"collector's": true, "ultimate": true, "anniversary": true, "final": true, "imax": true,
+}
 
 // isTitleQualifier reports whether s, the text in parentheses at the end of
-// a title, is a region ("US") or edition ("Director's Cut", "Extended")
-// qualifier rather than a title.
+// a title, is a region or edition qualifier ("US", "DE", "Director's Cut",
+// "4K Remastered") rather than a title: each word is a release or qualifier
+// word, holds a digit, or is a capitalised code of up to three letters.
 func isTitleQualifier(s string) bool {
-	lower := strings.ToLower(s)
-	if _, ok := regionAliases[lower]; ok {
-		return true
+	words := strings.Fields(s)
+	for _, word := range words {
+		lower := strings.ToLower(word)
+		_, release := releaseWords[lower]
+		_, region := regionAliases[lower]
+		code := len(word) <= 3 && strings.ToUpper(word) == word
+		if !release && !region && !code && !qualifierWords[lower] && !strings.ContainsAny(word, "0123456789") {
+			return false
+		}
 	}
-	if _, ok := releaseWords[lower]; ok {
-		return true
-	}
-	words := strings.Fields(lower)
-	return len(words) > 0 && editionWords[words[len(words)-1]]
+	return len(words) > 0
 }
 
 // letterScripts reports whether s has a Latin letter and whether it has a
@@ -1353,7 +1362,7 @@ func findYear(name, lower string, episodeCut int) yearToken {
 		// After a title bar, a year starts the second title ("Космическая
 		// одиссея | 2001 A Space Odyssey 1968"), so the title text before
 		// it is only that after the bar.
-		if hasTitleText(afterTitleBar(name[:c.start])) {
+		if hasTitleTextAfterBar(name[:c.start]) {
 			return c
 		}
 		if !bracketed.found() && groupsEnd > 0 && episodeCut < 0 {
@@ -1492,15 +1501,16 @@ func blankChecksums(s string) string {
 	return reChecksum.ReplaceAllStringFunc(s, func(c string) string { return strings.Repeat(" ", len(c)) })
 }
 
-// afterTitleBar returns the text of s after its last alternateTitleBars
-// rune, or s when it has none.
-func afterTitleBar(s string) string {
+// hasTitleTextAfterBar is hasTitleText for the text after the last
+// alternateTitleBars rune of s, when it has one. Brackets after a bar are
+// title text ("Репортаж | [REC] 2007"), not a leading release group.
+func hasTitleTextAfterBar(s string) bool {
 	i := strings.LastIndexAny(s, alternateTitleBars)
 	if i < 0 {
-		return s
+		return hasTitleText(s)
 	}
 	_, size := utf8.DecodeRuneInString(s[i:])
-	return s[i+size:]
+	return cleanTitle(s[i+size:]) != ""
 }
 
 // hasTitleText reports whether s, the text before a year, holds any title:
