@@ -54,6 +54,7 @@ func TestAlternateTitle(t *testing.T) {
 		// An edition tag before the year is no title text at all (CORE-2704).
 		{"edition-tag-before-year", "/movies/Амели (Extended) 2001.mkv", movie("Амели", 2001), ""},
 		{"edition-tags-before-year", "/movies/Бразилия (4K Remastered) (1985).mkv", movie("Бразилия", 1985), ""},
+		{"edition-word-is-the-latin-title", "/movies/Пленка | Uncut (1997).mkv", movie("Uncut", 1997), "Пленка"},
 		{"unlisted-region-qualifier", "/movies/Офис (DE) 2004.mkv", movie("Офис (DE)", 2004), ""},
 		{"curly-apostrophe-edition", "/movies/Бразилия (Director’s Cut) 1985.mkv", movie("Бразилия (Director’s Cut)", 1985), ""},
 		{"hyphenated-edition", "/movies/Бразилия (Special-Edition) 1985.mkv", movie("Бразилия (Special-Edition)", 1985), ""},

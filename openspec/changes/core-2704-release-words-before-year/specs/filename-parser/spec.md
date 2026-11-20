@@ -19,7 +19,7 @@ tags that the year follows, keeping the first word, and SHALL keep a scene tag t
 ### Requirement: Language and subtitle tags are release noise
 
 The parser SHALL treat French and Scandinavian language and subtitle tags as release noise, and
-SHALL end a title at `DC` when a release tag follows it.
+SHALL treat `DC` as noise only right after an edition word.
 
 #### Scenario: Edition and language tags without a year
 
@@ -28,8 +28,8 @@ SHALL end a title at `DC` when a release tag follows it.
 
 ### Requirement: A leading site name is not title text
 
-The parser SHALL drop a leading `www.` site name followed by a spaced hyphen, or one in brackets,
-before reading the title.
+The parser SHALL drop a leading `www.` site name followed by a spaced hyphen before reading the
+name, and a leading bracketed `www.` site name from a film title.
 
 #### Scenario: Site prefix
 

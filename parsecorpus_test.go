@@ -464,6 +464,49 @@ func parseCorpus() []parseCase {
 			resolvable: true,
 		},
 
+		{
+			name:       "split-tag-before-year",
+			path:       "Heat.EXTENDED.WEB-DL.1995.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Heat", Class: "movie", Year: 1995},
+			resolvable: true,
+		},
+		{
+			name:       "directors-cut-after-edition-before-year",
+			path:       "Color.Of.Night.Unrated.DC.1994.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Color Of Night", Class: "movie", Year: 1994},
+			resolvable: true,
+		},
+		{
+			name:       "edition-word-after-joining-mark",
+			path:       "South Park - Bigger, Longer & Uncut (1999).mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "South Park - Bigger, Longer & Uncut", Class: "movie", Year: 1999},
+			resolvable: true,
+		},
+		{
+			name:       "language-word-ends-title",
+			path:       "The.Good.German.WEB-DL.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "The Good German", Class: "movie"},
+			resolvable: true,
+		},
+		{
+			name:       "dc-ends-title-before-tag",
+			path:       "Washington.DC.WEB-DL.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Washington DC", Class: "movie"},
+			resolvable: true,
+		},
+		{
+			name:       "site-group-marks-fansub-episode",
+			path:       "/downloads/[www.example.org] Naruto - 001.mkv",
+			wantOK:     true,
+			want:       sdk.ParsedMedia{Title: "Naruto", Class: "episode", Index: 1, AbsoluteOrdinal: 1},
+			resolvable: true,
+		},
+
 		// --- A release tag that is also a word ends a title only in front of
 		// another release tag, or (for the unambiguous ones) as the last word. ---
 		{
@@ -932,6 +975,7 @@ func TestParseEpisodeTitle(t *testing.T) {
 		// A release tag that is also a word stays in the title until a real
 		// release tag follows it.
 		{"release-word-inside-title", "Show.S01E02.Internal.Affairs.720p.HDTV.x264-GRP.mkv", "Internal Affairs"},
+		{"language-word-ends-title", "Friends.S10E13.The.One.Where.Joey.Speaks.French.WEB-DL.mkv", "The One Where Joey Speaks French"},
 		{"release-word-then-same-tag", "Show.S01E02.The.Web.WEB-DL.DDP5.1.H.264-GRP.mkv", "The Web"},
 		{"release-word-then-resolution", "Show.S01E01.The.Web.1080p.mkv", "The Web"},
 		{"release-word-then-resolution-and-codec", "Show.S01E01.The.Web.1080p.x264.mkv", "The Web"},

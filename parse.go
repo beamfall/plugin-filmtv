@@ -125,10 +125,14 @@ var (
 	// Release-group brackets in front of a series name ("[Group] Show - S01E01"),
 	// adjacent or separated ("[Fansub].[Group]").
 	reLeadingGroups = regexp.MustCompile(`^(?:[\s._-]*\[[^\]]*\])+`)
-	// reSitePrefix matches a torrent site's name in front of a release: a
-	// "www." host followed by a spaced hyphen ("www.Site.com - "), or in
-	// brackets ("[www.Site.com] ") (CORE-2704).
-	reSitePrefix = regexp.MustCompile(`(?i)^\s*(?:[\[(]\s*www\.[a-z0-9-]+(?:\.[a-z0-9-]+)+\s*[\])]|www\.[a-z0-9-]+(?:\.[a-z0-9-]+)+\s+-)\s*`)
+	// reSitePrefix matches a torrent site's name and a spaced hyphen in front
+	// of a release ("www.Site.com - ") (CORE-2704).
+	reSitePrefix = regexp.MustCompile(`(?i)^\s*www\.[a-z0-9-]+(?:\.[a-z0-9-]+)+\s+-\s*`)
+	// reSiteGroup matches a torrent site's name in leading brackets
+	// ("[www.Site.com] "). It is dropped from a film title only: as a
+	// leading group it still marks a fansub episode ("[www.Site.org]
+	// Naruto - 001").
+	reSiteGroup = regexp.MustCompile(`(?i)^\s*\[\s*www\.[a-z0-9-]+(?:\.[a-z0-9-]+)+\s*\]`)
 	// reLeadingChecksums matches the checksum brackets and parenthesized
 	// year that open a name, up to its first other bracket or word.
 	reLeadingChecksums = regexp.MustCompile(`(?i)^(?:[\s._-]*(?:\[[0-9a-f]{8}\]|\((?:19|20)\d\d\)))+`)
@@ -204,8 +208,6 @@ var releaseWords = map[string]bool{
 	"dv": true, "hdr": true, "atmos": true,
 	"imax": true, "nordic": true, "ita": true, "eng": true,
 	"web": false, "multi": false, "dubbed": false, "subbed": false,
-	// "Washington DC", "The French Connection": noise only before a tag.
-	"dc": false, "french": false, "german": false,
 }
 
 // Parse derives a best-guess ParsedMedia from a path and its local NFO evidence.
@@ -407,7 +409,7 @@ func parseName(path string) (nameParse, bool) {
 	// A film keeps a bracketed title ("[REC] 2") unless only a year-named
 	// title follows it ("[Group] 2012 (2009)"). A checksum is never title text.
 	rawTitle := reChecksum.ReplaceAllString(name[titleStart:cut], " ")
-	if groups := len(reLeadingGroups.FindString(rawTitle)); isEpisode || isYearNumber(cleanTitle(rawTitle[groups:])) {
+	if groups := len(reLeadingGroups.FindString(rawTitle)); isEpisode || isYearNumber(cleanTitle(rawTitle[groups:])) || reSiteGroup.MatchString(rawTitle) {
 		rawTitle = rawTitle[groups:]
 	}
 	parsed.Title = cleanTitle(rawTitle)
@@ -1614,19 +1616,40 @@ var beforeYearWords = map[string]bool{
 }
 
 // noiseBeforeYear returns where the film title in lower, the text before its
-// year, ends: before a trailing run of beforeYearWords and release tags, or
-// at the end of lower. The first word always stays ("Extended.2020").
+// year, ends: before a trailing run of beforeYearWords and release tags
+// ("Dominion.EXTENDED.2022", "Heat.EXTENDED.WEB-DL.1995"), with a DC right
+// after an edition word ("Unrated.DC.1994"), or at the end of lower. The
+// first word always stays ("Extended.2020"), and so does a run that would
+// leave the title ending in a joining mark ("Bigger, Longer & Uncut (1999)",
+// "Пленка | Uncut (1997)").
 func noiseBeforeYear(lower string) int {
 	tokens := tokenSpans(lower)
 	end := len(lower)
 	for i := len(tokens) - 1; i > 0; i-- {
 		word := lower[tokens[i][0]:tokens[i][1]]
-		if !beforeYearWords[word] && !isTag([]string{word}) {
-			break
+		prev := lower[tokens[i-1][0]:tokens[i-1][1]]
+		switch {
+		case i > 1 && releaseNoise[prev+word]:
+			i-- // "web-dl", "h.264"
+		case beforeYearWords[word] || isTag([]string{word}):
+		case word == "dc" && i > 1 && beforeYearWords[prev]:
+		default:
+			i = 0
+			continue
 		}
 		end = tokens[i][0]
 	}
+	if end < len(lower) && !endsInTitleRune(strings.TrimRight(lower[:end], " ._-([{")) {
+		return len(lower)
+	}
 	return end
+}
+
+// endsInTitleRune reports whether s ends in a letter, a digit, a closing
+// bracket or a quote: text a title can end with, not a joining mark.
+func endsInTitleRune(s string) bool {
+	r, _ := utf8.DecodeLastRuneInString(s)
+	return unicode.IsLetter(r) || unicode.IsDigit(r) || strings.ContainsRune(")]}'\"’", r)
 }
 
 // stripSitePrefix drops a torrent site's name from the front of name
@@ -1706,7 +1729,11 @@ func endsTitle(words []string) bool {
 		return false
 	}
 	if endsName {
-		return endsTitle(words[1:])
+		rest := words[1:]
+		if len(rest) > 1 && rest[0] == "dc" {
+			rest = rest[1:] // "Unrated.DC.VostFR": the Director's Cut
+		}
+		return endsTitle(rest)
 	}
 	return tagFollows(words[1:])
 }
