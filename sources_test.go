@@ -242,15 +242,40 @@ func TestPlexSourceItemsBySourceUser(t *testing.T) {
 	}
 
 	t.Run("watch-state", func(t *testing.T) {
-		watchSources := map[string]sdk.Source{ //nolint:staticcheck // deliberate SDK 0.x compatibility assertion
-			"legacy factory": NewPlexSource(path),
-			"requested":      NewPlexSourceForCategories(path, []string{sdk.CategoryWatchState}),
+		watchCategories := []string{sdk.CategoryWatchState}
+		watchSources := []struct {
+			name       string
+			source     sdk.Source //nolint:staticcheck // deliberate SDK 0.x compatibility assertion
+			categories []string
+		}{
+			{name: "legacy factory", source: NewPlexSource(path), categories: wantCategories},
+			{name: "requested", source: NewPlexSourceForCategories(path, watchCategories), categories: watchCategories},
+			{name: "nil selection", source: NewPlexSourceForCategories(path, nil), categories: watchCategories},
 		}
-		for name, source := range watchSources {
-			t.Run(name, func(t *testing.T) {
-				items, err := requireSourceUserItems(t, source).ItemsBySourceUser(context.Background())
+		for _, test := range watchSources {
+			t.Run(test.name, func(t *testing.T) {
+				if got := test.source.Categories(); !reflect.DeepEqual(got, test.categories) {
+					t.Errorf("categories = %v, want %v", got, test.categories)
+				}
+				legacy, err := test.source.Items(context.Background()) //nolint:staticcheck // deliberate SDK 0.x compatibility assertion
+				// The aggregate reader sees three watch settings for each of the three file paths.
+				if err != nil || len(legacy) != 9 {
+					t.Fatalf("compatibility Items returned %d items, error %v, want 9 watch-state items", len(legacy), err)
+				}
+				for _, item := range legacy {
+					if !item.WatchState.Present || !reflect.DeepEqual(item, sdk.ForeignItem{Path: item.Path, WatchState: item.WatchState}) {
+						t.Errorf("compatibility item includes data outside watch state: %#v", item)
+					}
+				}
+				if streamed, err := collectFilmTVStream(test.source); err != nil || !reflect.DeepEqual(streamed, legacy) {
+					t.Errorf("streamed items = %#v, error %v, want %#v", streamed, err, legacy)
+				}
+				items, err := requireSourceUserItems(t, test.source).ItemsBySourceUser(context.Background())
 				if err != nil {
 					t.Fatal(err)
+				}
+				if len(items) != len(want) {
+					t.Errorf("ItemsBySourceUser returned %d accounts, want %d", len(items), len(want))
 				}
 				for _, account := range []string{"Alice#1", "Bob#2"} {
 					var wantWatch []sdk.ForeignItem
@@ -267,6 +292,31 @@ func TestPlexSourceItemsBySourceUser(t *testing.T) {
 					t.Errorf("watch-state items for Empty#3 = %#v, present = %t", empty, ok)
 				}
 			})
+		}
+	})
+
+	t.Run("empty selection", func(t *testing.T) {
+		source := NewPlexSourceForCategories(path, []string{})
+		if got := source.Categories(); len(got) != 0 {
+			t.Errorf("categories = %v, want none", got)
+		}
+		if items, err := source.Items(context.Background()); err != nil || len(items) != 0 { //nolint:staticcheck // deliberate SDK 0.x compatibility assertion
+			t.Errorf("compatibility Items = %#v, error %v, want no items", items, err)
+		}
+		if streamed, err := collectFilmTVStream(source); err != nil || len(streamed) != 0 {
+			t.Errorf("streamed items = %#v, error %v, want no items", streamed, err)
+		}
+		items, err := requireSourceUserItems(t, source).ItemsBySourceUser(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(items) != len(want) {
+			t.Errorf("ItemsBySourceUser returned %d accounts, want %d", len(items), len(want))
+		}
+		for account := range want {
+			if userItems, ok := items[account]; !ok || len(userItems) != 0 {
+				t.Errorf("items for %s = %#v, present = %t, want an empty account", account, userItems, ok)
+			}
 		}
 	})
 

@@ -172,8 +172,12 @@ func NewPlexSource(dbPath string) sdk.Source { //nolint:staticcheck // deliberat
 }
 
 // NewPlexSourceForCategories returns a Plex source scoped to the requested
-// categories. Ratings and collections are available through ItemsBySourceUser.
+// categories. A nil selection defaults to watch state. A non-nil empty selection
+// returns no items. Ratings and collections are available through ItemsBySourceUser.
 func NewPlexSourceForCategories(dbPath string, requested []string) sdk.Source { //nolint:staticcheck // deliberate SDK 0.x compatibility path for pre-streaming consumers
+	if requested == nil {
+		requested = []string{sdk.CategoryWatchState}
+	}
 	categories := make([]string, 0, 3)
 	for _, category := range (plexSource{}).Categories() {
 		if slices.Contains(requested, category) {

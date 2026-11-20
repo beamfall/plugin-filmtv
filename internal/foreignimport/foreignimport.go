@@ -210,6 +210,9 @@ func ReadPlexByAccount(ctx context.Context, path string, options PlexReadOptions
 }
 
 func readPlexAccountItems(ctx context.Context, db *sql.DB, options PlexReadOptions) (map[string][]PlexAccountItem, error) {
+	if !options.WatchState && !options.Ratings {
+		return readPlexAccountKeys(ctx, db)
+	}
 	rows, err := db.QueryContext(ctx, `
 		WITH account_files AS (
 			SELECT mis.account_id, mp.file,
@@ -255,6 +258,26 @@ func readPlexAccountItems(ctx context.Context, db *sql.DB, options PlexReadOptio
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate plex account settings: %w", err)
+	}
+	return accounts, nil
+}
+
+func readPlexAccountKeys(ctx context.Context, db *sql.DB) (map[string][]PlexAccountItem, error) {
+	rows, err := db.QueryContext(ctx, `SELECT COALESCE(name, '') || '#' || id FROM accounts`)
+	if err != nil {
+		return nil, fmt.Errorf("query plex account keys: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	accounts := make(map[string][]PlexAccountItem)
+	for rows.Next() {
+		var account string
+		if err := rows.Scan(&account); err != nil {
+			return nil, fmt.Errorf("scan plex account key: %w", err)
+		}
+		accounts[account] = nil
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate plex account keys: %w", err)
 	}
 	return accounts, nil
 }

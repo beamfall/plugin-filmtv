@@ -125,6 +125,21 @@ func TestReadPlexByAccount(t *testing.T) {
 	if !reflect.DeepEqual(collections, wantCollections) {
 		t.Errorf("collection memberships = %#v, want %#v", collections, wantCollections)
 	}
+
+	t.Run("collections without settings", func(t *testing.T) {
+		path := fixtureDB(t, "plex.db", string(schema), "DROP TABLE metadata_item_settings")
+		accounts, collections, err := ReadPlexByAccount(context.Background(), path, PlexReadOptions{Collections: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		wantAccounts := map[string][]PlexAccountItem{"Alice#1": nil, "Bob#2": nil, "Empty#3": nil}
+		if !reflect.DeepEqual(accounts, wantAccounts) {
+			t.Errorf("account items = %#v, want %#v", accounts, wantAccounts)
+		}
+		if !reflect.DeepEqual(collections, wantCollections) {
+			t.Errorf("collection memberships = %#v, want %#v", collections, wantCollections)
+		}
+	})
 }
 
 func TestReadPlexByAccountCategoryQueries(t *testing.T) {
