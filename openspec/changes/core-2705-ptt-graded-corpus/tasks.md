@@ -1,13 +1,13 @@
 ## 1. Build
 
-- [ ] 1.1 Import PTT's library-shaped fixtures with provenance and licence
-- [ ] 1.2 Grade title, year, season and episode with marks and per-field floors
-- [ ] 1.3 Read a four-digit SxxEyyyy episode whole and skip channel layouts as NxM codes
+- [x] 1.1 Import PTT's library-shaped fixtures with provenance and licence
+- [x] 1.2 Grade title, year, season and episode with marks and per-field floors
+- [x] 1.3 Read a four-digit SxxEyyyy episode whole and skip channel layouts as NxM codes
 
 ## 2. Prove
 
-- [ ] 2.1 The grading test passes and fails on a planted regression
-- [ ] 2.2 `openspec validate --all --strict` passes
+- [x] 2.1 The grading test passes and fails on a planted regression
+- [x] 2.2 `openspec validate --all --strict` passes
 - [ ] 2.3 `script/gate.sh` passes on the lane head
 
 ## 3. Close

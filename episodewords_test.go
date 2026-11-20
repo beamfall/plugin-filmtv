@@ -68,6 +68,12 @@ func TestEpisodeMarkerWords(t *testing.T) {
 		{"/tv/Pokemon/Season 3/Pokemon 3x01 - Episode 3.01.mkv", episode("Pokemon", "3", 1), true},
 		{"/tv/Show/Season 1/Show - Episode 14 - 316.mkv", episode("Show", "1", 14), true},
 		{"/downloads/One Piece Temporada 1 Episodio 1071.mkv", sdk.ParsedMedia{Title: "One Piece", Class: "episode", Index: 1071, AbsoluteOrdinal: 1071}, true},
+		// Found by the PTT corpus (CORE-2705): a four-digit SxxEyyyy episode
+		// is the absolute episode, never cut to three digits, and a channel
+		// layout ("AC3 5.1x2") is no NxM code while a year before one is.
+		{"/downloads/One.Piece.S01E1056.1080p.WEB.x264.mkv", sdk.ParsedMedia{Title: "One Piece", Class: "episode", Index: 1056, AbsoluteOrdinal: 1056}, true},
+		{"/movies/Escaflowne (2000) (BDRip x265 AC3 5.1x2+2.0x3).mkv", sdk.ParsedMedia{Title: "Escaflowne", Class: "movie", Year: 2000}, true},
+		{"/downloads/Doctor.Who.2005.8x11.Dark.Water.720p.mkv", sdk.ParsedMedia{Title: "Doctor Who", Class: "episode", Year: 2005, Sequence: "8", Index: 11}, true},
 		{"/downloads/Anubis saison 1 ep 720p.mkv", sdk.ParsedMedia{Title: "Anubis saison 1 ep", Class: "movie"}, true},
 		{"/downloads/Dark Folge 2.04.mkv", episode("Dark", "2", 4), true},
 		{"/downloads/Fringe.T01E01-E02.Pilot.mkv", sdk.ParsedMedia{Title: "Fringe", Class: "episode", Sequence: "1", Index: 1, IndexEnd: 2}, true},
