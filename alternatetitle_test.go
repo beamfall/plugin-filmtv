@@ -42,7 +42,9 @@ func TestAlternateTitle(t *testing.T) {
 		{"parentheses-in-latin-title", "/movies/Бёрдмэн | Birdman (or The Unexpected Virtue of Ignorance) (2014).mkv", movie("Birdman (or The Unexpected Virtue of Ignorance)", 2014), "Бёрдмэн"},
 		{"year-starts-latin-title", "/movies/Космическая одиссея | 2001 A Space Odyssey 1968.mkv", movie("2001 A Space Odyssey", 1968), "Космическая одиссея"},
 		{"common-script-letter", "/movies/LʼAvventura | Приключение (1960).mkv", movie("LʼAvventura", 1960), "Приключение"},
-		{"title-ending-in-cut", "/movies/Тёмная сторона (In the Cut) 2003.mkv", movie("In the Cut", 2003), "Тёмная сторона"},
+		{"single-han-alternate", "/movies/Ran (乱) 1985.mkv", movie("Ran", 1985), "乱"},
+		{"punctuated-latin-title", "/movies/Баллада (R&B) 2010.mkv", movie("R&B", 2010), "Баллада"},
+		{"checksum-after-bar", "/movies/Космическая одиссея | [DEADBEEF] 2001 A Space Odyssey 1968.mkv", movie("2001 A Space Odyssey", 1968), "Космическая одиссея"},
 		{"bracketed-latin-title", "/movies/Репортаж | [REC] 2007.mkv", movie("[REC]", 2007), "Репортаж"},
 		// Controls: no Latin title, two Latin titles, a mixed-script part, a
 		// qualifier, or not two titles.
@@ -51,6 +53,11 @@ func TestAlternateTitle(t *testing.T) {
 		{"release-word-qualifier", "/movies/Амели (Extended) 2001.mkv", movie("Амели (Extended)", 2001), ""},
 		{"multiword-edition-qualifier", "/movies/Бразилия (4K Remastered) (1985).mkv", movie("Бразилия (4K Remastered)", 1985), ""},
 		{"unlisted-region-qualifier", "/movies/Офис (DE) 2004.mkv", movie("Офис (DE)", 2004), ""},
+		{"curly-apostrophe-edition", "/movies/Бразилия (Director’s Cut) 1985.mkv", movie("Бразилия (Director’s Cut)", 1985), ""},
+		{"limited-edition", "/movies/Бразилия (Limited Edition) 1985.mkv", movie("Бразилия (Limited Edition)", 1985), ""},
+		// A title ending in an edition word reads as an edition: accepted.
+		{"title-ending-in-cut", "/movies/Тёмная сторона (In the Cut) 2003.mkv", movie("Тёмная сторона (In the Cut)", 2003), ""},
+		{"unmatched-inner-parenthesis", "/movies/Мост （Bridge(） 2010.mkv", movie("Мост （Bridge(）", 2010), ""},
 		{"mismatched-parentheses", "/movies/Мост (Bridge） 2010.mkv", movie("Мост (Bridge）", 2010), ""},
 		{"mixed-script-part", "/movies/Fate／Grand Order -絶対魔獣戦線バビロニア-.mkv", movie("Fate／Grand Order -絶対魔獣戦線バビロニア", 0), ""},
 		{"non-latin-only", "/movies/Жихарка (2007).mkv", movie("Жихарка", 2007), ""},
