@@ -48,22 +48,28 @@ var (
 	// "Temp.2 [Cap.209]"). The pair is evidence enough on its own; a lone
 	// season or episode word is not (seasonFolderEpisode). Neither word nor
 	// the episode number runs into a letter or digit ("ep 720p" is no
-	// episode). Groups: the token, the season, the episode word, the episode.
-	reSeasonEpisodeWords = regexp.MustCompile(`(?:^|[^\pL\pN])((?:season|saison|temporada|temp|staffel|stagione|sezon)[ ._-]*(\d{1,2})[ ._,()\[\]-]*(` + episodeWords + `)[ ._-]*(\d{1,4}))(?:$|[^\pL\pN])`)
+	// episode), but a release revision may follow it ("Episode 03v2"). Groups: the token, the season, the episode word, the episode.
+	reSeasonEpisodeWords = regexp.MustCompile(`(?:^|[^\pL\pN])((?:season|saison|temporada|temp|staffel|stagione|sezon)[ ._-]*(\d{1,2})[ ._,()\[\]-]*(` + episodeWords + `)[ ._-]*(\d{1,4})(?:v\d{1,2})?)(?:$|[^\pL\pN])`)
 	// A "TxxEyy" code, the Spanish and Portuguese SxxEyy (T for temporada),
 	// with both numbers padded so a title word ("T2") never matches. Groups:
 	// the token, the season, the episode.
-	reTemporadaEpisode = regexp.MustCompile(`(?:^|[^\pL\pN])(t(\d{2})e(\d{2,3}))(?:$|[^\pL\pN])`)
+	reTemporadaEpisode = regexp.MustCompile(`(?:^|[^\pL\pN])(t(\d{2})e(\d{2,3})(?:v\d{1,2})?)(?:$|[^\pL\pN])`)
+	// One further episode token of a TxxEyy multi-episode file, as
+	// reEpisodeChainLink with a repeated "Txx" season ("T01E01-T01E02").
+	reTemporadaChainLink = regexp.MustCompile(`^[-+._ ]?(?:t(\d{1,2}))?e(\d{1,3})`)
 	// "Episode S.EE" ("Episode 1.22", "Folge 2.04"): a season and a padded
 	// episode number after an episode word (dottedEpisode). Groups: the token,
 	// the season, the episode.
-	reEpisodeDotted = regexp.MustCompile(`(?:^|[^\pL\pN])((?:` + episodeWords + `)[ ._-]*(\d{1,2})\.(\d{2,3}))(?:$|[^\pL\pN])`)
+	reEpisodeDotted = regexp.MustCompile(`(?:^|[^\pL\pN])((?:` + episodeWords + `)[ ._-]*(\d{1,2})\.(\d{2,3})(?:v\d{1,2})?)(?:$|[^\pL\pN])`)
+	// A bit depth after a number ("1.10-bit", "10.bit"): video encoding, not
+	// part of an episode code.
+	reBitDepth = regexp.MustCompile(`^[ ._-]?bit(?:$|[^\pL\pN])`)
 	// An episode number with no season: after an episode word ("Ep 14",
 	// "Folge 3", "Cap.209") or a bare "e" ("E10"), or before "seriya" ("08
 	// seriya"). Read only in a season folder, which supplies the season
 	// (seasonFolderEpisode). Groups: the token, the episode word, its
 	// number, the bare-e number, the seriya number.
-	reEpisodeOnly = regexp.MustCompile(`(?:^|[^\pL\pN])((` + episodeWords + `)[ ._-]*(\d{1,4})|e(\d{2,3})|(\d{1,3})[ ._-]*seriya)(?:$|[^\pL\pN])`)
+	reEpisodeOnly = regexp.MustCompile(`(?:^|[^\pL\pN])((` + episodeWords + `)[ ._-]*(\d{1,4})(?:v\d{1,2})?|e(\d{2,3})(?:v\d{1,2})?|(\d{1,3})[ ._-]*seriya)(?:$|[^\pL\pN])`)
 	// XxYY shorthand (e.g. 3x07); guarded so a resolution like 1920x1080 never
 	// matches (those numbers are far larger than a season/episode). A range
 	// ("1x01-1x02-1x03") is read by episodeChain with reSeasonXChainLink.
@@ -266,6 +272,10 @@ func parseName(path string) (nameParse, bool) {
 	// string (the earliest of any episode/year/noise token start).
 	cut := len(name)
 	episode, isEpisode := findEpisode(lower)
+	unambiguous := isEpisode
+	if !isEpisode {
+		episode, isEpisode = findShorthandEpisode(lower)
+	}
 	if !isEpisode {
 		episode, isEpisode = bareSeasonEpisode(path, lower)
 	}
@@ -279,14 +289,23 @@ func parseName(path string) (nameParse, bool) {
 		episode, isEpisode = seriesCodeEpisode(path, lower)
 	}
 	if !isEpisode {
-		// An absolute number and a marker led by an episode word can share a
-		// name ("Naruto - 014 - Episode 1.14", "Show - Episode 14 - 316"): the
-		// first one is the episode.
 		episode, isEpisode = absoluteEpisode(path, name, lower)
+	}
+	if !unambiguous {
+		// A marker led by an episode word can share a name with another
+		// ("Naruto - 014 - Episode 1.14", "Show - Episode 14 - 316", "Episode
+		// 1.22 - 2009-05-12"): the first one is the episode, unless it is all
+		// of an absolute number's series name ("/tv/E60/Season 1/E60 - 014").
 		for _, find := range []func(string, string) (episodeToken, bool){dottedEpisode, seasonFolderEpisode} {
-			if marked, ok := find(path, lower); ok && (!isEpisode || marked.start < episode.start) {
+			marked, ok := find(path, lower)
+			if ok && (!isEpisode || marked.start < episode.start && (episode.absolute == 0 || cleanTitle(lower[:marked.start]) != "")) {
 				episode, isEpisode = marked, true
 			}
+		}
+		// The same episode restated right after it ("3x01 - Episode 3.01")
+		// is no part of the episode title.
+		if marked, ok := dottedEpisode(path, lower); isEpisode && ok && marked.start >= episode.end && strings.Trim(lower[episode.end:marked.start], " ._-") == "" {
+			episode.end = marked.end
 		}
 	}
 	episodeCut := -1
@@ -406,9 +425,9 @@ type episodeToken struct {
 	seriesYear bool
 }
 
-// findEpisode locates the season/episode marker in the ASCII-folded name. The
-// forms are tried in order of how unambiguous they are: SxxEyy, "season X
-// episode Y" in any of its languages, TxxEyy, XxYY, then an air date.
+// findEpisode locates an unambiguous season/episode marker in the
+// ASCII-folded name. The forms are tried in order: SxxEyy, "season X episode
+// Y" in any of its languages, then TxxEyy.
 func findEpisode(lower string) (episodeToken, bool) {
 	if m := reSeasonEpisode.FindStringSubmatchIndex(lower); m != nil {
 		token := episodeToken{start: m[0], end: m[1], sequence: numericText(lower[m[2]:m[3]]), index: atoi(lower[m[4]:m[5]])}
@@ -423,11 +442,17 @@ func findEpisode(lower string) (episodeToken, bool) {
 	}
 	if m := reTemporadaEpisode.FindStringSubmatchIndex(lower); m != nil {
 		token := episodeToken{start: m[2], end: m[3], sequence: numericText(lower[m[4]:m[5]]), index: atoi(lower[m[6]:m[7]])}
-		last, end := episodeChain(lower, token.end, reEpisodeChainLink, token.sequence)
+		last, end := episodeChain(lower, token.end, reTemporadaChainLink, token.sequence)
 		token.end = end
 		token.indexEnd = rangeEnd(token.index, last)
 		return token, true
 	}
+	return episodeToken{}, false
+}
+
+// findShorthandEpisode locates an XxYY code, then an air date: markers a
+// marker led by an episode word may precede (parseName).
+func findShorthandEpisode(lower string) (episodeToken, bool) {
 	if m := reSeasonX.FindStringSubmatchIndex(lower); m != nil {
 		token := episodeToken{start: m[0], end: m[1], sequence: numericText(lower[m[2]:m[3]]), index: atoi(lower[m[4]:m[5]])}
 		last, end := episodeChain(lower, token.end, reSeasonXChainLink, token.sequence)
@@ -448,14 +473,15 @@ func packedEpisode(word, digits string, season int) int {
 	return atoi(digits)
 }
 
-// dottedEpisode reads an "Episode S.EE" code ("Episode 1.22") anywhere. A
-// bit depth after it ("Episode.1.10-bit") is no episode number.
+// dottedEpisode reads the first "Episode S.EE" code ("Episode 1.22")
+// anywhere. A bit depth after it ("Episode.1.10-bit") is no episode number.
 func dottedEpisode(_, lower string) (episodeToken, bool) {
-	m := reEpisodeDotted.FindStringSubmatchIndex(lower)
-	if m == nil || strings.HasPrefix(lower[m[3]:], "-bit") {
-		return episodeToken{}, false
+	for _, m := range reEpisodeDotted.FindAllStringSubmatchIndex(lower, -1) {
+		if !reBitDepth.MatchString(lower[m[3]:]) {
+			return episodeToken{start: m[2], end: m[3], sequence: numericText(lower[m[4]:m[5]]), index: atoi(lower[m[6]:m[7]])}, true
+		}
 	}
-	return episodeToken{start: m[2], end: m[3], sequence: numericText(lower[m[4]:m[5]]), index: atoi(lower[m[6]:m[7]])}, true
+	return episodeToken{}, false
 }
 
 // seasonFolderEpisode reads an episode number with no season of its own

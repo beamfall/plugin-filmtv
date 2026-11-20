@@ -74,6 +74,14 @@ func TestEpisodeMarkerWords(t *testing.T) {
 		{"/downloads/Show Saison 2 E\u0301pisode 4.mkv", episode("Show", "2", 4), true},
 		{"/tv/Show/Season 3/Show Folge-03.mkv", episode("Show", "3", 3), true},
 		{"/tv/Show/Season 1/Show - 05 - The Cap 3 Heist.mkv", sdk.ParsedMedia{Title: "Show", Class: "episode", Index: 5, AbsoluteOrdinal: 5}, true},
+		{"/downloads/Fringe - Episode 1.22 - 2009-05-12.mkv", episode("Fringe", "1", 22), true},
+		{"/downloads/Fringe - Episode 1.22 - 16x9.mkv", episode("Fringe", "1", 22), true},
+		{"/tv/E60/Season 1/E60 - 014.mkv", sdk.ParsedMedia{Title: "E60", Class: "episode", Index: 14, AbsoluteOrdinal: 14}, true},
+		{"/movies/Star.Wars.Ep.1.10.bit.1080p.mkv", sdk.ParsedMedia{Title: "Star Wars Ep 1", Class: "movie"}, true},
+		{"/downloads/Fringe.Episode.1.22-Bittersweet.mkv", episode("Fringe", "1", 22), true},
+		{"/downloads/Fringe.T01E01-T01E02.Pilot.mkv", sdk.ParsedMedia{Title: "Fringe", Class: "episode", Sequence: "1", Index: 1, IndexEnd: 2}, true},
+		{"/downloads/[Fansub] Show Season 1 Episode 03v2.mkv", episode("Show", "1", 3), true},
+		{"/downloads/Show Episode 1.10-bit - Episode 2.04.mkv", episode("Show Episode 1 10-bit", "2", 4), true},
 		{"/downloads/Contemp 2 Ep 3.mkv", sdk.ParsedMedia{Title: "Contemp 2 Ep 3", Class: "movie"}, true},
 		// Episode zero is no episode.
 		{"/tv/Show/Season 1/Show Ep 0.mkv", sdk.ParsedMedia{Title: "Show Ep 0"}, true},
@@ -82,6 +90,27 @@ func TestEpisodeMarkerWords(t *testing.T) {
 		got, ok := parser.Parse(c.path, sdk.ParseProbe{})
 		if ok != c.ok || (ok && !reflect.DeepEqual(got, c.want)) {
 			t.Errorf("Parse(%q) = %+v, %v; want %+v, %v", c.path, got, ok, c.want, c.ok)
+		}
+	}
+}
+
+// TestEpisodeMarkerTitles pins the episode title after a marker: the same
+// episode restated after it is no part of the title (CORE-2702).
+func TestEpisodeMarkerTitles(t *testing.T) {
+	parser := filmtv.New()
+	for path, want := range map[string]string{
+		"/tv/Pokemon/Season 3/Pokemon 3x01 - Episode 3.01 - Pilot.mkv": "Pilot",
+		"/downloads/Fringe.T01E01-T01E02.Pilot.mkv":                    "Pilot",
+		"/downloads/Fringe.Episode.1.22-Bittersweet.mkv":               "Bittersweet",
+	} {
+		got := ""
+		for _, field := range parser.ParseTypedMediaFields(path, sdk.ParseProbe{}) {
+			if field.Name == "episode-title" {
+				got = field.Text
+			}
+		}
+		if got != want {
+			t.Errorf("episode title of %s = %q, want %q", path, got, want)
 		}
 	}
 }
