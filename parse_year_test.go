@@ -119,6 +119,12 @@ func TestYearPickerKeepsYearNamedTitles(t *testing.T) {
 		{"/movies/[REC] (2007) PROPER.1080p.x264-GRP.mkv", sdk.ParsedMedia{Title: "[REC]", Class: "movie", Year: 2007}, true},
 		{"/movies/[Group] (2013) Proper Uncut.mkv", sdk.ParsedMedia{Title: "Proper", Class: "movie", Year: 2013}, true},
 		{"/movies/(2013) Proper Uncut.mkv", sdk.ParsedMedia{Title: "Proper", Class: "movie", Year: 2013}, true},
+		// Stacked scene tags and split codecs are one run of noise; an episode
+		// marker ends the span read for it.
+		{"/movies/(2007) PROPER.H.264.mkv", sdk.ParsedMedia{}, false},
+		{"/movies/(2007) PROPER.REPACK.H.264-GRP.mkv", sdk.ParsedMedia{}, false},
+		{"/movies/[REC] (2007) PROPER.REPACK.1080p.mkv", sdk.ParsedMedia{Title: "[REC]", Class: "movie", Year: 2007}, true},
+		{"/tv/Fringe/Season 01/[Group] (2007) PROPER.1080p.S01E01 - Pilot.mkv", sdk.ParsedMedia{Title: "Fringe", Class: "episode", Year: 2007, Sequence: "1", Index: 1}, true},
 		// Show folders read the same way: a checksum hides no year-shaped
 		// title, and a bare year before scene noise names no series.
 		{"/tv/[DEADBEEF] 1923/Season 01/S01E01.mkv", sdk.ParsedMedia{Title: "1923", Class: "episode", Sequence: "1", Index: 1}, true},

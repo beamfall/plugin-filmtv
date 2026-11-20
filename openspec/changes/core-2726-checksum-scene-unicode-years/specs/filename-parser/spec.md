@@ -5,7 +5,8 @@
 After a leading parenthesized year, a scene tag (`PROPER`, `REPACK`, `RERIP`) that only checksum
 brackets and release tags follow SHALL be release noise. When a bracketed title stands before the
 year, that title stays the title. When nothing stands before the year, the name SHALL have no title
-and SHALL NOT parse. A release group hyphenated onto the last tag is part of that noise. A release
+and SHALL NOT parse. Further scene tags, a tag split in two (`H.264`) and a release group
+hyphenated onto the last tag are part of that noise; an episode marker ends it. A release
 word that can be a title, or any other word after the noise, SHALL keep the scene tag as the title,
 with or without a checksum. A show folder SHALL follow the same rule.
 
@@ -43,6 +44,11 @@ with or without a checksum. A show folder SHALL follow the same rule.
 
 - **WHEN** a file is `/tv/(2007) PROPER.[DEADBEEF].1080p/Season 01/S01E01.mkv`
 - **THEN** it does not parse
+
+#### Scenario: Stacked scene tags
+
+- **WHEN** a file is `/movies/[REC] (2007) PROPER.REPACK.1080p.mkv`
+- **THEN** it parses to title `[REC]`, year 2007
 
 #### Scenario: Ordinary release word
 
