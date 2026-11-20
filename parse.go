@@ -604,7 +604,8 @@ const (
 //     "Anime");
 //   - a CRC32 checksum bracket, or a release-group bracket in front of the
 //     anime " - 001" form;
-//   - a show folder named for series, except for an underscored counter.
+//   - a show folder named for series, except for an underscored counter and
+//     a dashed number after a series name with a year.
 //
 // A camera clip stem is never a series. The weak episode forms are read only
 // with this context, because a film or a home video can end on the same
