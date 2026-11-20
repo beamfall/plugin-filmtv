@@ -8,7 +8,7 @@
 
 - [x] 2.1 Corpus cases for each form and controls for real titles holding the words
 - [x] 2.2 `openspec validate --all --strict` passes
-- [ ] 2.3 `script/gate.sh` passes on the lane head
+- [x] 2.3 `script/gate.sh` passes on the lane head
 
 ## 3. Close
 
