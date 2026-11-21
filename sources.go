@@ -14,7 +14,6 @@ package filmtv
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -22,7 +21,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/beamfall/plugin-filmtv/internal/foreignimport"
 	sdk "github.com/beamfall/plugin-sdk"
@@ -102,27 +100,39 @@ func watchRowForeignItem(row foreignimport.WatchRow) sdk.ForeignItem {
 	}
 }
 
-type plexSource struct {
+// userItemsReader reads per-source-user items and library-wide collection
+// memberships from a foreign database.
+type userItemsReader func(
+	ctx context.Context,
+	dbPath string,
+	options foreignimport.ReadOptions,
+) (map[string][]foreignimport.UserItem, []foreignimport.CollectionMember, error)
+
+// multiUserSource is a database source that also reads state per source user.
+type multiUserSource struct {
 	dbWatchSource
+	// categories is the run's selection, or nil for every supported category.
 	categories []string
+	supported  []string
+	readByUser userItemsReader
 }
 
-func (s plexSource) Categories() []string {
+func (s multiUserSource) Categories() []string {
 	if s.categories != nil {
 		return slices.Clone(s.categories)
 	}
-	return []string{sdk.CategoryWatchState, sdk.CategoryRatings, sdk.CategoryCollections}
+	return slices.Clone(s.supported)
 }
 
 // ItemsBySourceUser supplies Core with account-specific playback state and ratings.
 // Library-wide collection memberships are available under each source-user key.
-func (s plexSource) ItemsBySourceUser(ctx context.Context) (map[string][]sdk.ForeignItem, error) {
-	options := foreignimport.PlexReadOptions{
+func (s multiUserSource) ItemsBySourceUser(ctx context.Context) (map[string][]sdk.ForeignItem, error) {
+	options := foreignimport.ReadOptions{
 		WatchState:  s.categories == nil || slices.Contains(s.categories, sdk.CategoryWatchState),
 		Ratings:     slices.Contains(s.categories, sdk.CategoryRatings),
 		Collections: slices.Contains(s.categories, sdk.CategoryCollections),
 	}
-	accounts, memberships, err := foreignimport.ReadPlexByAccount(ctx, s.dbPath, options)
+	accounts, memberships, err := s.readByUser(ctx, s.dbPath, options)
 	if err != nil {
 		return nil, err
 	}
@@ -164,6 +174,55 @@ func (s plexSource) ItemsBySourceUser(ctx context.Context) (map[string][]sdk.For
 	return byUser, nil
 }
 
+// scopeCategories keeps the supported categories a run requested, in supported
+// order. A nil request means watch state.
+func scopeCategories(supported, requested []string) []string {
+	if requested == nil {
+		requested = []string{sdk.CategoryWatchState}
+	}
+	categories := make([]string, 0, len(supported))
+	for _, category := range supported {
+		if slices.Contains(requested, category) {
+			categories = append(categories, category)
+		}
+	}
+	return categories
+}
+
+// newMultiUserSource builds a source over the given readers. When a selection
+// leaves out watch state, Items and Stream return nothing.
+func newMultiUserSource(
+	dbPath string,
+	categories, supported []string,
+	read watchRowReader,
+	stream watchRowStreamer,
+	readByUser userItemsReader,
+) multiUserSource {
+	source := dbWatchSource{read: read, stream: stream, dbPath: dbPath}
+	if categories != nil && !slices.Contains(categories, sdk.CategoryWatchState) {
+		source.read = func(ctx context.Context, _ string) ([]foreignimport.WatchRow, error) {
+			return nil, ctx.Err()
+		}
+		source.stream = func(ctx context.Context, _ string, _ func(foreignimport.WatchRow) error) error {
+			return ctx.Err()
+		}
+	}
+	return multiUserSource{
+		dbWatchSource: source,
+		categories:    categories,
+		supported:     supported,
+		readByUser:    readByUser,
+	}
+}
+
+var (
+	plexCategories     = []string{sdk.CategoryWatchState, sdk.CategoryRatings, sdk.CategoryCollections}
+	jellyfinCategories = []string{sdk.CategoryWatchState, sdk.CategoryRatings, sdk.CategoryCollections}
+	// Emby's API never stored a rating in the CORE-2678 observation, so Emby
+	// advertises no ratings.
+	embyCategories = []string{sdk.CategoryWatchState, sdk.CategoryCollections}
+)
+
 // NewPlexSource advertises the Plex importer's capabilities and reads watch
 // state from the exported library database. Use NewPlexSourceForCategories
 // when the resolver supplies a run's category selection.
@@ -175,119 +234,50 @@ func NewPlexSource(dbPath string) sdk.Source { //nolint:staticcheck // deliberat
 // categories. A nil selection defaults to watch state. A non-nil empty selection
 // returns no items. Ratings and collections are available through ItemsBySourceUser.
 func NewPlexSourceForCategories(dbPath string, requested []string) sdk.Source { //nolint:staticcheck // deliberate SDK 0.x compatibility path for pre-streaming consumers
-	if requested == nil {
-		requested = []string{sdk.CategoryWatchState}
-	}
-	categories := make([]string, 0, 3)
-	for _, category := range (plexSource{}).Categories() {
-		if slices.Contains(requested, category) {
-			categories = append(categories, category)
-		}
-	}
-	return newPlexSource(dbPath, categories)
+	return newPlexSource(dbPath, scopeCategories(plexCategories, requested))
 }
 
-func newPlexSource(dbPath string, categories []string) plexSource {
-	source := dbWatchSource{
-		read:   foreignimport.ReadPlexContext,
-		stream: foreignimport.StreamPlexWatchRows,
-		dbPath: dbPath,
-	}
-	if categories != nil && !slices.Contains(categories, sdk.CategoryWatchState) {
-		source.read = func(ctx context.Context, _ string) ([]foreignimport.WatchRow, error) {
-			return nil, ctx.Err()
-		}
-		source.stream = func(ctx context.Context, _ string, _ func(foreignimport.WatchRow) error) error {
-			return ctx.Err()
-		}
-	}
-	return plexSource{dbWatchSource: source, categories: categories}
+func newPlexSource(dbPath string, categories []string) multiUserSource {
+	return newMultiUserSource(dbPath, categories, plexCategories,
+		foreignimport.ReadPlexContext, foreignimport.StreamPlexWatchRows, foreignimport.ReadPlexByAccount)
 }
 
-// NewEmbySource returns the Emby migration Source over an Emby `library.db`.
-// (filmtv, "emby") → here.
+// NewEmbySource returns the Emby migration Source over an Emby `library.db`,
+// in the 4.10 layout or the older one. Per-user state and 4.10 collections
+// come through ItemsBySourceUser, with user names from the `users.db` beside
+// it. (filmtv, "emby") → here.
 func NewEmbySource(dbPath string) sdk.Source { //nolint:staticcheck // deliberate SDK 0.x compatibility path for pre-streaming consumers
-	return dbWatchSource{
-		read: foreignimport.ReadEmbyContext,
-		stream: func(ctx context.Context, path string, visit func(foreignimport.WatchRow) error) error {
-			return streamEmbyWatchRows(ctx, path, "emby", visit)
-		},
-		dbPath: dbPath,
-	}
+	return newEmbySource(dbPath, nil)
+}
+
+// NewEmbySourceForCategories returns an Emby source scoped to the requested
+// categories, as NewPlexSourceForCategories does.
+func NewEmbySourceForCategories(dbPath string, requested []string) sdk.Source { //nolint:staticcheck // deliberate SDK 0.x compatibility path for pre-streaming consumers
+	return newEmbySource(dbPath, scopeCategories(embyCategories, requested))
+}
+
+func newEmbySource(dbPath string, categories []string) multiUserSource {
+	return newMultiUserSource(dbPath, categories, embyCategories,
+		foreignimport.ReadEmbyContext, foreignimport.StreamEmbyWatchRows, foreignimport.ReadEmbyByUser)
 }
 
 // NewJellyfinSource returns the Jellyfin migration Source over a Jellyfin 12
 // `jellyfin.db`. A pre-12 `library.db` is refused with an error that tells the
-// operator to upgrade Jellyfin first. (filmtv, "jellyfin") → here.
+// operator to upgrade Jellyfin first. Per-user state, ratings and BoxSet
+// collections come through ItemsBySourceUser. (filmtv, "jellyfin") → here.
 func NewJellyfinSource(dbPath string) sdk.Source { //nolint:staticcheck // deliberate SDK 0.x compatibility path for pre-streaming consumers
-	return dbWatchSource{
-		read:   foreignimport.ReadJellyfinContext,
-		stream: foreignimport.StreamJellyfinWatchRows,
-		dbPath: dbPath,
-	}
+	return newJellyfinSource(dbPath, nil)
 }
 
-func streamEmbyWatchRows(
-	ctx context.Context,
-	path string,
-	dialect string,
-	visit func(foreignimport.WatchRow) error,
-) error {
-	db, err := openFilmTVReadOnly(path)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = db.Close() }()
-	rows, err := db.QueryContext(ctx, `
-		SELECT tbi.Path,
-		       COALESCE(ud.Played, 0),
-		       COALESCE(ud.PlaybackPositionTicks, 0),
-		       COALESCE(ud.LastPlayedDate, ''),
-		       COALESCE(tbi.RunTimeTicks, 0)
-		FROM TypedBaseItems tbi
-		JOIN UserDatas ud ON ud.key = tbi.UserDataKey
-		WHERE tbi.Path IS NOT NULL AND tbi.Path <> ''
-		  AND (ud.Played = 1 OR ud.PlaybackPositionTicks > 0)
-		ORDER BY tbi.Path`)
-	if err != nil {
-		return fmt.Errorf("query %s watch-state: %w", dialect, err)
-	}
-	defer func() { _ = rows.Close() }()
-	for rows.Next() {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		var file, lastPlayed string
-		var played, positionTicks, runTimeTicks int64
-		if err := rows.Scan(&file, &played, &positionTicks, &lastPlayed, &runTimeTicks); err != nil {
-			return fmt.Errorf("scan %s row: %w", dialect, err)
-		}
-		row := foreignimport.WatchRow{
-			Path:            file,
-			Watched:         played == 1,
-			PositionSeconds: positionTicks / 10_000_000,
-			DurationSeconds: runTimeTicks / 10_000_000,
-		}
-		if parsed, err := time.Parse(time.RFC3339Nano, lastPlayed); err == nil && lastPlayed != "" {
-			row.LastPlayed = parsed.UTC()
-		}
-		if err := visit(row); err != nil {
-			return err
-		}
-	}
-	if err := rows.Err(); err != nil {
-		return fmt.Errorf("iterate %s rows: %w", dialect, err)
-	}
-	return nil
+// NewJellyfinSourceForCategories returns a Jellyfin source scoped to the
+// requested categories, as NewPlexSourceForCategories does.
+func NewJellyfinSourceForCategories(dbPath string, requested []string) sdk.Source { //nolint:staticcheck // deliberate SDK 0.x compatibility path for pre-streaming consumers
+	return newJellyfinSource(dbPath, scopeCategories(jellyfinCategories, requested))
 }
 
-func openFilmTVReadOnly(path string) (*sql.DB, error) {
-	escaped := strings.NewReplacer("%", "%25", "?", "%3F", "#", "%23").Replace(path)
-	db, err := sql.Open("sqlite", "file:"+escaped+"?mode=ro&immutable=1")
-	if err != nil {
-		return nil, fmt.Errorf("open foreign db %q: %w", path, err)
-	}
-	return db, nil
+func newJellyfinSource(dbPath string, categories []string) multiUserSource {
+	return newMultiUserSource(dbPath, categories, jellyfinCategories,
+		foreignimport.ReadJellyfinContext, foreignimport.StreamJellyfinWatchRows, foreignimport.ReadJellyfinByUser)
 }
 
 // nfoSource adapts an NFO sidecar tree to sdk.Source. An NFO library carries no

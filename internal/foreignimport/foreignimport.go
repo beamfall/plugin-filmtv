@@ -15,7 +15,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -168,22 +167,22 @@ func plexWatchRow(file string, offsetMS, viewCount, lastViewedAt, durationMS int
 	return row
 }
 
-// PlexAccountItem holds one account's settings for a file. A nil Rating means unrated.
-type PlexAccountItem struct {
+// UserItem holds one account's settings for a file. A nil Rating means unrated.
+type UserItem struct {
 	WatchRow
 	HasWatchState bool
 	Rating        *float64
 }
 
-// PlexCollectionMember is a file's position in a library-wide collection.
-type PlexCollectionMember struct {
+// CollectionMember is a file's position in a library-wide collection.
+type CollectionMember struct {
 	Path     string
 	Name     string
 	Position int
 }
 
-// PlexReadOptions selects the account state and collection data to read.
-type PlexReadOptions struct {
+// ReadOptions selects the account state and collection data to read.
+type ReadOptions struct {
 	WatchState  bool
 	Ratings     bool
 	Collections bool
@@ -191,27 +190,27 @@ type PlexReadOptions struct {
 
 // ReadPlexByAccount returns account settings keyed by source-user ID and the
 // collections shared by those accounts. Accounts with no settings are included.
-func ReadPlexByAccount(ctx context.Context, path string, options PlexReadOptions) (map[string][]PlexAccountItem, []PlexCollectionMember, error) {
+func ReadPlexByAccount(ctx context.Context, path string, options ReadOptions) (map[string][]UserItem, []CollectionMember, error) {
 	db, err := openReadOnly(path)
 	if err != nil {
 		return nil, nil, err
 	}
 	defer func() { _ = db.Close() }()
-	accounts, err := readPlexAccountItems(ctx, db, options)
+	accounts, err := readUserItems(ctx, db, options)
 	if err != nil {
 		return nil, nil, err
 	}
 	if !options.Collections {
 		return accounts, nil, nil
 	}
-	collections, err := readPlexCollectionMembers(ctx, db)
+	collections, err := readCollectionMembers(ctx, db)
 	if err != nil {
 		return nil, nil, err
 	}
 	return accounts, collections, nil
 }
 
-func readPlexAccountItems(ctx context.Context, db *sql.DB, options PlexReadOptions) (map[string][]PlexAccountItem, error) {
+func readUserItems(ctx context.Context, db *sql.DB, options ReadOptions) (map[string][]UserItem, error) {
 	if !options.WatchState && !options.Ratings {
 		return readPlexAccountKeys(ctx, db)
 	}
@@ -240,7 +239,7 @@ func readPlexAccountItems(ctx context.Context, db *sql.DB, options PlexReadOptio
 		return nil, fmt.Errorf("query plex account settings: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
-	accounts := make(map[string][]PlexAccountItem)
+	accounts := make(map[string][]UserItem)
 	for rows.Next() {
 		var account, file string
 		var offsetMS, viewCount, lastViewedAt, durationMS int64
@@ -252,7 +251,7 @@ func readPlexAccountItems(ctx context.Context, db *sql.DB, options PlexReadOptio
 			accounts[account] = nil
 			continue
 		}
-		accounts[account] = append(accounts[account], PlexAccountItem{
+		accounts[account] = append(accounts[account], UserItem{
 			WatchRow:      plexWatchRow(file, offsetMS, viewCount, lastViewedAt, durationMS),
 			HasWatchState: offsetMS > 0 || viewCount > 0,
 			Rating:        rating,
@@ -264,13 +263,13 @@ func readPlexAccountItems(ctx context.Context, db *sql.DB, options PlexReadOptio
 	return accounts, nil
 }
 
-func readPlexAccountKeys(ctx context.Context, db *sql.DB) (map[string][]PlexAccountItem, error) {
+func readPlexAccountKeys(ctx context.Context, db *sql.DB) (map[string][]UserItem, error) {
 	rows, err := db.QueryContext(ctx, `SELECT COALESCE(name, '') || '#' || id FROM accounts`)
 	if err != nil {
 		return nil, fmt.Errorf("query plex account keys: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
-	accounts := make(map[string][]PlexAccountItem)
+	accounts := make(map[string][]UserItem)
 	for rows.Next() {
 		var account string
 		if err := rows.Scan(&account); err != nil {
@@ -284,7 +283,7 @@ func readPlexAccountKeys(ctx context.Context, db *sql.DB) (map[string][]PlexAcco
 	return accounts, nil
 }
 
-func readPlexCollectionMembers(ctx context.Context, db *sql.DB) ([]PlexCollectionMember, error) {
+func readCollectionMembers(ctx context.Context, db *sql.DB) ([]CollectionMember, error) {
 	rows, err := db.QueryContext(ctx, `
 		SELECT mp.file, tags.tag, COALESCE(taggings."index", 0)
 		FROM tags
@@ -298,9 +297,9 @@ func readPlexCollectionMembers(ctx context.Context, db *sql.DB) ([]PlexCollectio
 		return nil, fmt.Errorf("query plex collections: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
-	var members []PlexCollectionMember
+	var members []CollectionMember
 	for rows.Next() {
-		var member PlexCollectionMember
+		var member CollectionMember
 		if err := rows.Scan(&member.Path, &member.Name, &member.Position); err != nil {
 			return nil, fmt.Errorf("scan plex collection membership: %w", err)
 		}
@@ -346,58 +345,97 @@ var errJellyfinLegacy = errors.New("this is a Jellyfin library.db from before Je
 // errJellyfinUnknown reports a file without the Jellyfin 12 layout.
 var errJellyfinUnknown = errors.New("not a Jellyfin 12 jellyfin.db")
 
-// jellyfinColumns lists, in check order, the Jellyfin 12 tables and columns the
-// reader uses.
-var jellyfinColumns = []struct {
+// tableColumns names a table and the columns a reader uses from it.
+type tableColumns struct {
 	table   string
 	columns []string
-}{
+}
+
+// jellyfinColumns lists, in check order, the Jellyfin 12 tables and columns the
+// watch-state reader uses.
+var jellyfinColumns = []tableColumns{
 	{"BaseItems", []string{"Id", "Path", "RunTimeTicks", "IsFolder"}},
 	{"UserData", []string{"ItemId", "UserId", "CustomDataKey", "Played", "PlaybackPositionTicks", "LastPlayedDate"}},
 }
 
-// checkJellyfinSchema refuses anything but the Jellyfin 12 layout. It checks
-// shape, not a version number, so a later 12.x that keeps these columns reads.
-// It inspects only the tables it names, so an unrelated table it cannot open
-// (a virtual table whose module is absent) does not stop the import.
-func checkJellyfinSchema(ctx context.Context, db *sql.DB) error {
+// The per-user reader also needs these, the last two only when ratings or
+// collections are selected.
+var (
+	jellyfinUserColumns       = []tableColumns{{"Users", []string{"Id", "Username"}}}
+	jellyfinRatingColumns     = []tableColumns{{"UserData", []string{"Rating"}}}
+	jellyfinCollectionColumns = []tableColumns{
+		{"BaseItems", []string{"Type", "Name"}},
+		{"LinkedChildren", []string{"ParentId", "SortOrder", "ChildId"}},
+	}
+)
+
+// readTableColumns returns the columns of each named table that exists, keyed
+// by table name, with column names folded to lower case as SQLite matches
+// them. It inspects only the tables it names, so an unrelated table it cannot
+// open (a virtual table whose module is absent) does not stop the import.
+func readTableColumns(ctx context.Context, db *sql.DB, label string, names ...string) (map[string]map[string]bool, error) {
+	args := make([]any, len(names))
+	for i, name := range names {
+		args[i] = name
+	}
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(names)), ",")
 	rows, err := db.QueryContext(ctx, `
 		SELECT m.name, p.name
 		FROM sqlite_master m JOIN pragma_table_info(m.name) p
-		WHERE m.type = 'table' AND m.name IN ('BaseItems', 'UserData', 'TypedBaseItems')`)
+		WHERE m.type = 'table' AND m.name IN (`+placeholders+`)`, args...)
 	if err != nil {
-		return fmt.Errorf("read jellyfin schema: %w", err)
+		return nil, fmt.Errorf("read %s schema: %w", label, err)
 	}
 	defer func() { _ = rows.Close() }()
 	tables := map[string]map[string]bool{}
 	for rows.Next() {
 		var table, column string
 		if err := rows.Scan(&table, &column); err != nil {
-			return fmt.Errorf("scan jellyfin schema: %w", err)
+			return nil, fmt.Errorf("scan %s schema: %w", label, err)
 		}
 		if tables[table] == nil {
 			tables[table] = map[string]bool{}
 		}
-		tables[table][column] = true
+		tables[table][strings.ToLower(column)] = true
 	}
 	if err := rows.Err(); err != nil {
-		return fmt.Errorf("read jellyfin schema: %w", err)
+		return nil, fmt.Errorf("read %s schema: %w", label, err)
 	}
-	if tables["BaseItems"] == nil && tables["TypedBaseItems"] != nil {
-		return errJellyfinLegacy
-	}
-	for _, want := range jellyfinColumns {
-		have := tables[want.table]
-		if have == nil {
-			return fmt.Errorf("%w: missing table %s", errJellyfinUnknown, want.table)
-		}
-		for _, column := range want.columns {
-			if !have[column] {
-				return fmt.Errorf("%w: missing column %s.%s", errJellyfinUnknown, want.table, column)
+	return tables, nil
+}
+
+// requireColumns reports the first wanted table or column that tables lacks,
+// wrapping base.
+func requireColumns(tables map[string]map[string]bool, base error, wants ...[]tableColumns) error {
+	for _, group := range wants {
+		for _, want := range group {
+			have := tables[want.table]
+			if have == nil {
+				return fmt.Errorf("%w: missing table %s", base, want.table)
+			}
+			for _, column := range want.columns {
+				if !have[strings.ToLower(column)] {
+					return fmt.Errorf("%w: missing column %s.%s", base, want.table, column)
+				}
 			}
 		}
 	}
 	return nil
+}
+
+// checkJellyfinSchema refuses anything but the Jellyfin 12 layout with the
+// watch-state columns and any extra columns the caller needs. It checks shape,
+// not a version number, so a later 12.x that keeps these columns reads.
+func checkJellyfinSchema(ctx context.Context, db *sql.DB, extra ...[]tableColumns) error {
+	tables, err := readTableColumns(ctx, db, "jellyfin",
+		"BaseItems", "UserData", "TypedBaseItems", "Users", "LinkedChildren")
+	if err != nil {
+		return err
+	}
+	if tables["BaseItems"] == nil && tables["TypedBaseItems"] != nil {
+		return errJellyfinLegacy
+	}
+	return requireColumns(tables, errJellyfinUnknown, append([][]tableColumns{jellyfinColumns}, extra...)...)
 }
 
 // jellyfinCopy is one Jellyfin 12 `UserData` row joined to its item.
@@ -431,6 +469,34 @@ func (c jellyfinCopy) beats(o jellyfinCopy) bool {
 		return c.played
 	}
 	return c.positionTicks > o.positionTicks
+}
+
+// hasWatchState reports whether the copy records playback.
+func (c jellyfinCopy) hasWatchState() bool { return c.played || c.positionTicks > 0 }
+
+// setScanned fills the fields derived from the scanned Played and
+// LastPlayedDate values. A malformed LastPlayedDate leaves the time zero rather
+// than ending the import.
+func (c *jellyfinCopy) setScanned(played int64, lastPlayed string) {
+	c.played = played == 1
+	if parsed, err := parseJellyfinTime(lastPlayed); err == nil {
+		c.lastPlayed, c.hasLastPlayed = parsed, true
+	}
+}
+
+// watchRow converts the copy, parsing the duration only now.
+func (c jellyfinCopy) watchRow() (WatchRow, error) {
+	runTimeTicks, err := strconv.ParseInt(c.runTimeTicks, 10, 64)
+	if err != nil {
+		return WatchRow{}, fmt.Errorf("scan jellyfin row: RunTimeTicks %q: %w", c.runTimeTicks, err)
+	}
+	return WatchRow{
+		Path:            c.path,
+		Watched:         c.played,
+		PositionSeconds: c.positionTicks / ticksPerSecond,
+		DurationSeconds: runTimeTicks / ticksPerSecond,
+		LastPlayed:      c.lastPlayed,
+	}, nil
 }
 
 // StreamJellyfinWatchRows visits Jellyfin 12 watch rows in file path order, one
@@ -471,23 +537,17 @@ func StreamJellyfinWatchRows(ctx context.Context, path string, visit func(WatchR
 	var best jellyfinCopy
 	pending := false
 	emit := func() error {
-		if !pending || (!best.played && best.positionTicks <= 0) {
+		if !pending || !best.hasWatchState() {
 			return nil
 		}
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		runTimeTicks, err := strconv.ParseInt(best.runTimeTicks, 10, 64)
+		row, err := best.watchRow()
 		if err != nil {
-			return fmt.Errorf("scan jellyfin row: RunTimeTicks %q: %w", best.runTimeTicks, err)
+			return err
 		}
-		return visit(WatchRow{
-			Path:            best.path,
-			Watched:         best.played,
-			PositionSeconds: best.positionTicks / ticksPerSecond,
-			DurationSeconds: runTimeTicks / ticksPerSecond,
-			LastPlayed:      best.lastPlayed,
-		})
+		return visit(row)
 	}
 	for rows.Next() {
 		if err := ctx.Err(); err != nil {
@@ -501,12 +561,7 @@ func StreamJellyfinWatchRows(ctx context.Context, path string, visit func(WatchR
 		if err := rows.Scan(&c.path, &c.userID, &c.itemID, &played, &c.positionTicks, &lastPlayed, &c.runTimeTicks); err != nil {
 			return fmt.Errorf("scan jellyfin row: %w", err)
 		}
-		c.played = played == 1
-		// A malformed LastPlayedDate leaves the time zero rather than ending
-		// the import.
-		if parsed, err := parseJellyfinTime(lastPlayed); err == nil {
-			c.lastPlayed, c.hasLastPlayed = parsed, true
-		}
+		c.setScanned(played, lastPlayed)
 		if pending && c.sameEntry(best) {
 			if c.beats(best) {
 				best = c
@@ -535,77 +590,6 @@ func parseJellyfinTime(value string) (time.Time, error) {
 		return parsed, nil
 	}
 	return parseTime(value)
-}
-
-// ReadEmby reads watch-state keyed by file path from an Emby `library.db`.
-// Emby keeps the file path on `TypedBaseItems.Path` and per-user playback state
-// on `UserDatas` (`PlaybackPositionTicks`, `Played`, `LastPlayedDate`) joined on
-// `UserDataKey`. Jellyfin before 12 used the same layout; the Jellyfin source
-// now refuses it (see ReadJellyfin).
-func ReadEmby(path string) ([]WatchRow, error) {
-	return ReadEmbyContext(context.Background(), path)
-}
-
-// ReadEmbyContext is ReadEmby with cancellation propagated to SQLite.
-func ReadEmbyContext(ctx context.Context, path string) ([]WatchRow, error) {
-	return readEmbyFamilyContext(ctx, path, "emby")
-}
-
-func readEmbyFamilyContext(ctx context.Context, path, dialect string) ([]WatchRow, error) {
-	db, err := openReadOnly(path)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = db.Close() }()
-
-	rows, err := db.QueryContext(ctx, `
-		SELECT tbi.Path,
-		       COALESCE(ud.Played, 0),
-		       COALESCE(ud.PlaybackPositionTicks, 0),
-		       COALESCE(ud.LastPlayedDate, ''),
-		       COALESCE(tbi.RunTimeTicks, 0)
-		FROM TypedBaseItems tbi
-		JOIN UserDatas ud ON ud.key = tbi.UserDataKey
-		WHERE tbi.Path IS NOT NULL AND tbi.Path <> ''
-		  AND (ud.Played = 1 OR ud.PlaybackPositionTicks > 0)`)
-	if err != nil {
-		return nil, fmt.Errorf("query %s watch-state: %w", dialect, err)
-	}
-	defer func() { _ = rows.Close() }()
-
-	var out []WatchRow
-	for rows.Next() {
-		var (
-			file          string
-			played        int64
-			positionTicks int64
-			lastPlayed    string
-			runTimeTicks  int64
-		)
-		if err := rows.Scan(&file, &played, &positionTicks, &lastPlayed, &runTimeTicks); err != nil {
-			return nil, fmt.Errorf("scan %s row: %w", dialect, err)
-		}
-		row := WatchRow{
-			Path:            file,
-			Watched:         played == 1,
-			PositionSeconds: positionTicks / ticksPerSecond,
-			DurationSeconds: runTimeTicks / ticksPerSecond,
-		}
-		if lastPlayed != "" {
-			// A malformed LastPlayedDate degrades this one row to a zero
-			// LastPlayed rather than aborting the whole import, matching the
-			// Plex path's graceful handling of an absent/zero timestamp.
-			if parsed, err := parseTime(lastPlayed); err == nil {
-				row.LastPlayed = parsed
-			}
-		}
-		out = append(out, row)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate %s rows: %w", dialect, err)
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
-	return out, nil
 }
 
 // parseTime parses the RFC3339(.NET) timestamp Emby/Jellyfin write for

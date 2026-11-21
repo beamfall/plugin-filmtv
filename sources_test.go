@@ -378,7 +378,7 @@ func requireSourceUserItems(t *testing.T, source sdk.Source) sourceUserItems { /
 	t.Helper()
 	bySourceUser, ok := source.(sourceUserItems)
 	if !ok {
-		t.Fatal("Plex source does not implement ItemsBySourceUser")
+		t.Fatalf("%T does not implement ItemsBySourceUser", source)
 	}
 	return bySourceUser
 }
@@ -412,5 +412,95 @@ func assertFilmTVStreamMatchesItems(t *testing.T, source sdk.Source) { //nolint:
 	}
 	if !reflect.DeepEqual(streamed, items) {
 		t.Fatalf("streamed items differ from compatibility Items:\nstream: %#v\nitems:  %#v", streamed, items)
+	}
+}
+
+func TestJellyfinAndEmbySourcesItemsBySourceUser(t *testing.T) {
+	jellyfinPath := filepath.Join(t.TempDir(), "jellyfin.db")
+	seedFilmTVDatabase(t, jellyfinPath, []string{
+		`CREATE TABLE BaseItems (Id TEXT NOT NULL PRIMARY KEY, IsFolder INTEGER NOT NULL, Path TEXT,
+			RunTimeTicks INTEGER, Type TEXT NOT NULL, Name TEXT)`,
+		`CREATE TABLE UserData (ItemId TEXT NOT NULL, UserId TEXT NOT NULL, CustomDataKey TEXT NOT NULL,
+			Played INTEGER NOT NULL, PlaybackPositionTicks INTEGER NOT NULL, LastPlayedDate TEXT, Rating REAL)`,
+		`CREATE TABLE Users (Id TEXT NOT NULL PRIMARY KEY, Username TEXT NOT NULL)`,
+		`CREATE TABLE LinkedChildren (ParentId TEXT NOT NULL, SortOrder INTEGER NOT NULL, ChildId TEXT NOT NULL)`,
+		`INSERT INTO Users VALUES ('U1', 'owner'), ('U2', 'idle')`,
+		`INSERT INTO BaseItems VALUES
+			('a', 0, '/a.mkv', 900000000, 'MediaBrowser.Controller.Entities.Movies.Movie', 'A'),
+			('b', 0, '/b.mkv', 900000000, 'MediaBrowser.Controller.Entities.Movies.Movie', 'B'),
+			('s', 1, '/s', NULL, 'MediaBrowser.Controller.Entities.Movies.BoxSet', 'Set')`,
+		`INSERT INTO UserData VALUES ('a', 'U1', 'ka', 1, 0, '2024-01-02 03:04:05', NULL),
+			('b', 'U1', 'kb', 0, 0, NULL, 7.5)`,
+		`INSERT INTO LinkedChildren VALUES ('s', 3, 'b')`,
+	})
+	embyPath := filepath.Join(t.TempDir(), "library.db")
+	seedFilmTVDatabase(t, embyPath, []string{
+		`CREATE TABLE MediaItems (Id INTEGER PRIMARY KEY, type INT, ParentId INT, Path TEXT, Name TEXT,
+			RunTimeTicks INTEGER, UserDataKeyId INT)`,
+		`CREATE TABLE UserDatas (UserDataKeyId INT, userId INT, rating REAL, played INT, playCount INT,
+			isFavorite INT, playbackPositionTicks INTEGER, LastPlayedDateInt INT)`,
+		`CREATE TABLE ItemLinks2 (ItemId INT, Type INT, LinkedId INT, LinkOrder INT)`,
+		`INSERT INTO MediaItems (Id, type, Path, Name, RunTimeTicks, UserDataKeyId) VALUES
+			(10, 5, '/a.mkv', 'A', 900000000, 100), (11, 5, '/b.mkv', 'B', 900000000, 101),
+			(20, 9, '/c [boxset]', 'Set', NULL, NULL)`,
+		`INSERT INTO UserDatas VALUES (100, 1, NULL, 1, 1, 0, 0, 1704164645), (101, 1, 9, 0, 0, 1, 0, NULL)`,
+		`INSERT INTO ItemLinks2 VALUES (11, 6, 20, 0)`,
+	})
+	watched := sdk.ForeignItem{Path: "/a.mkv", WatchState: sdk.WatchState{Present: true, Watched: true,
+		DurationSeconds: 90, OccurredAt: time.Date(2024, 1, 2, 3, 4, 5, 0, time.UTC)}}
+	jellyfinMember := sdk.ForeignItem{Path: "/b.mkv", CollectionMember: sdk.CollectionMember{Present: true, Name: "Set", Position: 3}}
+	embyMember := sdk.ForeignItem{Path: "/b.mkv", CollectionMember: sdk.CollectionMember{Present: true, Name: "Set"}}
+	all := []string{sdk.CategoryWatchState, sdk.CategoryRatings, sdk.CategoryCollections}
+	embyAll := []string{sdk.CategoryWatchState, sdk.CategoryCollections}
+	for _, test := range []struct {
+		name       string
+		source     sdk.Source //nolint:staticcheck // deliberate SDK 0.x compatibility assertion
+		categories []string
+		want       map[string][]sdk.ForeignItem
+	}{
+		{name: "jellyfin all", source: NewJellyfinSourceForCategories(jellyfinPath, all), categories: all, want: map[string][]sdk.ForeignItem{
+			"owner#U1": {watched, {Path: "/b.mkv", Rating: sdk.Rating{Present: true, Value: 7.5, Scale: 10}}, jellyfinMember},
+			"idle#U2":  {jellyfinMember},
+		}},
+		{name: "jellyfin ratings", source: NewJellyfinSourceForCategories(jellyfinPath, []string{sdk.CategoryRatings}),
+			categories: []string{sdk.CategoryRatings}, want: map[string][]sdk.ForeignItem{
+				"owner#U1": {{Path: "/b.mkv", Rating: sdk.Rating{Present: true, Value: 7.5, Scale: 10}}},
+				"idle#U2":  nil,
+			}},
+		{name: "jellyfin legacy factory", source: NewJellyfinSource(jellyfinPath),
+			categories: all, want: map[string][]sdk.ForeignItem{"owner#U1": {watched}, "idle#U2": nil}},
+		{name: "jellyfin nil selection", source: NewJellyfinSourceForCategories(jellyfinPath, nil),
+			categories: []string{sdk.CategoryWatchState}, want: map[string][]sdk.ForeignItem{
+				"owner#U1": {watched}, "idle#U2": nil,
+			}},
+		{name: "emby legacy factory", source: NewEmbySource(embyPath), categories: embyAll,
+			want: map[string][]sdk.ForeignItem{"#1": {watched}}},
+		{name: "emby all", source: NewEmbySourceForCategories(embyPath, all), categories: embyAll, want: map[string][]sdk.ForeignItem{
+			"#1": {watched, embyMember},
+		}},
+		{name: "emby collections", source: NewEmbySourceForCategories(embyPath, []string{sdk.CategoryCollections}),
+			categories: []string{sdk.CategoryCollections}, want: map[string][]sdk.ForeignItem{}},
+		{name: "emby collections with user", source: NewEmbySourceForCategories(embyPath, []string{sdk.CategoryWatchState, sdk.CategoryCollections}),
+			categories: embyAll, want: map[string][]sdk.ForeignItem{"#1": {watched, embyMember}}},
+		{name: "emby ratings unsupported", source: NewEmbySourceForCategories(embyPath, []string{sdk.CategoryRatings}),
+			categories: []string{}, want: map[string][]sdk.ForeignItem{}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := test.source.Categories(); !reflect.DeepEqual(got, test.categories) {
+				t.Fatalf("categories = %#v, want %#v", got, test.categories)
+			}
+			got, err := requireSourceUserItems(t, test.source).ItemsBySourceUser(context.Background())
+			if err != nil {
+				t.Fatal(err)
+			}
+			for account, items := range got {
+				if len(items) == 0 {
+					got[account] = nil
+				}
+			}
+			if !reflect.DeepEqual(got, test.want) {
+				t.Errorf("items = %#v\nwant  %#v", got, test.want)
+			}
+		})
 	}
 }

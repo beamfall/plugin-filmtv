@@ -970,9 +970,11 @@ func Bundle() sdk.Bundle {
 		//
 		// Plex/Emby/Jellyfin read the foreign server's SQLite database
 		// (export-file input) and carry watch-state — resume position +
-		// completion + the historical timestamp. Plex also carries per-account
-		// ratings and library-wide collection memberships. Core's v1 handler
-		// applies watch-state. Applying Plex ratings and collections lands
+		// completion + the historical timestamp — per source user. Plex and
+		// Jellyfin also carry per-user ratings, and all three carry
+		// library-wide collection memberships. Emby advertises no ratings: its
+		// API never stored one when observed (CORE-2678). Core's v1 handler
+		// applies watch-state. Applying ratings and collections lands
 		// separately in Core.
 		//
 		// NFO walks a sidecar tree (the library folder) and declares TMDB/IMDB
@@ -989,14 +991,14 @@ func Bundle() sdk.Bundle {
 			{
 				ID:          "emby",
 				DisplayName: sdk.LocaleString{"en": "Emby", "fr": "Emby"},
-				Categories:  []string{"watch-state"},
+				Categories:  []string{sdk.CategoryWatchState, sdk.CategoryCollections},
 				Input:       "export-file",
 				Conflict:    "additive",
 			},
 			{
 				ID:          "jellyfin",
 				DisplayName: sdk.LocaleString{"en": "Jellyfin", "fr": "Jellyfin"},
-				Categories:  []string{"watch-state"},
+				Categories:  []string{sdk.CategoryWatchState, sdk.CategoryRatings, sdk.CategoryCollections},
 				Input:       "export-file",
 				Conflict:    "additive",
 			},
