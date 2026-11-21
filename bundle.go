@@ -75,8 +75,8 @@ func Bundle() sdk.Bundle {
 	return sdk.Bundle{
 		ID:          PluginID,
 		Version:     "0.1.4",
-		SDKFloor:    "0.4.6",
-		SDKCeiling:  "0.4.6",
+		SDKFloor:    "0.4.7",
+		SDKCeiling:  "0.4.7",
 		DisplayName: sdk.LocaleString{"en": "Film & TV", "fr": "Films et séries"},
 		// Per-item display labels key off the typed Media field
 		// `class: movie | episode`; MediaLabel stays the class-neutral
@@ -205,10 +205,11 @@ func Bundle() sdk.Bundle {
 		EntityKinds: []sdk.EntityKind{
 			{
 				// Show: ordered Seasons.
-				Name:            "show",
-				DisplayName:     sdk.LocaleString{"en": "Show", "fr": "Série"},
-				Archetype:       "container",
-				OrderedChildren: true,
+				Name:              "show",
+				DisplayName:       sdk.LocaleString{"en": "Show", "fr": "Série"},
+				PluralDisplayName: sdk.LocaleString{"en": "Shows", "fr": "Séries"},
+				Archetype:         "container",
+				OrderedChildren:   true,
 				Fields: []sdk.FieldSpec{
 					{Name: "first-air-date", Type: "date", Sortable: true,
 						Label: sdk.LocaleString{"en": "First Air Date", "fr": "Première diffusion"}},
@@ -251,10 +252,11 @@ func Bundle() sdk.Bundle {
 				// last, excluded from play-next auto-advance — the
 				// sort/auto-advance exclusion is server policy, not
 				// expressible in this declaration.
-				Name:            "season",
-				DisplayName:     sdk.LocaleString{"en": "Season", "fr": "Saison"},
-				Archetype:       "container",
-				OrderedChildren: true,
+				Name:              "season",
+				DisplayName:       sdk.LocaleString{"en": "Season", "fr": "Saison"},
+				PluralDisplayName: sdk.LocaleString{"en": "Seasons", "fr": "Saisons"},
+				Archetype:         "container",
+				OrderedChildren:   true,
 				Fields: []sdk.FieldSpec{
 					{Name: "number", Type: "number", Sortable: true,
 						Label: sdk.LocaleString{"en": "Number", "fr": "Numéro"}},
@@ -278,10 +280,11 @@ func Bundle() sdk.Bundle {
 				// Film Series: TMDB's "Collection" concept, renamed because
 				// core Collection means user-curated. Ordered
 				// grid by release.
-				Name:            "film-series",
-				DisplayName:     sdk.LocaleString{"en": "Film Series", "fr": "Saga de films"},
-				Archetype:       "container",
-				OrderedChildren: true,
+				Name:              "film-series",
+				DisplayName:       sdk.LocaleString{"en": "Film Series", "fr": "Saga de films"},
+				PluralDisplayName: sdk.LocaleString{"en": "Film Series", "fr": "Sagas de films"},
+				Archetype:         "container",
+				OrderedChildren:   true,
 				Fields: []sdk.FieldSpec{
 					{Name: "tmdb-id", Type: "text",
 						Label: sdk.LocaleString{"en": "TMDB ID", "fr": "Identifiant TMDB"}},
@@ -290,9 +293,10 @@ func Bundle() sdk.Bundle {
 			{
 				// One Kind for all humans; the credit relation's attributes
 				// distinguish actor/director/writer.
-				Name:        "person",
-				DisplayName: sdk.LocaleString{"en": "Person", "fr": "Personne"},
-				Archetype:   "person",
+				Name:              "person",
+				DisplayName:       sdk.LocaleString{"en": "Person", "fr": "Personne"},
+				PluralDisplayName: sdk.LocaleString{"en": "People", "fr": "Personnes"},
+				Archetype:         "person",
 				Fields: []sdk.FieldSpec{
 					{Name: "birth-date", Type: "date",
 						Label: sdk.LocaleString{"en": "Birth Date", "fr": "Date de naissance"}},
@@ -334,9 +338,10 @@ func Bundle() sdk.Bundle {
 			{
 				// One category Kind for production companies and networks;
 				// the function field carries the distinction.
-				Name:        "studio",
-				DisplayName: sdk.LocaleString{"en": "Studio", "fr": "Studio"},
-				Archetype:   "category",
+				Name:              "studio",
+				DisplayName:       sdk.LocaleString{"en": "Studio", "fr": "Studio"},
+				PluralDisplayName: sdk.LocaleString{"en": "Studios", "fr": "Studios"},
+				Archetype:         "category",
 				Fields: []sdk.FieldSpec{
 					{Name: "function", Type: "text", Filterable: true,
 						Label: sdk.LocaleString{"en": "Function", "fr": "Fonction"}},
@@ -351,9 +356,10 @@ func Bundle() sdk.Bundle {
 				},
 			},
 			{
-				Name:        "genre",
-				DisplayName: sdk.LocaleString{"en": "Genre", "fr": "Genre"},
-				Archetype:   "category",
+				Name:              "genre",
+				DisplayName:       sdk.LocaleString{"en": "Genre", "fr": "Genre"},
+				PluralDisplayName: sdk.LocaleString{"en": "Genres", "fr": "Genres"},
+				Archetype:         "category",
 				Relations: []sdk.RelationSpec{
 					// Genre → Media: the per-item genre link identification
 					// hydrates from TMDB's genres list.
