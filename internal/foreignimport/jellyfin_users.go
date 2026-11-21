@@ -11,11 +11,12 @@ import (
 const jellyfinBoxSetType = "MediaBrowser.Controller.Entities.Movies.BoxSet"
 
 // The per-user item query, with and without the rating column. The order
-// groups each entry's copies together and is total.
+// groups each entry's copies together and is total. User IDs are GUIDs that
+// Users matches without regard to case, so copies group on the upper-case ID.
 const (
 	jellyfinUserItemsHead = `
-		SELECT COALESCE(us.Username, '') || '#' || COALESCE(us.Id, u.UserId),
-		       b.Path, u.UserId, u.ItemId,
+		SELECT COALESCE(us.Username, '') || '#' || COALESCE(us.Id, UPPER(u.UserId)),
+		       b.Path, UPPER(u.UserId), u.ItemId,
 		       COALESCE(u.Played, 0), COALESCE(u.PlaybackPositionTicks, 0),
 		       COALESCE(u.LastPlayedDate, ''), CAST(COALESCE(b.RunTimeTicks, 0) AS TEXT), `
 	jellyfinUserItemsTail = `
@@ -23,7 +24,7 @@ const (
 		JOIN BaseItems b ON b.Id = u.ItemId
 		LEFT JOIN Users us ON us.Id = u.UserId COLLATE NOCASE
 		WHERE b.Path IS NOT NULL AND b.Path <> '' AND COALESCE(b.IsFolder, 0) = 0
-		ORDER BY u.UserId COLLATE BINARY, b.Path COLLATE BINARY,
+		ORDER BY UPPER(u.UserId) COLLATE BINARY, b.Path COLLATE BINARY,
 		         u.ItemId COLLATE BINARY, u.CustomDataKey COLLATE BINARY`
 	jellyfinUserItemsQuery      = jellyfinUserItemsHead + "NULL" + jellyfinUserItemsTail
 	jellyfinRatedUserItemsQuery = jellyfinUserItemsHead + "u.Rating" + jellyfinUserItemsTail

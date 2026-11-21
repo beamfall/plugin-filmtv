@@ -375,14 +375,18 @@ var (
 // open (a virtual table whose module is absent) does not stop the import.
 func readTableColumns(ctx context.Context, db *sql.DB, label string, names ...string) (map[string]map[string]bool, error) {
 	args := make([]any, len(names))
+	canonical := make(map[string]string, len(names))
 	for i, name := range names {
 		args[i] = name
+		canonical[strings.ToLower(name)] = name
 	}
 	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(names)), ",")
+	// SQLite resolves table names without regard to ASCII case, so the probe
+	// does too and reports each table under the name asked for.
 	rows, err := db.QueryContext(ctx, `
 		SELECT m.name, p.name
 		FROM sqlite_master m JOIN pragma_table_info(m.name) p
-		WHERE m.type = 'table' AND m.name IN (`+placeholders+`)`, args...)
+		WHERE m.type = 'table' AND m.name COLLATE NOCASE IN (`+placeholders+`)`, args...)
 	if err != nil {
 		return nil, fmt.Errorf("read %s schema: %w", label, err)
 	}
@@ -393,6 +397,7 @@ func readTableColumns(ctx context.Context, db *sql.DB, label string, names ...st
 		if err := rows.Scan(&table, &column); err != nil {
 			return nil, fmt.Errorf("scan %s schema: %w", label, err)
 		}
+		table = canonical[strings.ToLower(table)]
 		if tables[table] == nil {
 			tables[table] = map[string]bool{}
 		}

@@ -206,7 +206,8 @@ func TestReadEmbyLegacyLayoutByUser(t *testing.T) {
 	t.Run("with userId", func(t *testing.T) {
 		path := legacy(t, ", userId INTEGER",
 			`INSERT INTO UserDatas VALUES ('ka', 1, 1, 0, '2024-01-02T03:04:05Z'),
-				('kb', 2, 0, 50000000, CAST('2024-01-02T03:04:05Z' AS BLOB)), ('kb', 1, 0, 0, NULL)`)
+				('kb', 2, 0, 50000000, CAST('2024-01-02T03:04:05Z' AS BLOB)), ('kb', 1, 0, 0, NULL),
+				('ka', NULL, 1, 0, NULL)`)
 		users, members, err := ReadEmbyByUser(context.Background(), path,
 			ReadOptions{WatchState: true, Collections: true})
 		if err != nil {
@@ -215,9 +216,21 @@ func TestReadEmbyLegacyLayoutByUser(t *testing.T) {
 		want := map[string][]UserItem{
 			"#1": {{WatchRow: WatchRow{Path: "/a.mkv", Watched: true, DurationSeconds: 900, LastPlayed: at}, HasWatchState: true}},
 			"#2": {{WatchRow: WatchRow{Path: "/b.mkv", PositionSeconds: 5, DurationSeconds: 900, LastPlayed: at}, HasWatchState: true}},
+			"#":  {{WatchRow: WatchRow{Path: "/a.mkv", Watched: true, DurationSeconds: 900}, HasWatchState: true}},
 		}
 		if !reflect.DeepEqual(users, want) || members != nil {
 			t.Errorf("users = %#v, members = %#v\nwant %#v", users, members, want)
+		}
+	})
+	t.Run("lower-case table names", func(t *testing.T) {
+		path := fixtureDB(t, "library.db",
+			`CREATE TABLE typedbaseitems (Path TEXT, UserDataKey TEXT, RunTimeTicks INTEGER)`,
+			`CREATE TABLE userdatas (key TEXT, Played INTEGER, PlaybackPositionTicks INTEGER, LastPlayedDate TEXT)`,
+			`INSERT INTO typedbaseitems VALUES ('/a.mkv', 'ka', 9000000000)`,
+			`INSERT INTO userdatas VALUES ('ka', 1, 0, NULL)`)
+		rows, err := ReadEmby(path)
+		if err != nil || len(rows) != 1 || rows[0].Path != "/a.mkv" {
+			t.Fatalf("rows = %#v, err = %v", rows, err)
 		}
 	})
 	t.Run("without userId", func(t *testing.T) {
@@ -233,6 +246,25 @@ func TestReadEmbyLegacyLayoutByUser(t *testing.T) {
 			t.Errorf("users = %#v\nwant %#v", users, want)
 		}
 	})
+}
+
+func TestEmbyLastPlayed(t *testing.T) {
+	for _, test := range []struct {
+		value any
+		want  time.Time
+	}{
+		{nil, time.Time{}},
+		{int64(0), time.Time{}},
+		{int64(-1), time.Unix(-1, 0).UTC()},
+		{int64(1763700000), time.Unix(1763700000, 0).UTC()},
+		{"not a time", time.Time{}},
+		{"2024-01-02T03:04:05Z", time.Date(2024, 1, 2, 3, 4, 5, 0, time.UTC)},
+		{[]byte("2024-01-02T03:04:05Z"), time.Date(2024, 1, 2, 3, 4, 5, 0, time.UTC)},
+	} {
+		if got := embyLastPlayed(test.value); !got.Equal(test.want) {
+			t.Errorf("embyLastPlayed(%#v) = %v, want %v", test.value, got, test.want)
+		}
+	}
 }
 
 func TestReadEmbySchemaErrors(t *testing.T) {
@@ -282,7 +314,6 @@ func TestReadEmbySchemaErrors(t *testing.T) {
 			name, stmt, want string
 			options          ReadOptions
 		}{
-			{"duration", `UPDATE MediaItems SET Name = 'x' WHERE Id = 10`, "", ReadOptions{WatchState: true}},
 			{"membership", `DROP TABLE ItemLinks2`, "missing table ItemLinks2", ReadOptions{Collections: true}},
 		} {
 			t.Run(test.name, func(t *testing.T) {
@@ -292,6 +323,18 @@ func TestReadEmbySchemaErrors(t *testing.T) {
 					t.Fatalf("error = %v, want %q", err, test.want)
 				}
 			})
+		}
+	})
+
+	t.Run("unreadable duration", func(t *testing.T) {
+		path := fixtureDB(t, "library.db",
+			`CREATE TABLE TypedBaseItems (Path TEXT, UserDataKey TEXT, RunTimeTicks)`,
+			`CREATE TABLE UserDatas (key TEXT, Played INTEGER, PlaybackPositionTicks INTEGER, LastPlayedDate TEXT)`,
+			`INSERT INTO TypedBaseItems VALUES ('/a.mkv', 'ka', 9000000000), ('/b.mkv', 'kb', 'x')`,
+			`INSERT INTO UserDatas VALUES ('ka', 1, 0, NULL), ('kb', 1, 0, NULL)`)
+		users, members, err := ReadEmbyByUser(context.Background(), path, ReadOptions{WatchState: true})
+		if err == nil || !strings.Contains(err.Error(), "scan emby row") || users != nil || members != nil {
+			t.Fatalf("users = %#v, members = %#v, err = %v", users, members, err)
 		}
 	})
 

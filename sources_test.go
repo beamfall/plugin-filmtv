@@ -479,11 +479,11 @@ func TestJellyfinAndEmbySourcesItemsBySourceUser(t *testing.T) {
 			"#1": {watched, embyMember},
 		}},
 		{name: "emby collections", source: NewEmbySourceForCategories(embyPath, []string{sdk.CategoryCollections}),
-			categories: []string{sdk.CategoryCollections}, want: map[string][]sdk.ForeignItem{}},
+			categories: []string{sdk.CategoryCollections}, want: map[string][]sdk.ForeignItem{"#1": {embyMember}}},
 		{name: "emby collections with user", source: NewEmbySourceForCategories(embyPath, []string{sdk.CategoryWatchState, sdk.CategoryCollections}),
 			categories: embyAll, want: map[string][]sdk.ForeignItem{"#1": {watched, embyMember}}},
 		{name: "emby ratings unsupported", source: NewEmbySourceForCategories(embyPath, []string{sdk.CategoryRatings}),
-			categories: []string{}, want: map[string][]sdk.ForeignItem{}},
+			categories: []string{}, want: map[string][]sdk.ForeignItem{"#1": nil}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			if got := test.source.Categories(); !reflect.DeepEqual(got, test.categories) {

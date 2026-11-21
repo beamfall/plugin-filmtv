@@ -40,7 +40,7 @@ const (
 	embyCollectionType  = 9
 	embyCollectionLink  = 6
 	embyNoUserColumn    = "''"
-	embyUserColumn      = "CAST(ud.userId AS TEXT)"
+	embyUserColumn      = "COALESCE(CAST(ud.userId AS TEXT), '')"
 	embyLegacyQueryHead = `
 		SELECT tbi.Path, `
 	embyLegacyQueryTail = `,
@@ -50,7 +50,7 @@ const (
 		JOIN UserDatas ud ON ud.key = tbi.UserDataKey
 		WHERE tbi.Path IS NOT NULL AND tbi.Path <> ''
 		  AND (ud.Played = 1 OR ud.PlaybackPositionTicks > 0)
-		ORDER BY 1 COLLATE BINARY, 2 COLLATE BINARY`
+		ORDER BY 1 COLLATE BINARY, 2 COLLATE BINARY, 3, 4, 5, 6`
 	embyLegacyQuery       = embyLegacyQueryHead + embyNoUserColumn + embyLegacyQueryTail
 	embyLegacyByUserQuery = embyLegacyQueryHead + embyUserColumn + embyLegacyQueryTail
 	emby410Query          = `
@@ -182,7 +182,7 @@ func streamEmbyRows(ctx context.Context, db *sql.DB, schema embySchema, visit fu
 func embyLastPlayed(value any) time.Time {
 	switch v := value.(type) {
 	case int64:
-		if v > 0 {
+		if v != 0 {
 			return time.Unix(v, 0).UTC()
 		}
 	case string:
@@ -202,9 +202,9 @@ func embyLastPlayed(value any) time.Time {
 //
 // On the 4.10 layout the key is `Name#Id`, with names from the users.db beside
 // library.db, and every user there is a key even with no state. Without
-// users.db the key is `#Id`. On the older layout the key is `#<userId>`, or `#`
-// for everything when UserDatas has no userId column, and there are no
-// collections. Ratings and favourites are not read: the Emby API observed for
+// users.db the key is `#Id`, and every user with a UserDatas row is a key. On
+// the older layout the key is `#<userId>`, or `#` when the row's userId is null
+// or UserDatas has no userId column, and there are no collections. Ratings and favourites are not read: the Emby API observed for
 // CORE-2678 never stored a rating, and favourites wait for CORE-2895.
 func ReadEmbyByUser(ctx context.Context, path string, options ReadOptions) (map[string][]UserItem, []CollectionMember, error) {
 	db, err := openReadOnly(path)
@@ -227,6 +227,11 @@ func ReadEmbyByUser(ctx context.Context, path string, options ReadOptions) (map[
 	if schema.modern {
 		if names, err = readEmbyUserNames(ctx, filepath.Join(filepath.Dir(path), "users.db")); err != nil {
 			return nil, nil, err
+		}
+		if len(names) == 0 {
+			if names, err = readEmbyUserIDs(ctx, db); err != nil {
+				return nil, nil, err
+			}
 		}
 	}
 	users := make(map[string][]UserItem, len(names))
@@ -251,6 +256,28 @@ func ReadEmbyByUser(ctx context.Context, path string, options ReadOptions) (map[
 		return nil, nil, err
 	}
 	return users, members, nil
+}
+
+// readEmbyUserIDs returns every 4.10 UserDatas.userId with no name, for a
+// library without users.db, so collections still reach each user.
+func readEmbyUserIDs(ctx context.Context, db *sql.DB) (map[string]string, error) {
+	rows, err := db.QueryContext(ctx, `SELECT DISTINCT CAST(userId AS TEXT) FROM UserDatas WHERE userId IS NOT NULL`)
+	if err != nil {
+		return nil, fmt.Errorf("query emby user ids: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	ids := map[string]string{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan emby user id: %w", err)
+		}
+		ids[id] = ""
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate emby user ids: %w", err)
+	}
+	return ids, nil
 }
 
 // readEmbyUserNames reads Emby 4.10 user names keyed by LocalUsersv2.Id, which
