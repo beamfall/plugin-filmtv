@@ -111,6 +111,29 @@ func TestScrobbleTargetDeclaration(t *testing.T) {
 	}
 }
 
+// TestInteropDeclaration pins the plugin-owned tokens Core's compatibility
+// surfaces echo. Film series and the default mixed scope stay unmapped.
+func TestInteropDeclaration(t *testing.T) {
+	want := &sdk.InteropSpec{
+		MediaField: "class",
+		Media: []sdk.InteropMapping{
+			{Value: "movie", Type: "Movie"},
+			{Value: "episode", Type: "Episode"},
+		},
+		Kinds: []sdk.InteropMapping{
+			{Value: "show", Type: "Series"},
+			{Value: "season", Type: "Season"},
+		},
+		Scopes: []sdk.InteropMapping{
+			{Value: "films", Type: "movies"},
+			{Value: "tvshows", Type: "tvshows"},
+		},
+	}
+	if got := filmtv.Bundle().Interop; !reflect.DeepEqual(got, want) {
+		t.Fatalf("Bundle().Interop = %#v, want %#v", got, want)
+	}
+}
+
 func scrobbleTargetHint(spec *sdk.ScrobbleTargetSpec, value string) (scrobble.TargetHint, bool) {
 	for _, mapping := range spec.Mappings {
 		if mapping.Value == value {

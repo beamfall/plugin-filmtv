@@ -178,6 +178,26 @@ func Bundle() sdk.Bundle {
 				{Value: "episode", Hint: scrobble.TargetIndexed},
 			},
 		},
+		// How this catalog presents to external automation tools through
+		// Core's read-only compatibility surfaces (CORE-2681). The tokens are
+		// this plugin's data; Core echoes them and never spells them. Unmapped
+		// class values and kinds are not listed, and the default "mixed" scope
+		// carries no collection token.
+		Interop: &sdk.InteropSpec{
+			MediaField: "class",
+			Media: []sdk.InteropMapping{
+				{Value: "movie", Type: "Movie"},
+				{Value: "episode", Type: "Episode"},
+			},
+			Kinds: []sdk.InteropMapping{
+				{Value: "show", Type: "Series"},
+				{Value: "season", Type: "Season"},
+			},
+			Scopes: []sdk.InteropMapping{
+				{Value: "films", Type: "movies"},
+				{Value: "tvshows", Type: "tvshows"},
+			},
+		},
 		// The US MPA movie scale, low→high (the ordered scale Profile
 		// ceilings compare against; country × media-family scale tables arrive with the
 		// certification-region setting later).
