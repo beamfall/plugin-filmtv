@@ -462,7 +462,7 @@ func StreamJellyfinWatchRows(ctx context.Context, path string, visit func(WatchR
 	var best jellyfinCopy
 	pending := false
 	emit := func() error {
-		if !pending || !(best.played || best.positionTicks > 0) {
+		if !pending || (!best.played && best.positionTicks <= 0) {
 			return nil
 		}
 		if err := ctx.Err(); err != nil {
