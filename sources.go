@@ -216,15 +216,13 @@ func NewEmbySource(dbPath string) sdk.Source { //nolint:staticcheck // deliberat
 	}
 }
 
-// NewJellyfinSource returns the Jellyfin migration Source over a Jellyfin
-// `library.db` (the Emby sibling dialect). (filmtv, "jellyfin")
-// → here.
+// NewJellyfinSource returns the Jellyfin migration Source over a Jellyfin 12
+// `jellyfin.db`. A pre-12 `library.db` is refused with an error that tells the
+// operator to upgrade Jellyfin first. (filmtv, "jellyfin") → here.
 func NewJellyfinSource(dbPath string) sdk.Source { //nolint:staticcheck // deliberate SDK 0.x compatibility path for pre-streaming consumers
 	return dbWatchSource{
-		read: foreignimport.ReadJellyfinContext,
-		stream: func(ctx context.Context, path string, visit func(foreignimport.WatchRow) error) error {
-			return streamEmbyWatchRows(ctx, path, "jellyfin", visit)
-		},
+		read:   foreignimport.ReadJellyfinContext,
+		stream: foreignimport.StreamJellyfinWatchRows,
 		dbPath: dbPath,
 	}
 }

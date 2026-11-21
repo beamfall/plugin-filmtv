@@ -43,7 +43,9 @@ account and has no telemetry.
 - You can import watched state, resume position, and last-played time from a Plex,
   Emby, or Jellyfin database export or a Trakt watched-history CSV. An NFO sidecar library
   contributes its TMDB/IMDB IDs and local artwork. Imports are additive and safe to re-run; the
-  foreign databases are opened read-only.
+  foreign databases are opened read-only. For Jellyfin, import `jellyfin.db` from the data folder
+  of Jellyfin 12; on an older Jellyfin, upgrade to 12 first. For Emby, import `library.db` from
+  its data folder.
 - When you finish something, Beamfall can record it in your Trakt history
   using the title's TMDB, IMDB, or TVDB ID. TV episodes are currently submitted as movie entries;
   episode-aware submission is planned.
@@ -64,7 +66,7 @@ seasons, networks) lives in this plugin; Core has none of it.
 | `sources.go`, `nfotree.go` | Migration sources for Plex, Emby, Jellyfin, and NFO sidecar trees. |
 | `trakt.go` | Migration source for Trakt watched-history CSV exports. |
 | `trakt_scrobble.go` | The Trakt scrobble adapter. |
-| `internal/foreignimport` | Read-only readers for Plex, Emby, and Jellyfin SQLite databases. |
+| `internal/foreignimport` | Read-only readers for Plex, Emby, and Jellyfin 12 SQLite databases. |
 | `internal/mediaimport` | Parsers for NFO XML, external IDs, artwork, ordered lists, and watch-state JSON. |
 
 ## Develop

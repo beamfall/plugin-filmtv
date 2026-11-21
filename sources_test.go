@@ -140,25 +140,31 @@ func TestDatabaseImporterStreamsMatchCompatibilityItems(t *testing.T) {
 		assertFilmTVStreamMatchesItems(t, NewPlexSource(seedPlexWatchDatabase(t)))
 	})
 
-	for _, dialect := range []struct {
-		name   string
-		source func(string) sdk.Source //nolint:staticcheck // deliberate SDK 0.x compatibility path for pre-streaming consumers
-	}{
-		{name: "emby", source: NewEmbySource},
-		{name: "jellyfin", source: NewJellyfinSource},
-	} {
-		t.Run(dialect.name, func(t *testing.T) {
-			path := filepath.Join(t.TempDir(), dialect.name+".db")
-			seedFilmTVDatabase(t, path, []string{
-				`CREATE TABLE TypedBaseItems (Path TEXT, UserDataKey TEXT, RunTimeTicks INTEGER)`,
-				`CREATE TABLE UserDatas (key TEXT, Played INTEGER, PlaybackPositionTicks INTEGER, LastPlayedDate TEXT)`,
-				`INSERT INTO UserDatas VALUES ('one', 1, 120000000, '2024-01-02T03:04:05Z')`,
-				`INSERT INTO TypedBaseItems VALUES ('/z.mkv', 'one', 900000000)`,
-				`INSERT INTO TypedBaseItems VALUES ('/a.mkv', 'one', 900000000)`,
-			})
-			assertFilmTVStreamMatchesItems(t, dialect.source(path))
+	t.Run("emby", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "library.db")
+		seedFilmTVDatabase(t, path, []string{
+			`CREATE TABLE TypedBaseItems (Path TEXT, UserDataKey TEXT, RunTimeTicks INTEGER)`,
+			`CREATE TABLE UserDatas (key TEXT, Played INTEGER, PlaybackPositionTicks INTEGER, LastPlayedDate TEXT)`,
+			`INSERT INTO UserDatas VALUES ('one', 1, 120000000, '2024-01-02T03:04:05Z')`,
+			`INSERT INTO TypedBaseItems VALUES ('/z.mkv', 'one', 900000000)`,
+			`INSERT INTO TypedBaseItems VALUES ('/a.mkv', 'one', 900000000)`,
 		})
-	}
+		assertFilmTVStreamMatchesItems(t, NewEmbySource(path))
+	})
+
+	t.Run("jellyfin", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "jellyfin.db")
+		seedFilmTVDatabase(t, path, []string{
+			`CREATE TABLE BaseItems (Id TEXT NOT NULL PRIMARY KEY, IsFolder INTEGER NOT NULL, Path TEXT, RunTimeTicks INTEGER)`,
+			`CREATE TABLE UserData (ItemId TEXT NOT NULL, UserId TEXT NOT NULL, CustomDataKey TEXT NOT NULL,
+				Played INTEGER NOT NULL, PlaybackPositionTicks INTEGER NOT NULL, LastPlayedDate TEXT)`,
+			`INSERT INTO BaseItems VALUES ('z', 0, '/z.mkv', 900000000), ('a', 0, '/a.mkv', 900000000)`,
+			`INSERT INTO UserData VALUES
+				('z', 'U1', 'z-uuid', 1, 120000000, '2024-01-02 03:04:05'),
+				('a', 'U1', 'a-uuid', 1, 120000000, '2024-01-02 03:04:05')`,
+		})
+		assertFilmTVStreamMatchesItems(t, NewJellyfinSource(path))
+	})
 }
 
 func seedPlexWatchDatabase(t *testing.T) string {

@@ -3,9 +3,11 @@ package foreignimport
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -189,47 +191,251 @@ func TestReadPlexByAccountQueryErrors(t *testing.T) {
 	}
 }
 
+// jellyfin12Schema is the part of the Jellyfin 12 `jellyfin.db` layout the
+// reader uses, with the column types, nullability and UserData primary key
+// observed in the official 12.4 image (CORE-2677 evidence). The DEFAULTs on
+// columns the reader ignores, and the missing foreign keys, are fixture
+// conveniences.
+var jellyfin12Schema = []string{
+	`CREATE TABLE "BaseItems" (
+		"Id" TEXT NOT NULL CONSTRAINT "PK_BaseItems" PRIMARY KEY,
+		"IsFolder" INTEGER NOT NULL,
+		"IsVirtualItem" INTEGER NOT NULL DEFAULT 0,
+		"Path" TEXT NULL,
+		"RunTimeTicks" INTEGER NULL,
+		"Type" TEXT NOT NULL)`,
+	`CREATE TABLE "UserData" (
+		"ItemId" TEXT NOT NULL,
+		"UserId" TEXT NOT NULL,
+		"CustomDataKey" TEXT NOT NULL,
+		"IsFavorite" INTEGER NOT NULL DEFAULT 0,
+		"LastPlayedDate" TEXT NULL,
+		"PlayCount" INTEGER NOT NULL DEFAULT 0,
+		"PlaybackPositionTicks" INTEGER NOT NULL,
+		"Played" INTEGER NOT NULL,
+		CONSTRAINT "PK_UserData" PRIMARY KEY ("ItemId", "UserId", "CustomDataKey"))`,
+}
+
+const (
+	jellyfinMovie   = "MediaBrowser.Controller.Entities.Movies.Movie"
+	jellyfinEpisode = "MediaBrowser.Controller.Entities.TV.Episode"
+	jellyfinSeries  = "MediaBrowser.Controller.Entities.TV.Series"
+	jellyfinOwner   = "C77F9F38-62CF-4530-A763-EA3ADA622927"
+	jellyfinSecond  = "7396E9F1-2D18-4486-B3E7-EFD69E5C449A"
+)
+
+// jellyfin12DB builds a Jellyfin 12 fixture from the observed schema plus the
+// given rows.
+func jellyfin12DB(t *testing.T, name string, stmts ...string) string {
+	t.Helper()
+	return fixtureDB(t, name, append(append([]string(nil), jellyfin12Schema...), stmts...)...)
+}
+
 func TestReadJellyfinMapsPathKeyedWatchState(t *testing.T) {
-	path := fixtureDB(t, "jellyfin.db",
-		`CREATE TABLE TypedBaseItems (Id TEXT PRIMARY KEY, Path TEXT, UserDataKey TEXT, RunTimeTicks INTEGER)`,
-		`CREATE TABLE UserDatas (key TEXT, Played INTEGER, PlaybackPositionTicks INTEGER, LastPlayedDate TEXT)`,
-		// Completed, with a .NET-style RFC3339 timestamp.
-		`INSERT INTO TypedBaseItems (Id, Path, UserDataKey, RunTimeTicks) VALUES ('a', '/media/tv/S01E01.mkv', 'key-a', 18000000000)`,
-		`INSERT INTO UserDatas (key, Played, PlaybackPositionTicks, LastPlayedDate) VALUES ('key-a', 1, 0, '2026-06-10T12:34:56.0000000Z')`,
-		// In-progress: 120s = 1_200_000_000 ticks.
-		`INSERT INTO TypedBaseItems (Id, Path, UserDataKey, RunTimeTicks) VALUES ('b', '/media/tv/S01E02.mkv', 'key-b', 18000000000)`,
-		`INSERT INTO UserDatas (key, Played, PlaybackPositionTicks, LastPlayedDate) VALUES ('key-b', 0, 1200000000, '')`,
-		// Untouched: excluded.
-		`INSERT INTO TypedBaseItems (Id, Path, UserDataKey, RunTimeTicks) VALUES ('c', '/media/tv/S01E03.mkv', 'key-c', 18000000000)`,
-		`INSERT INTO UserDatas (key, Played, PlaybackPositionTicks, LastPlayedDate) VALUES ('key-c', 0, 0, '')`,
+	path := jellyfin12DB(t, "jellyfin.db",
+		`INSERT INTO BaseItems (Id, IsFolder, Path, RunTimeTicks, Type) VALUES
+			('a', 0, '/media/tv/S01E01.mkv', 18000000000, '`+jellyfinEpisode+`'),
+			('b', 0, '/media/tv/S01E02.mkv', 18000000000, '`+jellyfinEpisode+`'),
+			('c', 0, '/media/tv/S01E03.mkv', 18000000000, '`+jellyfinEpisode+`'),
+			('show', 1, '/media/tv', NULL, '`+jellyfinSeries+`'),
+			('nopath', 0, NULL, 18000000000, '`+jellyfinMovie+`')`,
+		// Completed by the owner, stored under three data keys as Jellyfin 12
+		// writes it, with the stored timestamp form.
+		`INSERT INTO UserData (ItemId, UserId, CustomDataKey, Played, PlaybackPositionTicks, LastPlayedDate) VALUES
+			('a', '`+jellyfinOwner+`', '329865', 1, 0, '2026-06-10 12:34:56.0279689'),
+			('a', '`+jellyfinOwner+`', 'a-uuid', 1, 0, '2026-06-10 12:34:56.0279689'),
+			('a', '`+jellyfinOwner+`', 'tt2543164', 1, 0, '2026-06-10 12:34:56.0279689')`,
+		// The second user stopped the same file at 50 s.
+		`INSERT INTO UserData (ItemId, UserId, CustomDataKey, Played, PlaybackPositionTicks, LastPlayedDate) VALUES
+			('a', '`+jellyfinSecond+`', '329865', 0, 500000000, NULL)`,
+		// In progress at 120 s, two data keys, no timestamp.
+		`INSERT INTO UserData (ItemId, UserId, CustomDataKey, Played, PlaybackPositionTicks, LastPlayedDate) VALUES
+			('b', '`+jellyfinOwner+`', 'b-uuid', 0, 1200000000, NULL),
+			('b', '`+jellyfinOwner+`', 'series001002', 0, 1200000000, NULL)`,
+		// Untouched, a played folder and a played item without a path: excluded.
+		`INSERT INTO UserData (ItemId, UserId, CustomDataKey, Played, PlaybackPositionTicks, LastPlayedDate) VALUES
+			('c', '`+jellyfinOwner+`', 'c-uuid', 0, 0, NULL),
+			('show', '`+jellyfinOwner+`', 'show-uuid', 1, 0, '2026-06-10 12:00:00.0000000'),
+			('nopath', '`+jellyfinOwner+`', 'nopath-uuid', 1, 0, NULL)`,
 	)
 
 	rows, err := ReadJellyfin(path)
 	if err != nil {
 		t.Fatalf("ReadJellyfin: %v", err)
 	}
-	if len(rows) != 2 {
-		t.Fatalf("got %d rows, want 2: %#v", len(rows), rows)
+	want := []WatchRow{
+		// Same path: the second user's row sorts first by user ID.
+		{Path: "/media/tv/S01E01.mkv", PositionSeconds: 50, DurationSeconds: 1800},
+		{Path: "/media/tv/S01E01.mkv", Watched: true, DurationSeconds: 1800,
+			LastPlayed: time.Date(2026, 6, 10, 12, 34, 56, 27968900, time.UTC)},
+		{Path: "/media/tv/S01E02.mkv", PositionSeconds: 120, DurationSeconds: 1800},
 	}
-	first := rows[0] // S01E01.mkv (sorted)
-	if first.Path != "/media/tv/S01E01.mkv" || !first.Watched || first.DurationSeconds != 1800 {
-		t.Fatalf("first row = %#v", first)
-	}
-	if !first.LastPlayed.Equal(time.Date(2026, 6, 10, 12, 34, 56, 0, time.UTC)) {
-		t.Fatalf("first LastPlayed = %v", first.LastPlayed)
-	}
-	second := rows[1]
-	if second.Path != "/media/tv/S01E02.mkv" || second.Watched || second.PositionSeconds != 120 {
-		t.Fatalf("second row = %#v", second)
-	}
-	if !second.LastPlayed.IsZero() {
-		t.Fatalf("second LastPlayed = %v, want zero (empty source)", second.LastPlayed)
+	if !reflect.DeepEqual(rows, want) {
+		t.Fatalf("rows = %#v\nwant  %#v", rows, want)
 	}
 }
 
-func TestReadEmbySharesJellyfinDialect(t *testing.T) {
-	// Emby is the sibling schema: same TypedBaseItems/UserDatas
-	// shape, so the shared reader resolves it identically.
+func TestReadJellyfinPicksNewestDataKeyCopy(t *testing.T) {
+	path := jellyfin12DB(t, "jellyfin-copies.db",
+		`INSERT INTO BaseItems (Id, IsFolder, Path, RunTimeTicks, Type) VALUES
+			('x', 0, '/media/films/Unmarked.mkv', 300000000, '`+jellyfinMovie+`'),
+			('y', 0, '/media/films/Resumed.mkv', 300000000, '`+jellyfinMovie+`'),
+			('z', 0, '/media/films/Tied.mkv', 300000000, '`+jellyfinMovie+`')`,
+		// A newer unplayed copy wins over an older played one: no record.
+		`INSERT INTO UserData (ItemId, UserId, CustomDataKey, Played, PlaybackPositionTicks, LastPlayedDate) VALUES
+			('x', '`+jellyfinOwner+`', 'k1', 1, 0, '2026-01-01 10:00:00.0000000'),
+			('x', '`+jellyfinOwner+`', 'k2', 0, 0, '2026-02-01 10:00:00.0000000')`,
+		// With no timestamps, a played copy wins, then the larger position.
+		`INSERT INTO UserData (ItemId, UserId, CustomDataKey, Played, PlaybackPositionTicks, LastPlayedDate) VALUES
+			('y', '`+jellyfinOwner+`', 'k1', 0, 100000000, NULL),
+			('y', '`+jellyfinOwner+`', 'k2', 0, 200000000, NULL),
+			('z', '`+jellyfinOwner+`', 'k1', 0, 100000000, NULL),
+			('z', '`+jellyfinOwner+`', 'k2', 1, 0, NULL)`,
+	)
+
+	rows, err := ReadJellyfin(path)
+	if err != nil {
+		t.Fatalf("ReadJellyfin: %v", err)
+	}
+	want := []WatchRow{
+		{Path: "/media/films/Resumed.mkv", PositionSeconds: 20, DurationSeconds: 30},
+		{Path: "/media/films/Tied.mkv", Watched: true, DurationSeconds: 30},
+	}
+	if !reflect.DeepEqual(rows, want) {
+		t.Fatalf("rows = %#v\nwant  %#v", rows, want)
+	}
+}
+
+// TestReadJellyfinMatchesLegacyReader proves the Jellyfin 12 reader returns the
+// records the legacy reader returns for the same library: the one recorded for
+// CORE-2677 (two films, two episodes, two users), laid out both ways.
+func TestReadJellyfinMatchesLegacyReader(t *testing.T) {
+	legacy := fixtureDB(t, "library.db",
+		`CREATE TABLE TypedBaseItems (Id TEXT PRIMARY KEY, Path TEXT, UserDataKey TEXT, RunTimeTicks INTEGER)`,
+		`CREATE TABLE UserDatas (key TEXT, userId INTEGER, Played INTEGER, PlaybackPositionTicks INTEGER, LastPlayedDate TEXT)`,
+		`INSERT INTO TypedBaseItems VALUES
+			('arrival', '/media/films/Arrival (2016)/Arrival (2016).mkv', '329865', 300230000),
+			('heat', '/media/films/Heat (1995)/Heat (1995).mkv', '949', NULL),
+			('e01', '/media/tv/Night Shift (2020)/Season 01/Night Shift (2020) - S01E01.mkv', 'ns001001', 200230000),
+			('e02', '/media/tv/Night Shift (2020)/Season 01/Night Shift (2020) - S01E02.mkv', 'ns001002', 200230000)`,
+		`INSERT INTO UserDatas VALUES
+			('329865', 1, 1, 0, '2026-11-21T13:42:00.8301004Z'),
+			('329865', 2, 0, 50000000, NULL),
+			('949', 2, 0, 70000000, NULL),
+			('ns001001', 1, 0, 120000000, NULL),
+			('ns001002', 1, 1, 0, '2026-11-21T13:42:00.9321923Z')`,
+	)
+	current := jellyfin12DB(t, "jellyfin.db",
+		`INSERT INTO BaseItems (Id, IsFolder, Path, RunTimeTicks, Type) VALUES
+			('arrival', 0, '/media/films/Arrival (2016)/Arrival (2016).mkv', 300230000, '`+jellyfinMovie+`'),
+			('heat', 0, '/media/films/Heat (1995)/Heat (1995).mkv', NULL, '`+jellyfinMovie+`'),
+			('e01', 0, '/media/tv/Night Shift (2020)/Season 01/Night Shift (2020) - S01E01.mkv', 200230000, '`+jellyfinEpisode+`'),
+			('e02', 0, '/media/tv/Night Shift (2020)/Season 01/Night Shift (2020) - S01E02.mkv', 200230000, '`+jellyfinEpisode+`')`,
+		`INSERT INTO UserData (ItemId, UserId, CustomDataKey, Played, PlaybackPositionTicks, LastPlayedDate) VALUES
+			('arrival', '`+jellyfinOwner+`', '329865', 1, 0, '2026-11-21 13:42:00.8301004'),
+			('arrival', '`+jellyfinOwner+`', 'arrival-uuid', 1, 0, '2026-11-21 13:42:00.8301004'),
+			('arrival', '`+jellyfinOwner+`', 'tt2543164', 1, 0, '2026-11-21 13:42:00.8301004'),
+			('arrival', '`+jellyfinSecond+`', '329865', 0, 50000000, NULL),
+			('arrival', '`+jellyfinSecond+`', 'arrival-uuid', 0, 50000000, NULL),
+			('arrival', '`+jellyfinSecond+`', 'tt2543164', 0, 50000000, NULL),
+			('heat', '`+jellyfinSecond+`', 'heat-uuid', 0, 70000000, NULL),
+			('e01', '`+jellyfinOwner+`', 'e01-uuid', 0, 120000000, NULL),
+			('e01', '`+jellyfinOwner+`', 'series001001', 0, 120000000, NULL),
+			('e02', '`+jellyfinOwner+`', 'e02-uuid', 1, 0, '2026-11-21 13:42:00.9321923'),
+			('e02', '`+jellyfinOwner+`', 'series001002', 1, 0, '2026-11-21 13:42:00.9321923')`,
+	)
+
+	want, err := ReadEmby(legacy)
+	if err != nil {
+		t.Fatalf("legacy reader: %v", err)
+	}
+	got, err := ReadJellyfin(current)
+	if err != nil {
+		t.Fatalf("ReadJellyfin: %v", err)
+	}
+	// The legacy reader orders by path only, so compare as sets.
+	sortWatchRows(want)
+	sortWatchRows(got)
+	if len(got) != 5 || !reflect.DeepEqual(got, want) {
+		t.Fatalf("Jellyfin 12 rows differ from legacy rows:\njellyfin 12: %#v\nlegacy:      %#v", got, want)
+	}
+}
+
+func sortWatchRows(rows []WatchRow) {
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].Path != rows[j].Path {
+			return rows[i].Path < rows[j].Path
+		}
+		if rows[i].Watched != rows[j].Watched {
+			return !rows[i].Watched
+		}
+		return rows[i].PositionSeconds < rows[j].PositionSeconds
+	})
+}
+
+func TestReadJellyfinRefusesLegacyLibrary(t *testing.T) {
+	path := fixtureDB(t, "library.db",
+		`CREATE TABLE TypedBaseItems (Id TEXT PRIMARY KEY, Path TEXT, UserDataKey TEXT, RunTimeTicks INTEGER)`,
+		`CREATE TABLE UserDatas (key TEXT, Played INTEGER, PlaybackPositionTicks INTEGER, LastPlayedDate TEXT)`,
+		`INSERT INTO TypedBaseItems VALUES ('a', '/media/films/Old.mkv', 'key-a', 12000000000)`,
+		`INSERT INTO UserDatas VALUES ('key-a', 1, 0, '')`,
+	)
+	rows, err := ReadJellyfin(path)
+	if !errors.Is(err, errJellyfinLegacy) || rows != nil {
+		t.Fatalf("ReadJellyfin(legacy) = %#v, %v; want errJellyfinLegacy", rows, err)
+	}
+	for _, phrase := range []string{"Jellyfin 12", "jellyfin.db", "upgrade"} {
+		if !strings.Contains(err.Error(), phrase) {
+			t.Fatalf("legacy error %q does not mention %q", err, phrase)
+		}
+	}
+}
+
+func TestReadJellyfinRefusesUnknownSchema(t *testing.T) {
+	tests := []struct {
+		name  string
+		stmts []string
+		want  string
+	}{
+		{"unrelated file", []string{`CREATE TABLE unrelated (x INTEGER)`}, "missing table BaseItems"},
+		{"no UserData", jellyfin12Schema[:1], "missing table UserData"},
+		{"no Played column", []string{
+			jellyfin12Schema[0],
+			`CREATE TABLE UserData (ItemId TEXT, UserId TEXT, CustomDataKey TEXT, PlaybackPositionTicks INTEGER, LastPlayedDate TEXT)`,
+		}, "missing column UserData.Played"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := fixtureDB(t, "unknown.db", tt.stmts...)
+			_, err := ReadJellyfin(path)
+			if !errors.Is(err, errJellyfinUnknown) || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("ReadJellyfin = %v; want errJellyfinUnknown naming %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseJellyfinTime(t *testing.T) {
+	tests := map[string]time.Time{
+		"2026-11-21 13:40:27.0279689":  time.Date(2026, 11, 21, 13, 40, 27, 27968900, time.UTC),
+		"2026-11-21 13:40:27":          time.Date(2026, 11, 21, 13, 40, 27, 0, time.UTC),
+		"2026-11-21T13:40:27.0279689Z": time.Date(2026, 11, 21, 13, 40, 27, 27968900, time.UTC),
+		"2026-11-21T15:40:27.5+02:00":  time.Date(2026, 11, 21, 13, 40, 27, 500000000, time.UTC),
+	}
+	for value, want := range tests {
+		got, err := parseJellyfinTime(value)
+		if err != nil || !got.Equal(want) || got.Location() != time.UTC {
+			t.Fatalf("parseJellyfinTime(%q) = %v, %v; want %v UTC", value, got, err, want)
+		}
+	}
+	if _, err := parseJellyfinTime("not-a-timestamp"); err == nil {
+		t.Fatal("parseJellyfinTime(malformed) error = nil")
+	}
+}
+
+func TestReadEmbyReadsLegacyLibrary(t *testing.T) {
+	// Emby keeps the TypedBaseItems/UserDatas layout that Jellyfin dropped in
+	// 12; the Emby reader still reads it.
 	path := fixtureDB(t, "emby.db",
 		`CREATE TABLE TypedBaseItems (Id TEXT PRIMARY KEY, Path TEXT, UserDataKey TEXT, RunTimeTicks INTEGER)`,
 		`CREATE TABLE UserDatas (key TEXT, Played INTEGER, PlaybackPositionTicks INTEGER, LastPlayedDate TEXT)`,
@@ -250,15 +456,13 @@ func TestReadJellyfinDegradesMalformedLastPlayedDate(t *testing.T) {
 	// LastPlayed rather than aborting the whole import: the
 	// Plex path already tolerates an absent timestamp, and this path must
 	// match it instead of erroring out the entire library.
-	path := fixtureDB(t, "jellyfin-malformed.db",
-		`CREATE TABLE TypedBaseItems (Id TEXT PRIMARY KEY, Path TEXT, UserDataKey TEXT, RunTimeTicks INTEGER)`,
-		`CREATE TABLE UserDatas (key TEXT, Played INTEGER, PlaybackPositionTicks INTEGER, LastPlayedDate TEXT)`,
-		// Good row with a valid timestamp.
-		`INSERT INTO TypedBaseItems (Id, Path, UserDataKey, RunTimeTicks) VALUES ('a', '/media/tv/Good.mkv', 'key-a', 18000000000)`,
-		`INSERT INTO UserDatas (key, Played, PlaybackPositionTicks, LastPlayedDate) VALUES ('key-a', 1, 0, '2026-06-10T12:34:56.0000000Z')`,
-		// Bad row: malformed (non-RFC3339) LastPlayedDate.
-		`INSERT INTO TypedBaseItems (Id, Path, UserDataKey, RunTimeTicks) VALUES ('b', '/media/tv/Bad.mkv', 'key-b', 18000000000)`,
-		`INSERT INTO UserDatas (key, Played, PlaybackPositionTicks, LastPlayedDate) VALUES ('key-b', 1, 0, 'not-a-timestamp')`,
+	path := jellyfin12DB(t, "jellyfin-malformed.db",
+		`INSERT INTO BaseItems (Id, IsFolder, Path, RunTimeTicks, Type) VALUES
+			('a', 0, '/media/tv/Good.mkv', 18000000000, '`+jellyfinEpisode+`'),
+			('b', 0, '/media/tv/Bad.mkv', 18000000000, '`+jellyfinEpisode+`')`,
+		`INSERT INTO UserData (ItemId, UserId, CustomDataKey, Played, PlaybackPositionTicks, LastPlayedDate) VALUES
+			('a', '`+jellyfinOwner+`', 'a-uuid', 1, 0, '2026-06-10 12:34:56.0000000'),
+			('b', '`+jellyfinOwner+`', 'b-uuid', 1, 0, 'not-a-timestamp')`,
 	)
 
 	rows, err := ReadJellyfin(path)
@@ -292,7 +496,7 @@ func TestReadForeignDBErrorsOnMissingTables(t *testing.T) {
 		t.Fatal("ReadPlex on a non-Plex db: error = nil, want a query error")
 	}
 	if _, err := ReadJellyfin(path); err == nil {
-		t.Fatal("ReadJellyfin on a non-Jellyfin db: error = nil, want a query error")
+		t.Fatal("ReadJellyfin on a non-Jellyfin db: error = nil, want a schema error")
 	}
 }
 

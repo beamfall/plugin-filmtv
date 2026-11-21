@@ -13,6 +13,7 @@ package foreignimport
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -310,26 +311,207 @@ func readPlexCollectionMembers(ctx context.Context, db *sql.DB) ([]PlexCollectio
 	return members, nil
 }
 
-// ReadJellyfin reads watch-state keyed by file path from a Jellyfin
-// `library.db`. Jellyfin keeps the file path on `TypedBaseItems.Path` and per-
-// user playback state on `UserDatas` (`PlaybackPositionTicks`, `Played`,
-// `LastPlayedDate`) joined on `UserDataKey`. The importer reads the
-// aggregate (any user's) state and maps it to the operator's Profile.
+// ReadJellyfin reads watch-state keyed by file path from a Jellyfin 12
+// `jellyfin.db`. Jellyfin 12 keeps the file path on `BaseItems.Path` and
+// per-user playback state on `UserData` (`Played`, `PlaybackPositionTicks`,
+// `LastPlayedDate`) keyed by item, user and data key. The importer reads every
+// source user's state and maps it to the operator's Profile.
+//
+// Only Jellyfin 12 is read. A pre-12 `library.db` is refused with an error that
+// tells the operator to upgrade Jellyfin first (owner decision 2026-11-21).
+// The layout was observed by inspecting the database of the official 12.4
+// image (CORE-2677), not from Jellyfin server source.
 func ReadJellyfin(path string) ([]WatchRow, error) {
 	return ReadJellyfinContext(context.Background(), path)
 }
 
 // ReadJellyfinContext is ReadJellyfin with cancellation propagated to SQLite.
 func ReadJellyfinContext(ctx context.Context, path string) ([]WatchRow, error) {
-	return readEmbyFamilyContext(ctx, path, "jellyfin")
+	var out []WatchRow
+	err := StreamJellyfinWatchRows(ctx, path, func(row WatchRow) error {
+		out = append(out, row)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
-// ReadEmby reads the same shape from an Emby `library.db`. Jellyfin is a 2018
-// fork of Emby, so the schema is a sibling dialect — drifted but
-// close enough to share one reader. Both descend from the same Emby schema
-// (TypedBaseItems.Path + UserDatas keyed by UserDataKey), so the query is
-// identical today; the dialect argument is carried for error context and any
-// future per-dialect divergence.
+// errJellyfinLegacy reports a pre-12 Jellyfin `library.db`.
+var errJellyfinLegacy = errors.New("this is a Jellyfin library.db from before Jellyfin 12: " +
+	"upgrade Jellyfin to 12, then import jellyfin.db from its data folder")
+
+// errJellyfinUnknown reports a file without the Jellyfin 12 layout.
+var errJellyfinUnknown = errors.New("not a Jellyfin 12 jellyfin.db")
+
+// jellyfinColumns lists, in check order, the Jellyfin 12 tables and columns the
+// reader uses.
+var jellyfinColumns = []struct {
+	table   string
+	columns []string
+}{
+	{"BaseItems", []string{"Id", "Path", "RunTimeTicks", "IsFolder"}},
+	{"UserData", []string{"ItemId", "UserId", "CustomDataKey", "Played", "PlaybackPositionTicks", "LastPlayedDate"}},
+}
+
+// checkJellyfinSchema refuses anything but the Jellyfin 12 layout. It checks
+// shape, not a version number, so a later 12.x that keeps these columns reads.
+func checkJellyfinSchema(ctx context.Context, db *sql.DB) error {
+	tables := map[string]bool{}
+	rows, err := db.QueryContext(ctx, `SELECT name FROM sqlite_master WHERE type = 'table'`)
+	if err != nil {
+		return fmt.Errorf("read jellyfin tables: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return fmt.Errorf("scan jellyfin table name: %w", err)
+		}
+		tables[name] = true
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate jellyfin tables: %w", err)
+	}
+	if !tables["BaseItems"] && tables["TypedBaseItems"] {
+		return errJellyfinLegacy
+	}
+	for _, want := range jellyfinColumns {
+		if !tables[want.table] {
+			return fmt.Errorf("%w: missing table %s", errJellyfinUnknown, want.table)
+		}
+		have, err := tableColumns(ctx, db, want.table)
+		if err != nil {
+			return err
+		}
+		for _, column := range want.columns {
+			if !have[column] {
+				return fmt.Errorf("%w: missing column %s.%s", errJellyfinUnknown, want.table, column)
+			}
+		}
+	}
+	return nil
+}
+
+func tableColumns(ctx context.Context, db *sql.DB, table string) (map[string]bool, error) {
+	rows, err := db.QueryContext(ctx, `SELECT name FROM pragma_table_info(?)`, table)
+	if err != nil {
+		return nil, fmt.Errorf("read jellyfin %s columns: %w", table, err)
+	}
+	defer func() { _ = rows.Close() }()
+	columns := map[string]bool{}
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, fmt.Errorf("scan jellyfin %s column: %w", table, err)
+		}
+		columns[name] = true
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate jellyfin %s columns: %w", table, err)
+	}
+	return columns, nil
+}
+
+// StreamJellyfinWatchRows visits Jellyfin 12 watch rows in file path order, one
+// per item and source user.
+//
+// Jellyfin 12 writes one user's state for one item as several identical
+// `UserData` rows, one per data key (provider IDs and internal keys). The query
+// keeps one: the latest last-played time, then a played row, then the larger
+// resume position, then the lowest data key. It picks before it filters, so a
+// newer unplayed copy wins over an older played one.
+func StreamJellyfinWatchRows(ctx context.Context, path string, visit func(WatchRow) error) error {
+	db, err := openReadOnly(path)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = db.Close() }()
+	if err := checkJellyfinSchema(ctx, db); err != nil {
+		return err
+	}
+
+	rows, err := db.QueryContext(ctx, `
+		SELECT Path, Played, PositionTicks, LastPlayed, RunTimeTicks
+		FROM (
+			SELECT b.Path AS Path,
+			       u.UserId AS UserId,
+			       COALESCE(u.Played, 0) AS Played,
+			       COALESCE(u.PlaybackPositionTicks, 0) AS PositionTicks,
+			       COALESCE(u.LastPlayedDate, '') AS LastPlayed,
+			       COALESCE(b.RunTimeTicks, 0) AS RunTimeTicks,
+			       ROW_NUMBER() OVER (
+			           PARTITION BY u.ItemId, u.UserId
+			           ORDER BY u.LastPlayedDate DESC, u.Played DESC,
+			                    u.PlaybackPositionTicks DESC, u.CustomDataKey
+			       ) AS pick
+			FROM UserData u
+			JOIN BaseItems b ON b.Id = u.ItemId
+			WHERE b.Path IS NOT NULL AND b.Path <> '' AND COALESCE(b.IsFolder, 0) = 0
+		)
+		WHERE pick = 1 AND (Played = 1 OR PositionTicks > 0)
+		ORDER BY Path COLLATE BINARY, UserId`)
+	if err != nil {
+		return fmt.Errorf("query jellyfin watch-state: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	for rows.Next() {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		var (
+			file          string
+			played        int64
+			positionTicks int64
+			lastPlayed    string
+			runTimeTicks  int64
+		)
+		if err := rows.Scan(&file, &played, &positionTicks, &lastPlayed, &runTimeTicks); err != nil {
+			return fmt.Errorf("scan jellyfin row: %w", err)
+		}
+		row := WatchRow{
+			Path:            file,
+			Watched:         played == 1,
+			PositionSeconds: positionTicks / ticksPerSecond,
+			DurationSeconds: runTimeTicks / ticksPerSecond,
+		}
+		if lastPlayed != "" {
+			// A malformed LastPlayedDate leaves this row's LastPlayed zero
+			// rather than ending the import.
+			if parsed, err := parseJellyfinTime(lastPlayed); err == nil {
+				row.LastPlayed = parsed
+			}
+		}
+		if err := visit(row); err != nil {
+			return err
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate jellyfin rows: %w", err)
+	}
+	return nil
+}
+
+// jellyfinTimeLayout is the form Jellyfin 12 stores LastPlayedDate in: UTC,
+// a space before the time, up to seven fractional digits, no zone suffix.
+const jellyfinTimeLayout = "2006-01-02 15:04:05.9999999"
+
+// parseJellyfinTime reads Jellyfin 12's stored LastPlayedDate, falling back to
+// RFC 3339 for a value written with a zone.
+func parseJellyfinTime(value string) (time.Time, error) {
+	if parsed, err := time.ParseInLocation(jellyfinTimeLayout, value, time.UTC); err == nil {
+		return parsed, nil
+	}
+	return parseTime(value)
+}
+
+// ReadEmby reads watch-state keyed by file path from an Emby `library.db`.
+// Emby keeps the file path on `TypedBaseItems.Path` and per-user playback state
+// on `UserDatas` (`PlaybackPositionTicks`, `Played`, `LastPlayedDate`) joined on
+// `UserDataKey`. Jellyfin before 12 used the same layout; the Jellyfin source
+// now refuses it (see ReadJellyfin).
 func ReadEmby(path string) ([]WatchRow, error) {
 	return ReadEmbyContext(context.Background(), path)
 }

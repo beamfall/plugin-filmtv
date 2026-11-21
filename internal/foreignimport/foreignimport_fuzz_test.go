@@ -120,6 +120,13 @@ func FuzzReadForeignWatchRows(f *testing.F) {
 			return
 		}
 		parsed, parseErr := time.Parse(time.RFC3339Nano, lastPlayedText)
+		if dialect == 1 {
+			// Jellyfin 12 stores "2006-01-02 15:04:05.fffffff" in UTC; the
+			// RFC 3339 form is the fallback.
+			if spaced, err := time.ParseInLocation("2006-01-02 15:04:05.9999999", lastPlayedText, time.UTC); err == nil {
+				parsed, parseErr = spaced, nil
+			}
+		}
 		if parseErr == nil && !rows[0].LastPlayed.Equal(parsed.UTC()) {
 			t.Fatalf("Emby-family timestamp changed: got %v want %v", rows[0].LastPlayed, parsed.UTC())
 		}
@@ -187,6 +194,30 @@ func writeForeignFuzzDatabase(
 			lastPlayedUnix,
 		); err != nil {
 			t.Fatalf("insert Plex state: %v", err)
+		}
+		return
+	}
+
+	if dialect == 1 {
+		for _, statement := range jellyfin12Schema {
+			if _, err := db.Exec(statement); err != nil {
+				t.Fatalf("create Jellyfin 12 fuzz schema: %v", err)
+			}
+		}
+		if _, err := db.Exec(
+			`INSERT INTO BaseItems (Id, IsFolder, Path, RunTimeTicks, Type) VALUES ('fuzz-item', 0, ?, ?, 'MediaBrowser.Controller.Entities.Movies.Movie')`,
+			mediaPath,
+			duration,
+		); err != nil {
+			t.Fatalf("insert Jellyfin 12 item: %v", err)
+		}
+		if _, err := db.Exec(
+			`INSERT INTO UserData (ItemId, UserId, CustomDataKey, Played, PlaybackPositionTicks, LastPlayedDate) VALUES ('fuzz-item', 'FUZZ-USER', 'fuzz-key', ?, ?, ?)`,
+			played,
+			position,
+			lastPlayedText,
+		); err != nil {
+			t.Fatalf("insert Jellyfin 12 state: %v", err)
 		}
 		return
 	}
