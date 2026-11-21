@@ -524,16 +524,18 @@ func StreamJellyfinWatchRows(ctx context.Context, path string, visit func(WatchR
 	}
 
 	// The order groups each entry's copies together and is total, so a resumed
-	// import counts the same rows in the same order.
+	// import counts the same rows in the same order. User IDs are GUIDs that
+	// Users matches without regard to case, so copies group on the upper-case
+	// ID; the raw ID breaks a tie between copies that differ only in its case.
 	rows, err := db.QueryContext(ctx, `
-		SELECT b.Path, u.UserId, u.ItemId,
+		SELECT b.Path, UPPER(u.UserId), u.ItemId,
 		       COALESCE(u.Played, 0), COALESCE(u.PlaybackPositionTicks, 0),
 		       COALESCE(u.LastPlayedDate, ''), CAST(COALESCE(b.RunTimeTicks, 0) AS TEXT)
 		FROM UserData u
 		JOIN BaseItems b ON b.Id = u.ItemId
 		WHERE b.Path IS NOT NULL AND b.Path <> '' AND COALESCE(b.IsFolder, 0) = 0
-		ORDER BY b.Path COLLATE BINARY, u.UserId COLLATE BINARY,
-		         u.ItemId COLLATE BINARY, u.CustomDataKey COLLATE BINARY`)
+		ORDER BY b.Path COLLATE BINARY, UPPER(u.UserId) COLLATE BINARY,
+		         u.ItemId COLLATE BINARY, u.CustomDataKey COLLATE BINARY, u.UserId COLLATE BINARY`)
 	if err != nil {
 		return fmt.Errorf("query jellyfin watch-state: %w", err)
 	}

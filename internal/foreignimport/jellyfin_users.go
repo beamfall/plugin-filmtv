@@ -12,7 +12,8 @@ const jellyfinBoxSetType = "MediaBrowser.Controller.Entities.Movies.BoxSet"
 
 // The per-user item query, with and without the rating column. The order
 // groups each entry's copies together and is total. User IDs are GUIDs that
-// Users matches without regard to case, so copies group on the upper-case ID.
+// Users matches without regard to case, so copies group on the upper-case ID;
+// the raw ID breaks a tie between copies that differ only in its case.
 const (
 	jellyfinUserItemsHead = `
 		SELECT COALESCE(us.Username, '') || '#' || COALESCE(us.Id, UPPER(u.UserId)),
@@ -25,7 +26,8 @@ const (
 		LEFT JOIN Users us ON us.Id = u.UserId COLLATE NOCASE
 		WHERE b.Path IS NOT NULL AND b.Path <> '' AND COALESCE(b.IsFolder, 0) = 0
 		ORDER BY UPPER(u.UserId) COLLATE BINARY, b.Path COLLATE BINARY,
-		         u.ItemId COLLATE BINARY, u.CustomDataKey COLLATE BINARY`
+		         u.ItemId COLLATE BINARY, u.CustomDataKey COLLATE BINARY,
+		         u.UserId COLLATE BINARY`
 	jellyfinUserItemsQuery      = jellyfinUserItemsHead + "NULL" + jellyfinUserItemsTail
 	jellyfinRatedUserItemsQuery = jellyfinUserItemsHead + "u.Rating" + jellyfinUserItemsTail
 )

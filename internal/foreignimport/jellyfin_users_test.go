@@ -64,11 +64,14 @@ func jellyfinUserFixture(t *testing.T, extra ...string) string {
 			('ep2', '`+jellyfinOwner+`', 'ep2-a', 1, 0, '2026-11-21 10:00:00', NULL),
 			('ep2', '`+jellyfinOwner+`', 'ep2-b', 0, 0, NULL, 4)`,
 		// The second user's ID is stored in lower case; the Users join ignores case.
-		// An older upper-case copy competes with it and loses on both counts.
+		// An older upper-case copy competes with it and loses on both counts, and
+		// the path reader must not emit it either. On ep1 the two spellings tie
+		// on every field but the rating, and the upper-case copy sorts first.
 		`INSERT INTO UserData (ItemId, UserId, CustomDataKey, IsFavorite, Played, PlaybackPositionTicks, LastPlayedDate, Rating, Likes) VALUES
-			('heat', '`+jellyfinSecond+`', 'heat-old', 0, 0, 0, NULL, 2, 0),
+			('heat', '`+jellyfinSecond+`', 'heat-old', 0, 1, 0, NULL, 2, 0),
 			('heat', '`+strings.ToLower(jellyfinSecond)+`', 'heat-uuid', 1, 1, 0, '2026-11-20 09:30:00', 6, 0),
-			('ep1', '`+strings.ToLower(jellyfinSecond)+`', 'ep1-uuid', 0, 0, 0, NULL, 10, 1)`,
+			('ep1', '`+strings.ToLower(jellyfinSecond)+`', 'ep1-uuid', 0, 0, 0, NULL, 3, 1),
+			('ep1', '`+jellyfinSecond+`', 'ep1-uuid', 0, 0, 0, NULL, 10, 1)`,
 		// State left by a deleted user, a folder and a pathless item.
 		`INSERT INTO UserData (ItemId, UserId, CustomDataKey, Played, PlaybackPositionTicks) VALUES
 			('ep1', '`+jellyfinDeleted+`', 'ep1-uuid', 1, 0),
