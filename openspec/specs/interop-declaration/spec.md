@@ -1,7 +1,8 @@
 # interop-declaration Specification
 
 ## Purpose
-TBD - created by archiving change core-2812-interop. Update Purpose after archive.
+The interop tokens Film & TV declares so Core's compatibility surfaces can show external automation
+tools its movies, episodes, shows, seasons and scoped libraries.
 
 ## Requirements
 
