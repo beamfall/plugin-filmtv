@@ -283,6 +283,7 @@ func TestReadJellyfinPicksNewestDataKeyCopy(t *testing.T) {
 			('z', 0, '/media/films/Tied.mkv', 300000000, '`+jellyfinMovie+`'),
 			('s', 0, '/media/films/Spelled.mkv', 300000000, '`+jellyfinMovie+`'),
 			('u', 0, '/media/films/Unreadable.mkv', 300000000, '`+jellyfinMovie+`'),
+			('m', 0, '/media/films/MinValue.mkv', 300000000, '`+jellyfinMovie+`'),
 			('d2', 0, '/media/films/Shared.mkv', 600000000, '`+jellyfinMovie+`'),
 			('d1', 0, '/media/films/Shared.mkv', 300000000, '`+jellyfinMovie+`')`,
 		// Two spellings of one instant tie on time, so the played copy wins.
@@ -293,6 +294,11 @@ func TestReadJellyfinPicksNewestDataKeyCopy(t *testing.T) {
 		`INSERT INTO UserData (ItemId, UserId, CustomDataKey, Played, PlaybackPositionTicks, LastPlayedDate) VALUES
 			('u', '`+jellyfinOwner+`', 'k1', 0, 0, 'not-a-timestamp'),
 			('u', '`+jellyfinOwner+`', 'k2', 1, 0, '2026-11-21 13:00:00.0000000')`,
+		// A readable time, even the minimum one, ranks above an absent time:
+		// the dated unplayed copy wins, so no record.
+		`INSERT INTO UserData (ItemId, UserId, CustomDataKey, Played, PlaybackPositionTicks, LastPlayedDate) VALUES
+			('m', '`+jellyfinOwner+`', 'k1', 1, 0, NULL),
+			('m', '`+jellyfinOwner+`', 'k2', 0, 0, '0001-01-01 00:00:00')`,
 		// Two items on one path for one user stay two records, in item ID order.
 		`INSERT INTO UserData (ItemId, UserId, CustomDataKey, Played, PlaybackPositionTicks, LastPlayedDate) VALUES
 			('d2', '`+jellyfinOwner+`', 'k1', 0, 200000000, NULL),
@@ -686,6 +692,38 @@ func TestReadJellyfinReportsUnreadableRow(t *testing.T) {
 	)
 	if _, err := ReadJellyfin(path); err == nil || !strings.Contains(err.Error(), "scan jellyfin row") {
 		t.Fatalf("ReadJellyfin(non-numeric RunTimeTicks) = %v; want a scan error", err)
+	}
+}
+
+// TestReadJellyfinSkipsBadDurationOnUntouchedItem proves a bad duration on an
+// item with no watch state does not end the import of the others.
+func TestReadJellyfinSkipsBadDurationOnUntouchedItem(t *testing.T) {
+	path := jellyfin12DB(t, "jellyfin-untouched-bad.db",
+		`INSERT INTO BaseItems (Id, IsFolder, Path, RunTimeTicks, Type) VALUES
+			('a', 0, '/media/a.mkv', 'long', '`+jellyfinMovie+`'),
+			('b', 0, '/media/b.mkv', 300000000, '`+jellyfinMovie+`')`,
+		`INSERT INTO UserData (ItemId, UserId, CustomDataKey, Played, PlaybackPositionTicks) VALUES
+			('a', '`+jellyfinOwner+`', 'a-uuid', 0, 0),
+			('b', '`+jellyfinOwner+`', 'b-uuid', 1, 0)`,
+	)
+	rows, err := ReadJellyfin(path)
+	want := []WatchRow{{Path: "/media/b.mkv", Watched: true, DurationSeconds: 30}}
+	if err != nil || !reflect.DeepEqual(rows, want) {
+		t.Fatalf("ReadJellyfin = %#v, %v; want %#v", rows, err, want)
+	}
+}
+
+// TestReadJellyfinIgnoresUnopenableTable proves the schema check reads only the
+// tables it names: a virtual table whose module is absent does not stop it.
+func TestReadJellyfinIgnoresUnopenableTable(t *testing.T) {
+	path := jellyfin12DB(t, "jellyfin-vtab.db",
+		`PRAGMA writable_schema = ON`,
+		`INSERT INTO sqlite_master (type, name, tbl_name, rootpage, sql)
+			VALUES ('table', 'Search', 'Search', 0, 'CREATE VIRTUAL TABLE Search USING nosuchmodule()')`,
+		`PRAGMA writable_schema = OFF`,
+	)
+	if _, err := ReadJellyfin(path); err != nil {
+		t.Fatalf("ReadJellyfin(with an unopenable virtual table) = %v; want no error", err)
 	}
 }
 

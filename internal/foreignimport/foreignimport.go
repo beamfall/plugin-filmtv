@@ -16,6 +16,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -357,11 +358,13 @@ var jellyfinColumns = []struct {
 
 // checkJellyfinSchema refuses anything but the Jellyfin 12 layout. It checks
 // shape, not a version number, so a later 12.x that keeps these columns reads.
+// It inspects only the tables it names, so an unrelated table it cannot open
+// (a virtual table whose module is absent) does not stop the import.
 func checkJellyfinSchema(ctx context.Context, db *sql.DB) error {
 	rows, err := db.QueryContext(ctx, `
 		SELECT m.name, p.name
 		FROM sqlite_master m JOIN pragma_table_info(m.name) p
-		WHERE m.type = 'table'`)
+		WHERE m.type = 'table' AND m.name IN ('BaseItems', 'UserData', 'TypedBaseItems')`)
 	if err != nil {
 		return fmt.Errorf("read jellyfin schema: %w", err)
 	}
@@ -403,7 +406,10 @@ type jellyfinCopy struct {
 	played               bool
 	positionTicks        int64
 	lastPlayed           time.Time
-	runTimeTicks         int64
+	hasLastPlayed        bool
+	// runTimeTicks is read only for an emitted copy, so a bad duration on an
+	// untouched item does not end the import.
+	runTimeTicks string
 }
 
 func (c jellyfinCopy) sameEntry(o jellyfinCopy) bool {
@@ -415,6 +421,9 @@ func (c jellyfinCopy) sameEntry(o jellyfinCopy) bool {
 // then the larger resume position. On a full tie the earlier copy, the lower
 // data key, stays.
 func (c jellyfinCopy) beats(o jellyfinCopy) bool {
+	if c.hasLastPlayed != o.hasLastPlayed {
+		return c.hasLastPlayed
+	}
 	if !c.lastPlayed.Equal(o.lastPlayed) {
 		return c.lastPlayed.After(o.lastPlayed)
 	}
@@ -448,7 +457,7 @@ func StreamJellyfinWatchRows(ctx context.Context, path string, visit func(WatchR
 	rows, err := db.QueryContext(ctx, `
 		SELECT b.Path, u.UserId, u.ItemId,
 		       COALESCE(u.Played, 0), COALESCE(u.PlaybackPositionTicks, 0),
-		       COALESCE(u.LastPlayedDate, ''), COALESCE(b.RunTimeTicks, 0)
+		       COALESCE(u.LastPlayedDate, ''), CAST(COALESCE(b.RunTimeTicks, 0) AS TEXT)
 		FROM UserData u
 		JOIN BaseItems b ON b.Id = u.ItemId
 		WHERE b.Path IS NOT NULL AND b.Path <> '' AND COALESCE(b.IsFolder, 0) = 0
@@ -468,11 +477,15 @@ func StreamJellyfinWatchRows(ctx context.Context, path string, visit func(WatchR
 		if err := ctx.Err(); err != nil {
 			return err
 		}
+		runTimeTicks, err := strconv.ParseInt(best.runTimeTicks, 10, 64)
+		if err != nil {
+			return fmt.Errorf("scan jellyfin row: RunTimeTicks %q: %w", best.runTimeTicks, err)
+		}
 		return visit(WatchRow{
 			Path:            best.path,
 			Watched:         best.played,
 			PositionSeconds: best.positionTicks / ticksPerSecond,
-			DurationSeconds: best.runTimeTicks / ticksPerSecond,
+			DurationSeconds: runTimeTicks / ticksPerSecond,
 			LastPlayed:      best.lastPlayed,
 		})
 	}
@@ -492,7 +505,7 @@ func StreamJellyfinWatchRows(ctx context.Context, path string, visit func(WatchR
 		// A malformed LastPlayedDate leaves the time zero rather than ending
 		// the import.
 		if parsed, err := parseJellyfinTime(lastPlayed); err == nil {
-			c.lastPlayed = parsed
+			c.lastPlayed, c.hasLastPlayed = parsed, true
 		}
 		if pending && c.sameEntry(best) {
 			if c.beats(best) {
