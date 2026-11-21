@@ -380,6 +380,16 @@ func TestTMDBCreditAttributes(t *testing.T) {
 		!reflect.DeepEqual(cast.RelationAttributeMap, map[string]string{"character": "character", "billing": "order"}) {
 		t.Errorf("cast map = %+v, want character and billing (order) attributes, ordered by billing", cast)
 	}
+	// Each credited person's TMDB profile image becomes the person Entity's
+	// headshot, so media(id).credits carries an artwork slot (CORE-2432).
+	if cast.ArtworkPath != "profile_path" || cast.ArtworkURLTemplate != "" {
+		t.Errorf("cast map ArtworkPath = %q (template %q), want TMDB profile_path headshots", cast.ArtworkPath, cast.ArtworkURLTemplate)
+	}
+	for _, scraperID := range []string{"tmdb-movie", "tmdb-tv"} {
+		if base := scraperByID(t, scraperID).ArtworkBaseURL; base != "https://image.tmdb.org/t/p/original" {
+			t.Errorf("%s ArtworkBaseURL = %q, want the TMDB image base the profile_path composes with", scraperID, base)
+		}
+	}
 	wantJobs := []string{"Director", "Screenplay", "Writer", "Producer", "Original Music Composer", "Director of Photography"}
 	if crew.Path != "credits.crew" || crew.Relation != "credited-in" || crew.NamePath != "name" ||
 		crew.ArtworkPath != "profile_path" || crew.LookupTemplate != "" ||
