@@ -16,12 +16,17 @@ The Jellyfin source SHALL read watch state from a Jellyfin 12 `jellyfin.db`, joi
 
 ### Requirement: Jellyfin data-key copies
 
-When one user has several `UserData` rows for one item, one per data key, the Jellyfin source SHALL emit one record. It SHALL use the row with the latest last-played time, then a played row, then the larger resume position, then the lowest data key.
+When one user has several `UserData` rows for one item, one per data key, the Jellyfin source SHALL emit one record. It SHALL use the row with the latest last-played instant, then a played row, then the larger resume position, then the lowest data key. It SHALL compare instants after parsing, ranking an absent or unreadable time last.
 
 #### Scenario: One user's state is stored under several data keys
 
 - **WHEN** a user's played state for a film is stored under three data keys
 - **THEN** the source emits one record for that user and film
+
+#### Scenario: Two spellings of one instant
+
+- **WHEN** a played copy has `LastPlayedDate` `2026-11-21 13:00:00` and an unplayed copy has `2026-11-21 13:00:00.0000000`
+- **THEN** the source emits the played record
 
 ### Requirement: Jellyfin last-played time
 
@@ -39,7 +44,7 @@ The Jellyfin source SHALL read `LastPlayedDate` as UTC in Jellyfin's stored form
 
 ### Requirement: Jellyfin database recognition
 
-Before it reads rows, the Jellyfin source SHALL check that the file has the Jellyfin 12 tables and columns it reads. A legacy Jellyfin `library.db` SHALL be refused with an error that tells the operator to upgrade Jellyfin to 12, then choose `jellyfin.db` from its data folder. Any other file SHALL be refused with an error naming the first missing table or column. The Emby source SHALL keep reading the legacy `library.db` layout.
+Before it reads rows, the Jellyfin source SHALL check that the file has the Jellyfin 12 tables and columns it reads. A legacy Jellyfin `library.db` SHALL be refused with an error telling the operator to upgrade to Jellyfin 12, then choose `jellyfin.db`. Another SQLite database SHALL be refused naming the first missing table or column; a file that is not SQLite, with the read error. The Emby source SHALL keep reading the legacy `library.db` layout.
 
 #### Scenario: The operator chooses a Jellyfin 10.10 library.db
 
@@ -48,5 +53,5 @@ Before it reads rows, the Jellyfin source SHALL check that the file has the Jell
 
 #### Scenario: The operator chooses an unrelated SQLite file
 
-- **WHEN** the Jellyfin source opens a database without `UserData`
+- **WHEN** the Jellyfin source opens a database that has the Jellyfin 12 `BaseItems` table and no `UserData`
 - **THEN** the import fails with an error naming the missing `UserData` table

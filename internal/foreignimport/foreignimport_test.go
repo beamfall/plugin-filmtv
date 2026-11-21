@@ -280,7 +280,23 @@ func TestReadJellyfinPicksNewestDataKeyCopy(t *testing.T) {
 		`INSERT INTO BaseItems (Id, IsFolder, Path, RunTimeTicks, Type) VALUES
 			('x', 0, '/media/films/Unmarked.mkv', 300000000, '`+jellyfinMovie+`'),
 			('y', 0, '/media/films/Resumed.mkv', 300000000, '`+jellyfinMovie+`'),
-			('z', 0, '/media/films/Tied.mkv', 300000000, '`+jellyfinMovie+`')`,
+			('z', 0, '/media/films/Tied.mkv', 300000000, '`+jellyfinMovie+`'),
+			('s', 0, '/media/films/Spelled.mkv', 300000000, '`+jellyfinMovie+`'),
+			('u', 0, '/media/films/Unreadable.mkv', 300000000, '`+jellyfinMovie+`'),
+			('d2', 0, '/media/films/Shared.mkv', 600000000, '`+jellyfinMovie+`'),
+			('d1', 0, '/media/films/Shared.mkv', 300000000, '`+jellyfinMovie+`')`,
+		// Two spellings of one instant tie on time, so the played copy wins.
+		`INSERT INTO UserData (ItemId, UserId, CustomDataKey, Played, PlaybackPositionTicks, LastPlayedDate) VALUES
+			('s', '`+jellyfinOwner+`', 'k1', 1, 0, '2026-11-21 13:00:00'),
+			('s', '`+jellyfinOwner+`', 'k2', 0, 0, '2026-11-21 13:00:00.0000000')`,
+		// An unreadable time ranks below a readable one.
+		`INSERT INTO UserData (ItemId, UserId, CustomDataKey, Played, PlaybackPositionTicks, LastPlayedDate) VALUES
+			('u', '`+jellyfinOwner+`', 'k1', 0, 0, 'not-a-timestamp'),
+			('u', '`+jellyfinOwner+`', 'k2', 1, 0, '2026-11-21 13:00:00.0000000')`,
+		// Two items on one path for one user stay two records, in item ID order.
+		`INSERT INTO UserData (ItemId, UserId, CustomDataKey, Played, PlaybackPositionTicks, LastPlayedDate) VALUES
+			('d2', '`+jellyfinOwner+`', 'k1', 0, 200000000, NULL),
+			('d1', '`+jellyfinOwner+`', 'k1', 0, 100000000, NULL)`,
 		// A newer unplayed copy wins over an older played one: no record.
 		`INSERT INTO UserData (ItemId, UserId, CustomDataKey, Played, PlaybackPositionTicks, LastPlayedDate) VALUES
 			('x', '`+jellyfinOwner+`', 'k1', 1, 0, '2026-01-01 10:00:00.0000000'),
@@ -297,9 +313,14 @@ func TestReadJellyfinPicksNewestDataKeyCopy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadJellyfin: %v", err)
 	}
+	at := time.Date(2026, 11, 21, 13, 0, 0, 0, time.UTC)
 	want := []WatchRow{
 		{Path: "/media/films/Resumed.mkv", PositionSeconds: 20, DurationSeconds: 30},
+		{Path: "/media/films/Shared.mkv", PositionSeconds: 10, DurationSeconds: 30},
+		{Path: "/media/films/Shared.mkv", PositionSeconds: 20, DurationSeconds: 60},
+		{Path: "/media/films/Spelled.mkv", Watched: true, DurationSeconds: 30, LastPlayed: at},
 		{Path: "/media/films/Tied.mkv", Watched: true, DurationSeconds: 30},
+		{Path: "/media/films/Unreadable.mkv", Watched: true, DurationSeconds: 30, LastPlayed: at},
 	}
 	if !reflect.DeepEqual(rows, want) {
 		t.Fatalf("rows = %#v\nwant  %#v", rows, want)
@@ -614,5 +635,87 @@ func TestOpenReadOnlyEscapesPercent(t *testing.T) {
 	defer func() { _ = db.Close() }()
 	if _, err := db.Exec("CREATE TABLE should_fail (x)"); err == nil {
 		t.Fatal("write succeeded against a literal '%23' path: mode=ro was dropped by DSN corruption")
+	}
+}
+
+func TestStreamJellyfinWatchRowsStopsEarly(t *testing.T) {
+	path := jellyfin12DB(t, "jellyfin-stream.db",
+		`INSERT INTO BaseItems (Id, IsFolder, Path, RunTimeTicks, Type) VALUES
+			('a', 0, '/media/a.mkv', 300000000, '`+jellyfinMovie+`'),
+			('b', 0, '/media/b.mkv', 300000000, '`+jellyfinMovie+`')`,
+		`INSERT INTO UserData (ItemId, UserId, CustomDataKey, Played, PlaybackPositionTicks) VALUES
+			('a', '`+jellyfinOwner+`', 'a-uuid', 1, 0),
+			('b', '`+jellyfinOwner+`', 'b-uuid', 1, 0)`,
+	)
+
+	stop := errors.New("stop")
+	visited := 0
+	err := StreamJellyfinWatchRows(context.Background(), path, func(WatchRow) error {
+		visited++
+		return stop
+	})
+	if !errors.Is(err, stop) || visited != 1 {
+		t.Fatalf("visit error: err = %v after %d rows; want stop after 1", err, visited)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	visited = 0
+	err = StreamJellyfinWatchRows(ctx, path, func(WatchRow) error {
+		visited++
+		cancel()
+		return nil
+	})
+	if !errors.Is(err, context.Canceled) || visited != 1 {
+		t.Fatalf("cancel mid-stream: err = %v after %d rows; want context.Canceled after 1", err, visited)
+	}
+
+	if err := StreamJellyfinWatchRows(ctx, path, func(WatchRow) error { return nil }); err == nil {
+		t.Fatal("cancelled context before the schema check: error = nil")
+	}
+	if _, err := ReadJellyfin(filepath.Join(t.TempDir(), "missing.db")); err == nil {
+		t.Fatal("ReadJellyfin(missing file) error = nil")
+	}
+}
+
+func TestReadJellyfinReportsUnreadableRow(t *testing.T) {
+	path := jellyfin12DB(t, "jellyfin-bad-row.db",
+		`INSERT INTO BaseItems (Id, IsFolder, Path, RunTimeTicks, Type) VALUES
+			('a', 0, '/media/a.mkv', 'long', '`+jellyfinMovie+`')`,
+		`INSERT INTO UserData (ItemId, UserId, CustomDataKey, Played, PlaybackPositionTicks) VALUES
+			('a', '`+jellyfinOwner+`', 'a-uuid', 1, 0)`,
+	)
+	if _, err := ReadJellyfin(path); err == nil || !strings.Contains(err.Error(), "scan jellyfin row") {
+		t.Fatalf("ReadJellyfin(non-numeric RunTimeTicks) = %v; want a scan error", err)
+	}
+}
+
+func TestReadEmbyDegradesMalformedLastPlayedDate(t *testing.T) {
+	path := fixtureDB(t, "library-malformed.db",
+		`CREATE TABLE TypedBaseItems (Path TEXT, UserDataKey TEXT, RunTimeTicks INTEGER)`,
+		`CREATE TABLE UserDatas (key TEXT, Played INTEGER, PlaybackPositionTicks INTEGER, LastPlayedDate TEXT)`,
+		`INSERT INTO TypedBaseItems VALUES ('/media/Good.mkv', 'good', 18000000000), ('/media/Bad.mkv', 'bad', 18000000000)`,
+		`INSERT INTO UserDatas VALUES ('good', 1, 0, '2026-06-10T12:34:56Z'), ('bad', 1, 0, 'not-a-timestamp')`,
+	)
+	rows, err := ReadEmby(path)
+	if err != nil {
+		t.Fatalf("ReadEmby: %v", err)
+	}
+	want := []WatchRow{
+		{Path: "/media/Bad.mkv", Watched: true, DurationSeconds: 1800},
+		{Path: "/media/Good.mkv", Watched: true, DurationSeconds: 1800,
+			LastPlayed: time.Date(2026, 6, 10, 12, 34, 56, 0, time.UTC)},
+	}
+	if !reflect.DeepEqual(rows, want) {
+		t.Fatalf("rows = %#v\nwant  %#v", rows, want)
+	}
+
+	bad := fixtureDB(t, "library-bad-row.db",
+		`CREATE TABLE TypedBaseItems (Path TEXT, UserDataKey TEXT, RunTimeTicks INTEGER)`,
+		`CREATE TABLE UserDatas (key TEXT, Played INTEGER, PlaybackPositionTicks INTEGER, LastPlayedDate TEXT)`,
+		`INSERT INTO TypedBaseItems VALUES ('/media/a.mkv', 'a', 'long')`,
+		`INSERT INTO UserDatas VALUES ('a', 1, 0, '')`,
+	)
+	if _, err := ReadEmby(bad); err == nil || !strings.Contains(err.Error(), "scan emby row") {
+		t.Fatalf("ReadEmby(non-numeric RunTimeTicks) = %v; want a scan error", err)
 	}
 }

@@ -358,32 +358,35 @@ var jellyfinColumns = []struct {
 // checkJellyfinSchema refuses anything but the Jellyfin 12 layout. It checks
 // shape, not a version number, so a later 12.x that keeps these columns reads.
 func checkJellyfinSchema(ctx context.Context, db *sql.DB) error {
-	tables := map[string]bool{}
-	rows, err := db.QueryContext(ctx, `SELECT name FROM sqlite_master WHERE type = 'table'`)
+	rows, err := db.QueryContext(ctx, `
+		SELECT m.name, p.name
+		FROM sqlite_master m JOIN pragma_table_info(m.name) p
+		WHERE m.type = 'table'`)
 	if err != nil {
-		return fmt.Errorf("read jellyfin tables: %w", err)
+		return fmt.Errorf("read jellyfin schema: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
+	tables := map[string]map[string]bool{}
 	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
-			return fmt.Errorf("scan jellyfin table name: %w", err)
+		var table, column string
+		if err := rows.Scan(&table, &column); err != nil {
+			return fmt.Errorf("scan jellyfin schema: %w", err)
 		}
-		tables[name] = true
+		if tables[table] == nil {
+			tables[table] = map[string]bool{}
+		}
+		tables[table][column] = true
 	}
 	if err := rows.Err(); err != nil {
-		return fmt.Errorf("iterate jellyfin tables: %w", err)
+		return fmt.Errorf("read jellyfin schema: %w", err)
 	}
-	if !tables["BaseItems"] && tables["TypedBaseItems"] {
+	if tables["BaseItems"] == nil && tables["TypedBaseItems"] != nil {
 		return errJellyfinLegacy
 	}
 	for _, want := range jellyfinColumns {
-		if !tables[want.table] {
+		have := tables[want.table]
+		if have == nil {
 			return fmt.Errorf("%w: missing table %s", errJellyfinUnknown, want.table)
-		}
-		have, err := tableColumns(ctx, db, want.table)
-		if err != nil {
-			return err
 		}
 		for _, column := range want.columns {
 			if !have[column] {
@@ -394,34 +397,42 @@ func checkJellyfinSchema(ctx context.Context, db *sql.DB) error {
 	return nil
 }
 
-func tableColumns(ctx context.Context, db *sql.DB, table string) (map[string]bool, error) {
-	rows, err := db.QueryContext(ctx, `SELECT name FROM pragma_table_info(?)`, table)
-	if err != nil {
-		return nil, fmt.Errorf("read jellyfin %s columns: %w", table, err)
+// jellyfinCopy is one Jellyfin 12 `UserData` row joined to its item.
+type jellyfinCopy struct {
+	path, userID, itemID string
+	played               bool
+	positionTicks        int64
+	lastPlayed           time.Time
+	runTimeTicks         int64
+}
+
+func (c jellyfinCopy) sameEntry(o jellyfinCopy) bool {
+	return c.path == o.path && c.userID == o.userID && c.itemID == o.itemID
+}
+
+// beats reports whether c is a better copy of the same entry than o: a later
+// last-played instant (an absent or unreadable time ranks last), then played,
+// then the larger resume position. On a full tie the earlier copy, the lower
+// data key, stays.
+func (c jellyfinCopy) beats(o jellyfinCopy) bool {
+	if !c.lastPlayed.Equal(o.lastPlayed) {
+		return c.lastPlayed.After(o.lastPlayed)
 	}
-	defer func() { _ = rows.Close() }()
-	columns := map[string]bool{}
-	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
-			return nil, fmt.Errorf("scan jellyfin %s column: %w", table, err)
-		}
-		columns[name] = true
+	if c.played != o.played {
+		return c.played
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate jellyfin %s columns: %w", table, err)
-	}
-	return columns, nil
+	return c.positionTicks > o.positionTicks
 }
 
 // StreamJellyfinWatchRows visits Jellyfin 12 watch rows in file path order, one
 // per item and source user.
 //
 // Jellyfin 12 writes one user's state for one item as several identical
-// `UserData` rows, one per data key (provider IDs and internal keys). The query
-// keeps one: the latest last-played time, then a played row, then the larger
-// resume position, then the lowest data key. It picks before it filters, so a
-// newer unplayed copy wins over an older played one.
+// `UserData` rows, one per data key (provider IDs and internal keys). The
+// reader keeps one: the latest last-played instant, then a played copy, then
+// the larger resume position, then the lowest data key. Instants are compared
+// after parsing, so two spellings of one time tie. It picks before it filters,
+// so a newer unplayed copy wins over an older played one.
 func StreamJellyfinWatchRows(ctx context.Context, path string, visit func(WatchRow) error) error {
 	db, err := openReadOnly(path)
 	if err != nil {
@@ -432,66 +443,72 @@ func StreamJellyfinWatchRows(ctx context.Context, path string, visit func(WatchR
 		return err
 	}
 
+	// The order groups each entry's copies together and is total, so a resumed
+	// import counts the same rows in the same order.
 	rows, err := db.QueryContext(ctx, `
-		SELECT Path, Played, PositionTicks, LastPlayed, RunTimeTicks
-		FROM (
-			SELECT b.Path AS Path,
-			       u.UserId AS UserId,
-			       COALESCE(u.Played, 0) AS Played,
-			       COALESCE(u.PlaybackPositionTicks, 0) AS PositionTicks,
-			       COALESCE(u.LastPlayedDate, '') AS LastPlayed,
-			       COALESCE(b.RunTimeTicks, 0) AS RunTimeTicks,
-			       ROW_NUMBER() OVER (
-			           PARTITION BY u.ItemId, u.UserId
-			           ORDER BY u.LastPlayedDate DESC, u.Played DESC,
-			                    u.PlaybackPositionTicks DESC, u.CustomDataKey
-			       ) AS pick
-			FROM UserData u
-			JOIN BaseItems b ON b.Id = u.ItemId
-			WHERE b.Path IS NOT NULL AND b.Path <> '' AND COALESCE(b.IsFolder, 0) = 0
-		)
-		WHERE pick = 1 AND (Played = 1 OR PositionTicks > 0)
-		ORDER BY Path COLLATE BINARY, UserId`)
+		SELECT b.Path, u.UserId, u.ItemId,
+		       COALESCE(u.Played, 0), COALESCE(u.PlaybackPositionTicks, 0),
+		       COALESCE(u.LastPlayedDate, ''), COALESCE(b.RunTimeTicks, 0)
+		FROM UserData u
+		JOIN BaseItems b ON b.Id = u.ItemId
+		WHERE b.Path IS NOT NULL AND b.Path <> '' AND COALESCE(b.IsFolder, 0) = 0
+		ORDER BY b.Path COLLATE BINARY, u.UserId COLLATE BINARY,
+		         u.ItemId COLLATE BINARY, u.CustomDataKey COLLATE BINARY`)
 	if err != nil {
 		return fmt.Errorf("query jellyfin watch-state: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
+	var best jellyfinCopy
+	pending := false
+	emit := func() error {
+		if !pending || !(best.played || best.positionTicks > 0) {
+			return nil
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		return visit(WatchRow{
+			Path:            best.path,
+			Watched:         best.played,
+			PositionSeconds: best.positionTicks / ticksPerSecond,
+			DurationSeconds: best.runTimeTicks / ticksPerSecond,
+			LastPlayed:      best.lastPlayed,
+		})
+	}
 	for rows.Next() {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 		var (
-			file          string
-			played        int64
-			positionTicks int64
-			lastPlayed    string
-			runTimeTicks  int64
+			c          jellyfinCopy
+			played     int64
+			lastPlayed string
 		)
-		if err := rows.Scan(&file, &played, &positionTicks, &lastPlayed, &runTimeTicks); err != nil {
+		if err := rows.Scan(&c.path, &c.userID, &c.itemID, &played, &c.positionTicks, &lastPlayed, &c.runTimeTicks); err != nil {
 			return fmt.Errorf("scan jellyfin row: %w", err)
 		}
-		row := WatchRow{
-			Path:            file,
-			Watched:         played == 1,
-			PositionSeconds: positionTicks / ticksPerSecond,
-			DurationSeconds: runTimeTicks / ticksPerSecond,
+		c.played = played == 1
+		// A malformed LastPlayedDate leaves the time zero rather than ending
+		// the import.
+		if parsed, err := parseJellyfinTime(lastPlayed); err == nil {
+			c.lastPlayed = parsed
 		}
-		if lastPlayed != "" {
-			// A malformed LastPlayedDate leaves this row's LastPlayed zero
-			// rather than ending the import.
-			if parsed, err := parseJellyfinTime(lastPlayed); err == nil {
-				row.LastPlayed = parsed
+		if pending && c.sameEntry(best) {
+			if c.beats(best) {
+				best = c
 			}
+			continue
 		}
-		if err := visit(row); err != nil {
+		if err := emit(); err != nil {
 			return err
 		}
+		best, pending = c, true
 	}
 	if err := rows.Err(); err != nil {
 		return fmt.Errorf("iterate jellyfin rows: %w", err)
 	}
-	return nil
+	return emit()
 }
 
 // jellyfinTimeLayout is the form Jellyfin 12 stores LastPlayedDate in: UTC,
