@@ -1,0 +1,19 @@
+{
+  "id": 501,
+  "title": "Saga Origins",
+  "original_title": "Saga Origins",
+  "overview": "A synthetic movie document in the TMDB /movie/{id} shape.",
+  "release_date": "1999-03-31",
+  "status": "Released",
+  "tagline": "",
+  "popularity": 12.5,
+  "vote_average": 7.1,
+  "vote_count": 840,
+  "poster_path": "/movie-501-poster.jpg",
+  "backdrop_path": "/movie-501-backdrop.jpg",
+  "belongs_to_collection": {"id": 8800, "name": "Another Saga", "poster_path": "/another-poster.jpg", "backdrop_path": "/another-backdrop.jpg"},
+  "genres": [{"id": 878, "name": "Science Fiction"}],
+  "production_companies": [{"id": 7, "name": "Example Pictures"}],
+  "release_dates": {"results": [{"iso_3166_1": "US", "release_dates": [{"certification": "PG-13", "type": 3}]}]},
+  "credits": {"cast": [], "crew": []}
+}

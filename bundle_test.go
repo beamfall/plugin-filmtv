@@ -306,9 +306,10 @@ func TestTMDBTVEntityMaps(t *testing.T) {
 	for _, s := range b.Scrapers {
 		var kinds []string
 		for _, em := range s.EntityMaps {
-			if em.Container {
+			if em.Container || em.Kind == "film-series" {
 				// Container maps hydrate the show and season (TV only);
-				// TestTMDBTVContainerHydration pins them.
+				// TestTMDBTVContainerHydration pins them. The film-series
+				// map is movie-only; TestTMDBMovieFilmSeriesMaps pins it.
 				continue
 			}
 			kinds = append(kinds, em.Kind+":"+em.Relation+":"+em.Path+":"+em.NamePath)

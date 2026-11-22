@@ -54,6 +54,10 @@ const (
 	CommunityRatingVotesField = "community-rating-votes"
 )
 
+// FilmSeriesFilmRelation links a film-series Entity to each member film Media
+// (one series per film), built from TMDB's belongs_to_collection (CORE-3152).
+const FilmSeriesFilmRelation = "film-series-film"
+
 // TMDB lookups with the documents that carry ratings folded on: credits for
 // the credited-in maps, release_dates (movies) and content_ratings (series)
 // for the certification fields.
@@ -288,6 +292,12 @@ func Bundle() sdk.Bundle {
 				Fields: []sdk.FieldSpec{
 					{Name: "tmdb-id", Type: "text",
 						Label: sdk.LocaleString{"en": "TMDB ID", "fr": "Identifiant TMDB"}},
+				},
+				// The tmdb-movie scraper links each film to the series of
+				// its belongs_to_collection (CORE-3152). One series per film,
+				// so core treats the series as the film's container.
+				Relations: []sdk.RelationSpec{
+					{Name: FilmSeriesFilmRelation, ToKind: sdk.MediaKindName, Cardinality: "one"},
 				},
 			},
 			{
@@ -605,6 +615,16 @@ func Bundle() sdk.Bundle {
 						RelationAttributeMap: map[string]string{"character": "character", "billing": "order"},
 						OrdinalField:         "billing"},
 					tmdbKeyCrewMap(),
+					// belongs_to_collection {id, name, poster_path,
+					// backdrop_path} (null outside a franchise) builds the
+					// film's series (CORE-3152): the first map creates the
+					// series and links the film; the container map then
+					// adds the backdrop to the series now holding it.
+					{Kind: "film-series", Relation: FilmSeriesFilmRelation, Path: "belongs_to_collection",
+						NamePath: "name", ArtworkPath: "poster_path",
+						FieldMap: map[string]string{"tmdb-id": "id"}},
+					{Kind: "film-series", Container: true, Path: "belongs_to_collection",
+						ArtworkMap: map[string]string{"backdrop": "backdrop_path"}},
 				},
 			},
 			{
