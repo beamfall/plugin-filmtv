@@ -286,7 +286,7 @@ func entryInFolder(path string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	defer root.Close()
+	defer func() { _ = root.Close() }()
 	_, err = root.Lstat(filepath.Base(path))
 	switch {
 	case err == nil:
