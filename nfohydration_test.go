@@ -561,18 +561,62 @@ func TestOverlongSidecarNameFallsBackToFolderNFO(t *testing.T) {
 	}
 }
 
+// TestOverlongSidecarNameInUnlistableFolder: a folder that allows lookups but
+// not listing still yields its folder NFO when the derived .nfo name is too
+// long for any filesystem (Codex r4).
+func TestOverlongSidecarNameInUnlistableFolder(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores folder permissions")
+	}
+	root := t.TempDir()
+	dir := filepath.Join(root, "Film")
+	media := filepath.Join(dir, strings.Repeat("a", 252)+".ts")
+	writeNFO(t, media, "")
+	folder := filepath.Join(dir, nfoFilmRoot+".nfo")
+	writeNFO(t, folder, "<"+nfoFilmRoot+"><title>Real</title></"+nfoFilmRoot+">")
+	if err := os.Chmod(dir, 0o300); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
+	if got, err := mediaNFOPath(media); err != nil || got != folder {
+		t.Fatalf("mediaNFOPath = %q, %v; want %q", got, err, folder)
+	}
+}
+
+// TestCaseFoldedLoopIsUnreadable: on a filesystem that folds case, a symlink
+// loop stored as Film.NFO fails the lookup of Film.nfo; that failure is an
+// unreadable sidecar, not an absent one (Codex r4).
+func TestCaseFoldedLoopIsUnreadable(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "Film")
+	media := filepath.Join(dir, "Film.mkv")
+	writeNFO(t, media, "")
+	loop := filepath.Join(dir, "Film.NFO")
+	if err := os.Symlink(loop, loop); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(filepath.Join(dir, "Film.nfo")); err != nil {
+		t.Skip("filesystem does not fold case")
+	}
+	if got, err := mediaNFOPath(media); err == nil {
+		t.Fatalf("mediaNFOPath = %q, nil; want an error", got)
+	}
+}
+
 // TestLongMultibyteSidecarNameIsFound: a sidecar whose name passes 255 bytes
 // but fits the filesystem's limit is still found (Codex r3).
 func TestLongMultibyteSidecarNameIsFound(t *testing.T) {
 	root := t.TempDir()
 	stem := strings.Repeat("映", 90)
 	media := filepath.Join(root, "Film", stem+".mkv")
-	writeNFO(t, media, "")
+	writeNFO(t, filepath.Join(root, "Film", nfoFilmRoot+".nfo"), "<"+nfoFilmRoot+"><title>Folder</title></"+nfoFilmRoot+">")
+	if err := os.WriteFile(media, nil, 0o600); err != nil {
+		t.Skipf("filesystem refuses a %d-byte name: %v", len(stem)+4, err)
+	}
 	sidecar := filepath.Join(root, "Film", stem+".nfo")
 	if err := os.WriteFile(sidecar, []byte("<"+nfoFilmRoot+"><title>Long</title></"+nfoFilmRoot+">"), 0o600); err != nil {
 		t.Skipf("filesystem refuses a %d-byte name: %v", len(stem)+4, err)
 	}
-	writeNFO(t, filepath.Join(root, "Film", nfoFilmRoot+".nfo"), "<"+nfoFilmRoot+"><title>Folder</title></"+nfoFilmRoot+">")
 	if got, err := mediaNFOPath(media); err != nil || got != sidecar {
 		t.Fatalf("mediaNFOPath = %q, %v; want %q", got, err, sidecar)
 	}

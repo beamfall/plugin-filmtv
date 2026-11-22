@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/beamfall/plugin-filmtv/internal/mediaimport"
 	sdk "github.com/beamfall/plugin-sdk"
@@ -232,9 +233,11 @@ var errNFODangling = errors.New("nfo symlink target is missing")
 // isRegularFile reports whether path names a regular file. Only a clean
 // not-found is false with no error: any other failure is returned, so a
 // sidecar behind a folder that denies traversal, or a symlink whose target
-// moved, never reads as absent. A stat that fails for another reason (a name
-// too long for the filesystem) is absent only when the folder listing proves
-// no such entry exists.
+// moved, never reads as absent. A name longer than maxNameRunes fits no
+// filesystem, so it is absent. A name past that many bytes may fit a
+// filesystem that counts characters but not one that counts bytes, so a
+// failed stat of one is absent only when the folder listing, compared without
+// case, proves no such entry exists.
 func isRegularFile(path string) (bool, error) {
 	info, err := os.Stat(path)
 	switch {
@@ -250,16 +253,27 @@ func isRegularFile(path string) (bool, error) {
 		}
 		return false, lerr
 	}
+	name := filepath.Base(path)
+	switch {
+	case utf8.RuneCountInString(name) > maxNameRunes:
+		return false, nil
+	case len(name) <= maxNameRunes:
+		return false, err
+	}
 	entries, lerr := os.ReadDir(filepath.Dir(path))
 	if lerr != nil {
 		return false, err
 	}
-	name := filepath.Base(path)
-	if slices.ContainsFunc(entries, func(e fs.DirEntry) bool { return e.Name() == name }) {
+	if slices.ContainsFunc(entries, func(e fs.DirEntry) bool { return strings.EqualFold(e.Name(), name) }) {
 		return false, err
 	}
 	return false, nil
 }
+
+// maxNameRunes is the longest file name common filesystems hold: ext4 counts
+// 255 bytes, APFS and NTFS 255 UTF-16 units, and each count is at least the
+// name's rune count.
+const maxNameRunes = 255
 
 // errNFOChanged reports a sidecar that changed while it was read.
 var errNFOChanged = errors.New("nfo changed while it was read")
