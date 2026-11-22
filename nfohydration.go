@@ -250,22 +250,67 @@ func isRegularFile(path string) (bool, error) {
 		}
 		return false, lerr
 	case nameTooLong(err):
+		return entryInFolder(path)
+	}
+	return false, err
+}
+
+// errNFOUnreachable reports a sidecar that exists in its folder but that the
+// system cannot open by its full path: the path, or its symlink target, is
+// past the length limit.
+var errNFOUnreachable = errors.New("nfo sidecar path is past the system's length limit")
+
+// entryInFolder looks for path's entry after a full-path lookup was refused
+// as too long. A symlink there whose target is too long, or a sidecar created
+// relative to its folder past the full-path limit, is an error, never
+// absence. A folder that grants traversal but not reading cannot be opened to
+// look, so there a too-long path stays absent.
+func entryInFolder(path string) (bool, error) {
+	_, err := os.Lstat(path)
+	switch {
+	case err == nil:
+		return false, errNFOUnreachable
+	case errors.Is(err, fs.ErrNotExist):
+		return false, nil
+	case !nameTooLong(err):
+		return false, err
+	}
+	root, err := os.OpenRoot(filepath.Dir(path))
+	if errors.Is(err, fs.ErrNotExist) || errors.Is(err, fs.ErrPermission) || nameTooLong(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	defer root.Close()
+	_, err = root.Lstat(filepath.Base(path))
+	switch {
+	case err == nil:
+		return false, errNFOUnreachable
+	case errors.Is(err, fs.ErrNotExist) || nameTooLong(err):
 		return false, nil
 	}
 	return false, err
 }
 
 // errNameTooLong is the system's error for a path past its length limits,
-// taken from a stat of a name no filesystem holds: the plugin cannot import
-// syscall to name it. It stays nil, matching nothing, if the probe fails
-// some other way.
+// taken from stats of two names no filesystem holds: the plugin cannot import
+// syscall to name it, nor write a folder of its own to probe in. It stays nil,
+// matching nothing, unless both stats fail the same way with an error that is
+// neither not-found nor access denied, so a temp folder the service cannot
+// read never teaches it that access denied means too long.
 var errNameTooLong = sync.OnceValue(func() error {
-	_, err := os.Stat(filepath.Join(os.TempDir(), strings.Repeat("n", 8192)))
+	tmp := os.TempDir()
+	_, long := os.Stat(filepath.Join(tmp, strings.Repeat("n", 8192)))
+	_, name := os.Stat(filepath.Join(tmp, strings.Repeat("n", 300)))
 	var pathErr *fs.PathError
-	if errors.As(err, &pathErr) && !errors.Is(err, fs.ErrNotExist) {
-		return pathErr.Err
+	if !errors.As(long, &pathErr) || errors.Is(long, fs.ErrNotExist) || errors.Is(long, fs.ErrPermission) {
+		return nil
 	}
-	return nil
+	if !errors.Is(name, pathErr.Err) {
+		return nil
+	}
+	return pathErr.Err
 })
 
 func nameTooLong(err error) bool {

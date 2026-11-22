@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -621,12 +623,18 @@ func TestFullPathLimitFallsBackToFolderNFO(t *testing.T) {
 			}
 			dir = next
 		}
-		stem := strings.Repeat("f", limit-1-len(dir)-1-len(".ts"))
-		media := filepath.Join(dir, stem+".ts")
-		if len(stem) < 1 || os.WriteFile(media, nil, 0o600) != nil {
+		n := limit - 1 - len(dir) - 1 - len(".ts")
+		if n < 1 {
 			continue
 		}
-		if _, err := os.Stat(filepath.Join(dir, stem+".nfo")); !nameTooLong(err) {
+		stem := strings.Repeat("f", n)
+		media := filepath.Join(dir, stem+".ts")
+		if os.WriteFile(media, nil, 0o600) != nil {
+			continue
+		}
+		// Only a refused lookup puts the limit in play; the assertion below
+		// then holds whatever the probe found.
+		if _, err := os.Stat(filepath.Join(dir, stem+".nfo")); err == nil || errors.Is(err, fs.ErrNotExist) {
 			continue
 		}
 		folder := filepath.Join(dir, nfoFilmRoot+".nfo")
@@ -642,8 +650,13 @@ func TestFullPathLimitFallsBackToFolderNFO(t *testing.T) {
 // TestNameTooLongProbe: the probe finds the system's too-long error, and a
 // symlink loop is not mistaken for it.
 func TestNameTooLongProbe(t *testing.T) {
-	if errNameTooLong() == nil {
-		t.Fatal("probe found no too-long error")
+	probe := errNameTooLong()
+	if probe == nil || errors.Is(probe, fs.ErrPermission) {
+		t.Fatalf("probe = %v, want the system's too-long error", probe)
+	}
+	// A single over-long name in a writable folder fails the same way.
+	if _, err := os.Stat(filepath.Join(t.TempDir(), strings.Repeat("x", 300))); !errors.Is(err, probe) {
+		t.Fatalf("300-byte name stat = %v, want %v", err, probe)
 	}
 	loop := filepath.Join(t.TempDir(), "loop.nfo")
 	if err := os.Symlink(loop, loop); err != nil {
@@ -651,6 +664,23 @@ func TestNameTooLongProbe(t *testing.T) {
 	}
 	if _, err := os.Stat(loop); err == nil || nameTooLong(err) {
 		t.Fatalf("loop stat error %v read as too long", err)
+	}
+}
+
+// TestSymlinkToTooLongTargetIsUnreadable: a sidecar symlink whose target the
+// system refuses as too long is an error, not a missing sidecar (Codex r6).
+func TestSymlinkToTooLongTargetIsUnreadable(t *testing.T) {
+	root := t.TempDir()
+	media := filepath.Join(root, "Film.mkv")
+	if err := os.WriteFile(media, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	writeNFO(t, filepath.Join(root, nfoFilmRoot+".nfo"), "<"+nfoFilmRoot+"><title>Folder</title></"+nfoFilmRoot+">")
+	if err := os.Symlink(filepath.Join(root, strings.Repeat("t", 300)), filepath.Join(root, "Film.nfo")); err != nil {
+		t.Skipf("no symlinks: %v", err)
+	}
+	if got, err := mediaNFOPath(media); !errors.Is(err, errNFOUnreachable) {
+		t.Fatalf("mediaNFOPath = %q, %v; want %v", got, err, errNFOUnreachable)
 	}
 }
 
