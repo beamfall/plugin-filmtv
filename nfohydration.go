@@ -226,15 +226,30 @@ func isExtraStem(stem string) bool {
 	return at >= 0 && slices.Contains(looseExtraLabels, asciiLower(stem[at+1:]))
 }
 
+// maxNameBytes is the file name limit of the common filesystems (ext4, APFS,
+// NTFS, ZFS): a derived sidecar name past it cannot name a file.
+const maxNameBytes = 255
+
+// errNFODangling reports a sidecar symlink whose target is gone.
+var errNFODangling = errors.New("nfo symlink target is missing")
+
 // isRegularFile reports whether path names a regular file. Only a clean
 // not-found is false with no error: any other stat failure is returned, so
-// a sidecar behind a folder that denies traversal never reads as absent.
+// a sidecar behind a folder that denies traversal, or a symlink whose target
+// moved, never reads as absent. A name longer than maxNameBytes cannot exist,
+// so it is absent too, and its lookup cannot fail with ENAMETOOLONG.
 func isRegularFile(path string) (bool, error) {
+	if len(filepath.Base(path)) > maxNameBytes {
+		return false, nil
+	}
 	info, err := os.Stat(path)
 	switch {
 	case err == nil:
 		return info.Mode().IsRegular(), nil
 	case errors.Is(err, fs.ErrNotExist):
+		if _, lerr := os.Lstat(path); lerr == nil {
+			return false, errNFODangling
+		}
 		return false, nil
 	}
 	return false, err
@@ -436,8 +451,9 @@ func selectCertification(mpaa string) (label string, policy bool) {
 }
 
 // reCertificationQualifier matches the country before a rating's colon: a
-// code or a name ("US", "Germany", "United States").
-var reCertificationQualifier = regexp.MustCompile(`^[\pL][\pL .]{0,39}$`)
+// code or a name ("US", "Germany", "United States", "Côte d’Ivoire",
+// "Guinea-Bissau").
+var reCertificationQualifier = regexp.MustCompile(`^[\pL][\pL .'’-]{0,39}$`)
 
 // splitCertification splits "US:Rated R" or "Germany:FSK 12" into its
 // lowercased country and the bare label. A label with no country before a

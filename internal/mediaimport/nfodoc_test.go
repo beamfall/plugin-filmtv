@@ -227,17 +227,17 @@ func TestParseNFODocumentSplitsLegacyCrew(t *testing.T) {
 
 // TestParseNFODocumentDropsNonFiniteNumbers (Codex r1).
 func TestParseNFODocumentDropsNonFiniteNumbers(t *testing.T) {
-	for _, doc := range []string{
-		"<movie><ratings><rating><value>NaN</value></rating></ratings></movie>",
-		"<movie><ratings><rating><value>NaN</value></rating><rating><value>7.5</value></rating></ratings></movie>",
-		"<movie><rating>+Inf</rating><userrating>NaN</userrating><runtime>Inf</runtime></movie>",
+	for doc, wantRating := range map[string]bool{
+		"<movie><ratings><rating><value>NaN</value></rating></ratings></movie>":                                    false,
+		"<movie><ratings><rating><value>NaN</value></rating><rating><value>7.5</value></rating></ratings></movie>": true,
+		"<movie><rating>+Inf</rating><userrating>NaN</userrating><runtime>Inf</runtime></movie>":                   false,
 	} {
 		entries, err := ParseNFODocument(strings.NewReader(doc))
 		if err != nil {
 			t.Fatal(err)
 		}
 		got := entries[0]
-		if (got.HasRating && got.Rating != 7.5) || got.UserRating != 0 || got.RuntimeMinutes != 0 {
+		if got.HasRating != wantRating || (wantRating && got.Rating != 7.5) || got.UserRating != 0 || got.RuntimeMinutes != 0 {
 			t.Errorf("%s: rating %v/%v user %v runtime %v", doc, got.Rating, got.HasRating, got.UserRating, got.RuntimeMinutes)
 		}
 	}

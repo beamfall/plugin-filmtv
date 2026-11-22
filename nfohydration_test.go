@@ -403,18 +403,20 @@ func TestSelectCertification(t *testing.T) {
 		label  string
 		policy bool
 	}{
-		"Rated PG-13":        {"PG-13", true},
-		"US:R / UK:15":       {"R", true},
-		"CA:PG / US:R":       {"R", true},
-		"CA:PG / R":          {"R", true},
-		"CA:PG":              {"PG", false},
-		"US:Rated R":         {"R", true},
-		"TV-14":              {"TV-14", true},
-		" ":                  {"", false},
-		"Germany:FSK 12":     {"FSK 12", false},
-		"Germany:FSK 16 / R": {"R", true},
-		"United States:PG":   {"PG", true},
-		"U.S.A.:PG-13":       {"PG-13", true},
+		"Rated PG-13":          {"PG-13", true},
+		"US:R / UK:15":         {"R", true},
+		"CA:PG / US:R":         {"R", true},
+		"CA:PG / R":            {"R", true},
+		"CA:PG":                {"PG", false},
+		"US:Rated R":           {"R", true},
+		"TV-14":                {"TV-14", true},
+		" ":                    {"", false},
+		"Germany:FSK 12":       {"FSK 12", false},
+		"Germany:FSK 16 / R":   {"R", true},
+		"United States:PG":     {"PG", true},
+		"U.S.A.:PG-13":         {"PG-13", true},
+		"Côte d’Ivoire:12 / R": {"R", true},
+		"Guinea-Bissau:12 / R": {"R", true},
 	} {
 		label, policy := selectCertification(in)
 		if label != want.label || policy != want.policy {
@@ -521,6 +523,40 @@ func TestNFOLookupErrorIsUnreadable(t *testing.T) {
 	}
 	if state, err := nfoWatchState(media); err == nil {
 		t.Errorf("nfoWatchState behind a denied folder = %+v, nil; want an error", state)
+	}
+}
+
+// TestDanglingNFOSymlinkIsUnreadable: a sidecar symlink whose target moved is
+// unreadable, never a removal that would release local ownership (Codex r2).
+func TestDanglingNFOSymlinkIsUnreadable(t *testing.T) {
+	root := t.TempDir()
+	media := filepath.Join(root, "Film", "Film.mkv")
+	writeNFO(t, media, "")
+	if err := os.Symlink(filepath.Join(root, "gone.nfo"), filepath.Join(root, "Film", "Film.nfo")); err != nil {
+		t.Fatal(err)
+	}
+	if got := LocalNFOHydration(media); !got.Unreadable {
+		t.Errorf("plan through a dangling symlink = %+v, want Unreadable", got)
+	}
+	if signature, err := NFOSignature(media); err == nil {
+		t.Errorf("NFOSignature through a dangling symlink = %q, nil; want an error", signature)
+	}
+	if state, err := nfoWatchState(media); err == nil {
+		t.Errorf("nfoWatchState through a dangling symlink = %+v, nil; want an error", state)
+	}
+}
+
+// TestOverlongSidecarNameFallsBackToFolderNFO: a media name that fits the
+// filesystem while its derived .nfo name does not still finds the folder NFO
+// (Codex r2).
+func TestOverlongSidecarNameFallsBackToFolderNFO(t *testing.T) {
+	root := t.TempDir()
+	media := filepath.Join(root, "Film", strings.Repeat("a", 252)+".ts")
+	writeNFO(t, media, "")
+	folder := filepath.Join(root, "Film", nfoFilmRoot+".nfo")
+	writeNFO(t, folder, "<"+nfoFilmRoot+"><title>Real</title></"+nfoFilmRoot+">")
+	if got, err := mediaNFOPath(media); err != nil || got != folder {
+		t.Fatalf("mediaNFOPath = %q, %v; want %q", got, err, folder)
 	}
 }
 
