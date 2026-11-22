@@ -280,26 +280,27 @@ func newJellyfinSource(dbPath string, categories []string) multiUserSource {
 		foreignimport.ReadJellyfinContext, foreignimport.StreamJellyfinWatchRows, foreignimport.ReadJellyfinByUser)
 }
 
-// nfoSource adapts an NFO sidecar tree to sdk.Source. An NFO library carries no
-// watch-state (NFO = parse-hint ids + local artwork), so its
-// declared category is "ratings"/"collections" parse-hint material rather than
-// watch-state — but the v1 handler's apply path is watch-state only (the
-// ratings/collections store projection is later work in Core).
-// The NFO source therefore yields path-keyed items with no WatchState: the match
-// chain still resolves and pins each path so the operator sees the match rate,
-// and the parse-hint IDs ride into identification through the existing scan/
-// identify path (NFO ids enter as Parse Hints), not through the
-// migrate engagement write.
+// nfoSource adapts an NFO sidecar tree to sdk.Source. Each video file is a
+// path-keyed item; when its own NFO records a play (<playcount>, <watched>,
+// <lastplayed>) the item carries that as watch-state, which the handler writes
+// for the importing profile only. NFO provider IDs ride into identification
+// through the scan/identify path (Parse Hints) and the NFO metadata through
+// the local hydration seam (nfohydration.go), not through this source.
 type nfoSource struct {
 	root string
 }
 
-// Categories: the NFO source declares "collections" as a placeholder for the
-// local-artwork material it carries — it is a real ImportCategories member
-// (so the wizard validates it). The handler applies no
-// engagement for it (watch-state only in v1), so an NFO run reports the match
-// rate and pins matched files without writing playback history.
-func (nfoSource) Categories() []string { return []string{sdk.CategoryCollections} }
+// Categories: watch-state from the NFO play record, plus "collections" for
+// the local-artwork material the tree carries.
+func (nfoSource) Categories() []string {
+	return []string{sdk.CategoryWatchState, sdk.CategoryCollections}
+}
+
+// nfoForeignItem keys a video file by path and adds the play its own NFO
+// records, if any.
+func nfoForeignItem(path string) sdk.ForeignItem {
+	return sdk.ForeignItem{Path: path, WatchState: nfoWatchState(path)}
+}
 
 func (s nfoSource) Items(ctx context.Context) ([]sdk.ForeignItem, error) {
 	found, err := walkNFOTreeContext(ctx, s.root)
@@ -311,9 +312,7 @@ func (s nfoSource) Items(ctx context.Context) ([]sdk.ForeignItem, error) {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		// Path-keyed only: NFO provider IDs are read by the filename parser
-		// during identification, not carried through the migration source.
-		items = append(items, sdk.ForeignItem{Path: it.Path})
+		items = append(items, nfoForeignItem(it.Path))
 	}
 	return items, nil
 }
@@ -353,7 +352,7 @@ func (s nfoSource) Stream(
 		if err != nil {
 			return fmt.Errorf("nfo tree: resolve %q: %w", path, err)
 		}
-		callbackErr = pager.add(sdk.ForeignItem{Path: absolute})
+		callbackErr = pager.add(nfoForeignItem(absolute))
 		return callbackErr
 	})
 	if callbackErr != nil {

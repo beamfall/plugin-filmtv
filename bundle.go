@@ -12,6 +12,8 @@
 package filmtv
 
 import (
+	"slices"
+
 	sdk "github.com/beamfall/plugin-sdk"
 	"github.com/beamfall/plugin-sdk/scrobble"
 )
@@ -73,6 +75,10 @@ const (
 const tmdbMovieUSCertification = "release_dates.results[iso_3166_1=US].release_dates[type=3].certification" +
 	"||release_dates.results[iso_3166_1=US].release_dates[type=4].certification" +
 	"||release_dates.results[iso_3166_1=US].release_dates.0.certification"
+
+// certificationScale is the US MPA scale Profile ceilings compare against,
+// low to high.
+var certificationScale = []string{"G", "PG", "PG-13", "R", "NC-17"}
 
 // Bundle returns the complete declarative Film & TV contribution.
 func Bundle() sdk.Bundle {
@@ -159,6 +165,23 @@ func Bundle() sdk.Bundle {
 				Label: sdk.LocaleString{"en": "TMDB rating", "fr": "Note TMDB"}},
 			{Name: CommunityRatingVotesField, Type: "number",
 				Label: sdk.LocaleString{"en": "TMDB votes", "fr": "Votes TMDB"}},
+			// Local NFO import (nfohydration.go, CORE-0361): fields only an
+			// NFO sidecar carries, and the sidecar signature Core compares
+			// on rescan.
+			{Name: outlineField, Type: "text",
+				Label: sdk.LocaleString{"en": "Outline", "fr": "Résumé court"}},
+			{Name: userRatingField, Type: "number", Sortable: true,
+				Label: sdk.LocaleString{"en": "User Rating", "fr": "Note personnelle"}},
+			{Name: tagsField, Type: "text", Searchable: true,
+				Label: sdk.LocaleString{"en": "Tags", "fr": "Étiquettes"}},
+			{Name: runtimeField, Type: "number", Sortable: true,
+				Label: sdk.LocaleString{"en": "Runtime (min)", "fr": "Durée (min)"}},
+			{Name: trailerField, Type: "text",
+				Label: sdk.LocaleString{"en": "Trailer", "fr": "Bande-annonce"}},
+			{Name: dateAddedField, Type: "date", Sortable: true,
+				Label: sdk.LocaleString{"en": "Date Added", "fr": "Date d'ajout"}},
+			{Name: NFOSignatureField, Type: "text",
+				Label: sdk.LocaleString{"en": "NFO Signature", "fr": "Signature NFO"}},
 		},
 		MediaClassLabels: map[string]sdk.LocaleString{
 			"movie":   {"en": "Movie", "fr": "Film"},
@@ -205,7 +228,7 @@ func Bundle() sdk.Bundle {
 		// The US MPA movie scale, low→high (the ordered scale Profile
 		// ceilings compare against; country × media-family scale tables arrive with the
 		// certification-region setting later).
-		CertificationScale: []string{"G", "PG", "PG-13", "R", "NC-17"},
+		CertificationScale: slices.Clone(certificationScale),
 		EntityKinds: []sdk.EntityKind{
 			{
 				// Show: ordered Seasons.
@@ -1105,7 +1128,7 @@ func Bundle() sdk.Bundle {
 			{
 				ID:          "nfo",
 				DisplayName: sdk.LocaleString{"en": "NFO sidecars", "fr": "Fichiers NFO"},
-				Categories:  []string{"collections"},
+				Categories:  []string{"watch-state", "collections"},
 				Input:       "export-file",
 				Conflict:    "additive",
 			},

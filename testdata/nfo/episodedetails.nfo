@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
+<episodedetails>
+    <title>High Water</title>
+    <showtitle>Tidewater</showtitle>
+    <season>1</season>
+    <episode>1</episode>
+    <plot>The town wakes to a flooded harbour.</plot>
+    <aired>2021-01-15</aired>
+    <runtime>48</runtime>
+    <userrating>7</userrating>
+    <ratings>
+        <rating name="tvdb" max="100" default="true">
+            <value>82</value>
+            <votes>140</votes>
+        </rating>
+    </ratings>
+    <director>Ana Brook</director>
+    <credits>Leo Marsh</credits>
+    <actor>
+        <name>Iris Calder</name>
+        <role>Captain Odell</role>
+        <order>0</order>
+    </actor>
+    <watched>true</watched>
+</episodedetails>

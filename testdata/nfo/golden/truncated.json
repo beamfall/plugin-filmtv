@@ -1,0 +1,22 @@
+{
+  "Found": true,
+  "Title": "Salt Roads",
+  "Summary": "Two smugglers cross the marsh.",
+  "Year": 2018,
+  "Relations": [
+    {
+      "FromKind": "genre",
+      "FromTitle": "Thriller",
+      "Name": "genre-of"
+    },
+    {
+      "FromKind": "person",
+      "FromTitle": "Corin Vale",
+      "Name": "credited-in",
+      "Attributes": {
+        "billing": "0"
+      },
+      "SortOrder": 0
+    }
+  ]
+}

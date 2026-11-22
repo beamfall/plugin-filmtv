@@ -1,0 +1,144 @@
+{
+  "Found": true,
+  "Title": "The Lantern Keeper",
+  "SortTitle": "Lantern Keeper, The",
+  "Summary": "On a storm-battered island, the last lighthouse keeper refuses to leave.",
+  "Year": 2019,
+  "MediaFields": [
+    {
+      "Name": "original-title",
+      "Type": "text",
+      "Text": "Le Gardien de la lanterne"
+    },
+    {
+      "Name": "release-date",
+      "Type": "date",
+      "Date": "2019-10-04T00:00:00Z"
+    },
+    {
+      "Name": "tagline",
+      "Type": "text",
+      "Text": "Some lights never go out."
+    },
+    {
+      "Name": "outline",
+      "Type": "text",
+      "Text": "A keeper guards the last light on the coast."
+    },
+    {
+      "Name": "community-rating",
+      "Type": "number",
+      "Number": 7.4
+    },
+    {
+      "Name": "community-rating-votes",
+      "Type": "number",
+      "Number": 812
+    },
+    {
+      "Name": "user-rating",
+      "Type": "number",
+      "Number": 8
+    },
+    {
+      "Name": "tags",
+      "Type": "text",
+      "Text": "coastal, slow burn"
+    },
+    {
+      "Name": "runtime",
+      "Type": "number",
+      "Number": 112
+    },
+    {
+      "Name": "trailer",
+      "Type": "text",
+      "Text": "plugin://plugin.video.youtube/?action=play_video\u0026videoid=abc123"
+    },
+    {
+      "Name": "date-added",
+      "Type": "date",
+      "Date": "2024-11-02T10:30:00Z"
+    },
+    {
+      "Name": "certification-display",
+      "Type": "text",
+      "Text": "PG-13"
+    },
+    {
+      "Name": "certification",
+      "Type": "text",
+      "Text": "PG-13"
+    }
+  ],
+  "Relations": [
+    {
+      "FromKind": "genre",
+      "FromTitle": "Drama",
+      "Name": "genre-of"
+    },
+    {
+      "FromKind": "genre",
+      "FromTitle": "Mystery",
+      "Name": "genre-of"
+    },
+    {
+      "FromKind": "studio",
+      "FromTitle": "Harbour Light Pictures",
+      "Name": "produced"
+    },
+    {
+      "FromKind": "studio",
+      "FromTitle": "North Pier",
+      "Name": "produced"
+    },
+    {
+      "FromKind": "person",
+      "FromTitle": "Iris Calder",
+      "Name": "credited-in",
+      "Attributes": {
+        "billing": "0",
+        "character": "Wren"
+      },
+      "SortOrder": 0
+    },
+    {
+      "FromKind": "person",
+      "FromTitle": "Mara Ellison",
+      "Name": "credited-in",
+      "Attributes": {
+        "billing": "1",
+        "character": "Harbourmaster",
+        "department": "Directing, Writing",
+        "job": "Director, Writer"
+      },
+      "SortOrder": 1
+    },
+    {
+      "FromKind": "person",
+      "FromTitle": "Jonah Pike",
+      "Name": "credited-in",
+      "Attributes": {
+        "billing": "2",
+        "character": "Ferryman"
+      },
+      "SortOrder": 2
+    },
+    {
+      "FromKind": "person",
+      "FromTitle": "Tomas Reyes",
+      "Name": "credited-in",
+      "Attributes": {
+        "department": "Writing",
+        "job": "Writer"
+      },
+      "SortOrder": 1002
+    },
+    {
+      "FromKind": "film-series",
+      "FromTitle": "Lantern Collection",
+      "Name": "film-series-film",
+      "Cardinality": "one"
+    }
+  ]
+}

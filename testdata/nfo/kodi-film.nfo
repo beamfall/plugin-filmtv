@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
+<movie>
+    <title>The Lantern Keeper</title>
+    <originaltitle>Le Gardien de la lanterne</originaltitle>
+    <sorttitle>Lantern Keeper, The</sorttitle>
+    <ratings>
+        <rating name="imdb" max="10">
+            <value>6.9</value>
+            <votes>1,204</votes>
+        </rating>
+        <rating name="themoviedb" max="10" default="true">
+            <value>7.4</value>
+            <votes>812</votes>
+        </rating>
+    </ratings>
+    <userrating>8</userrating>
+    <outline>A keeper guards the last light on the coast.</outline>
+    <plot>On a storm-battered island, the last lighthouse keeper refuses to leave.</plot>
+    <tagline>Some lights never go out.</tagline>
+    <runtime>112</runtime>
+    <mpaa>Rated PG-13</mpaa>
+    <playcount>1</playcount>
+    <lastplayed>2025-03-14 21:05:00</lastplayed>
+    <genre>Drama</genre>
+    <genre>Mystery</genre>
+    <tag>coastal</tag>
+    <tag>slow burn</tag>
+    <set>
+        <name>Lantern Collection</name>
+        <overview>Every Lantern film.</overview>
+    </set>
+    <studio>Harbour Light Pictures</studio>
+    <studio>North Pier</studio>
+    <premiered>2019-10-04</premiered>
+    <year>2019</year>
+    <director>Mara Ellison</director>
+    <credits>Mara Ellison</credits>
+    <credits>Tomas Reyes</credits>
+    <trailer>plugin://plugin.video.youtube/?action=play_video&amp;videoid=abc123</trailer>
+    <dateadded>2024-11-02 10:30:00</dateadded>
+    <actor>
+        <name>Iris Calder</name>
+        <role>Wren</role>
+        <order>0</order>
+        <thumb>https://images.example/iris.jpg</thumb>
+    </actor>
+    <actor>
+        <name>Mara Ellison</name>
+        <role>Harbourmaster</role>
+        <order>1</order>
+    </actor>
+    <actor>
+        <name>Jonah Pike</name>
+        <role>Ferryman</role>
+    </actor>
+</movie>

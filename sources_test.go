@@ -100,7 +100,7 @@ func TestImporterStreamingCancellationAndCheckpoint(t *testing.T) {
 		},
 		{Name: "emby", Source: dbWatchSource{read: reader, stream: streamer}, WantCategories: []string{sdk.CategoryWatchState}, WantItems: watchItems},
 		{Name: "jellyfin", Source: dbWatchSource{read: reader, stream: streamer}, WantCategories: []string{sdk.CategoryWatchState}, WantItems: watchItems},
-		{Name: "nfo", Source: nfoSource, WantCategories: []string{sdk.CategoryCollections}, WantItems: nfoItems},
+		{Name: "nfo", Source: nfoSource, WantCategories: []string{sdk.CategoryWatchState, sdk.CategoryCollections}, WantItems: nfoItems},
 		{Name: "trakt", Source: NewTraktSource(traktPath), WantCategories: []string{sdk.CategoryWatchState}, WantItems: traktItems},
 	}
 	for _, vector := range vectors {

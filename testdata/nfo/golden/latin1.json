@@ -1,0 +1,35 @@
+{
+  "Found": true,
+  "Title": "Café Mélodie",
+  "Summary": "Une serveuse rêve d'opéra — et de Noël.",
+  "Year": 2015,
+  "MediaFields": [
+    {
+      "Name": "original-title",
+      "Type": "text",
+      "Text": "Café Mélodie à Montréal"
+    },
+    {
+      "Name": "release-date",
+      "Type": "date",
+      "Date": "2015-12-04T00:00:00Z"
+    }
+  ],
+  "Relations": [
+    {
+      "FromKind": "genre",
+      "FromTitle": "Comédie",
+      "Name": "genre-of"
+    },
+    {
+      "FromKind": "person",
+      "FromTitle": "Hélène Côté",
+      "Name": "credited-in",
+      "Attributes": {
+        "department": "Directing",
+        "job": "Director"
+      },
+      "SortOrder": 1000
+    }
+  ]
+}
