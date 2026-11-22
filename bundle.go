@@ -402,14 +402,14 @@ func Bundle() sdk.Bundle {
 		},
 		// The Library home is shared by Film and TV Libraries. A fixed
 		// movie-only rail would promote unmatched movie-class files in a
-		// TV Library (CORE-2535); deliberate class browsing stays in the
-		// filter bar and All Titles grid.
+		// TV Library (CORE-2535). The home is recommendations only: no
+		// per-class or catch-all Media grid (CORE-3066). Every Media,
+		// identified or not, stays reachable through Core's Library tab.
 		// The genre shelves are the Source contract's EntityFilter: "Media related to the genre entity
 		// named N in this Library" (the Comedy shelf below proves it; more
-		// shelves are a curation pass, not new vocabulary). The catch-all
-		// grid stays last: Media not yet identified carries no class field
-		// and would otherwise be unreachable. Section titles ship as a
-		// full locale map: en + fr today, with more locales to follow.
+		// shelves are a curation pass, not new vocabulary). Section titles
+		// ship as a full locale map: en + fr today, with more locales to
+		// follow.
 		Layouts: []sdk.LayoutSpec{
 			{ID: "home", Role: "browse", Sections: []sdk.SectionSpec{
 				// The hero reads "most-played":
@@ -454,39 +454,6 @@ func Bundle() sdk.Bundle {
 					ArtworkSlot: "poster",
 					Source: sdk.SourceSpec{Kind: "all-items",
 						EntityFilter: &sdk.EntityFilter{Kind: "genre", Name: "Comedy"}}},
-				{ID: "browse-episodes", Kind: "grid",
-					Title:       sdk.LocaleString{"en": "Episodes", "fr": "Épisodes"},
-					ArtworkSlot: "poster",
-					Source: sdk.SourceSpec{Kind: "all-items",
-						FieldFilters: map[string]any{"class": "episode"}}},
-				// The filter-bar's declared options narrow the adjacent grid
-				// (browse-all, directly below) by the `class` keystone —
-				// view-time FieldFilters the user picks instead of the
-				// declaration-time split above.
-				{ID: "browse-filter", Kind: "filter-bar",
-					Title:  sdk.LocaleString{"en": "Browse", "fr": "Parcourir"},
-					Source: sdk.SourceSpec{Kind: "all-items"},
-					FilterOptions: []sdk.FilterOption{
-						{Field: "class", Value: "movie",
-							Label: sdk.LocaleString{"en": "Movies", "fr": "Films"}},
-						{Field: "class", Value: "episode",
-							Label: sdk.LocaleString{"en": "Episodes", "fr": "Épisodes"}},
-						// No network or studio chips: a filter-bar option is a
-						// fixed field/value pair, and fixed network names would
-						// narrow a Library without them to an empty grid. Network
-						// chips return when Core can derive options from the
-						// values present in the Library (CORE-1711).
-					}},
-				// "all-items" here carries no FieldFilters, so it returns
-				// every Media row — movie
-				// and episode class values, never a show-level Entity (a
-				// Movie and an Episode are Media, never Entities, per the
-				// package doc above). The layout serves Film and TV
-				// Libraries alike, so the label names no class: a Films
-				// Library must not read "Movies & Episodes" (CORE-2320).
-				{ID: "browse-all", Kind: "grid",
-					Title:       sdk.LocaleString{"en": "All Titles", "fr": "Tous les titres"},
-					ArtworkSlot: "poster", Source: sdk.SourceSpec{Kind: "all-items"}},
 			}},
 			// The Season detail Layout (episode list, thumb + synopsis) —
 			// the proving case for additional Layouts.

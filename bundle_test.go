@@ -563,14 +563,13 @@ func TestHomeLeadsWithShowsShelf(t *testing.T) {
 	}
 }
 
-// TestHomeRowTitlesNameNoClass pins that the home layout's recently-added and
-// all-items rows carry class-neutral titles: the layout serves Film and TV
+// TestHomeRowTitlesNameNoClass pins that the home layout's recently-added row
+// carries a class-neutral title: the layout serves Film and TV
 // Libraries alike, so a Films Library must not read "Movies & Episodes"
 // (CORE-2320).
 func TestHomeRowTitlesNameNoClass(t *testing.T) {
 	want := map[string]sdk.LocaleString{
 		"recently-added": {"en": "Recently Added", "fr": "Ajouts récents"},
-		"browse-all":     {"en": "All Titles", "fr": "Tous les titres"},
 	}
 	for _, layout := range filmtv.Bundle().Layouts {
 		if layout.ID != "home" {
@@ -679,22 +678,36 @@ func TestTMDBRatingMappings(t *testing.T) {
 }
 
 // CORE-2535: this layout also serves TV Libraries, including unmatched files
-// that default to movie. Only deliberate catalog browsing should offer that split.
+// that default to movie, so no home section narrows to the movie class.
 func TestHomeHasNoMovieOnlyRail(t *testing.T) {
 	home, ok := filmtv.Bundle().BrowseLayout()
 	if !ok {
 		t.Fatal("missing browse layout")
 	}
-	all := false
 	for _, section := range home.Sections {
-		if section.Kind != "filter-bar" && section.Source.FieldFilters["class"] == "movie" {
+		if section.Source.FieldFilters["class"] == "movie" {
 			t.Errorf("movie-only home section %q promotes unmatched files in TV Libraries", section.ID)
 		}
-		if section.ID == "browse-all" && section.Source.Kind == "all-items" && len(section.Source.FieldFilters) == 0 {
-			all = true
-		}
 	}
-	if !all {
-		t.Error("loose Media lost their deliberate All Titles browse")
+}
+
+// CORE-3066: the home is the Library's recommendations. Browsing every Media
+// (per class or all of them) is Core's Library tab, so the home declares no
+// grid, no filter bar and no unnarrowed all-items Source.
+func TestHomeIsRecommendationsOnly(t *testing.T) {
+	home, ok := filmtv.Bundle().BrowseLayout()
+	if !ok {
+		t.Fatal("missing browse layout")
+	}
+	for _, section := range home.Sections {
+		if section.Kind == "grid" || section.Kind == "filter-bar" {
+			t.Errorf("home section %q is a %s; browsing belongs to the Library tab", section.ID, section.Kind)
+		}
+		if section.Source.Kind == "all-items" && section.Source.EntityFilter == nil {
+			t.Errorf("home section %q reads every Media of the Library", section.ID)
+		}
+		if section.Source.FieldFilters["class"] != nil {
+			t.Errorf("home section %q narrows to a class", section.ID)
+		}
 	}
 }
