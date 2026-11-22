@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -207,5 +208,37 @@ func TestParseNFODocumentCollectionAndEarlyYear(t *testing.T) {
 func TestParseNFODocumentURLOnlyHasNoRoot(t *testing.T) {
 	if _, err := ParseNFODocument(strings.NewReader("https://www.imdb.com/title/tt0000001/\n")); !errors.Is(err, ErrNoNFORoot) {
 		t.Fatalf("err = %v, want ErrNoNFORoot", err)
+	}
+}
+
+// TestParseNFODocumentSplitsLegacyCrew: Kodi splits <director> and <credits>
+// on its " / " item separator (Codex r1).
+func TestParseNFODocumentSplitsLegacyCrew(t *testing.T) {
+	entries, err := ParseNFODocument(strings.NewReader("<movie><director>Ann One / Bo Two</director>" +
+		"<credits>Cy Three / Di Four</credits><writer>Cy Three</writer></movie>"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := entries[0]
+	if !slices.Equal(got.Directors, []string{"Ann One", "Bo Two"}) || !slices.Equal(got.Writers, []string{"Cy Three", "Di Four"}) {
+		t.Fatalf("directors %q writers %q", got.Directors, got.Writers)
+	}
+}
+
+// TestParseNFODocumentDropsNonFiniteNumbers (Codex r1).
+func TestParseNFODocumentDropsNonFiniteNumbers(t *testing.T) {
+	for _, doc := range []string{
+		"<movie><ratings><rating><value>NaN</value></rating></ratings></movie>",
+		"<movie><ratings><rating><value>NaN</value></rating><rating><value>7.5</value></rating></ratings></movie>",
+		"<movie><rating>+Inf</rating><userrating>NaN</userrating><runtime>Inf</runtime></movie>",
+	} {
+		entries, err := ParseNFODocument(strings.NewReader(doc))
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := entries[0]
+		if (got.HasRating && got.Rating != 7.5) || got.UserRating != 0 || got.RuntimeMinutes != 0 {
+			t.Errorf("%s: rating %v/%v user %v runtime %v", doc, got.Rating, got.HasRating, got.UserRating, got.RuntimeMinutes)
+		}
 	}
 }

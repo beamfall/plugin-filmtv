@@ -302,12 +302,17 @@ func (s nfoSource) Categories() []string {
 }
 
 // item keys a video file by path and adds the play its own NFO records when
-// the run selected watch state.
-func (s nfoSource) item(path string) sdk.ForeignItem {
+// the run selected watch state. An NFO that exists but cannot be read fails
+// the item, so a checkpoint never moves past a play it did not read.
+func (s nfoSource) item(path string) (sdk.ForeignItem, error) {
 	if !slices.Contains(s.categories, sdk.CategoryWatchState) {
-		return sdk.ForeignItem{Path: path}
+		return sdk.ForeignItem{Path: path}, nil
 	}
-	return sdk.ForeignItem{Path: path, WatchState: nfoWatchState(path)}
+	state, err := nfoWatchState(path)
+	if err != nil {
+		return sdk.ForeignItem{}, fmt.Errorf("nfo tree: %w", err)
+	}
+	return sdk.ForeignItem{Path: path, WatchState: state}, nil
 }
 
 func (s nfoSource) Items(ctx context.Context) ([]sdk.ForeignItem, error) {
@@ -320,7 +325,11 @@ func (s nfoSource) Items(ctx context.Context) ([]sdk.ForeignItem, error) {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		items = append(items, s.item(it.Path))
+		item, err := s.item(it.Path)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, item)
 	}
 	return items, nil
 }
@@ -360,7 +369,7 @@ func (s nfoSource) Stream(
 		if err != nil {
 			return fmt.Errorf("nfo tree: resolve %q: %w", path, err)
 		}
-		callbackErr = pager.add(s.item(absolute))
+		callbackErr = pager.addFunc(func() (sdk.ForeignItem, error) { return s.item(absolute) })
 		return callbackErr
 	})
 	if callbackErr != nil {
@@ -398,12 +407,22 @@ func newFilmTVPageEmitter(
 }
 
 func (p *filmTVPageEmitter) add(item sdk.ForeignItem) error {
+	return p.addFunc(func() (sdk.ForeignItem, error) { return item, nil })
+}
+
+// addFunc adds the item build returns, calling build only for an item past
+// the resume checkpoint, so a resumed run does not re-read what it skips.
+func (p *filmTVPageEmitter) addFunc(build func() (sdk.ForeignItem, error)) error {
 	if err := p.ctx.Err(); err != nil {
 		return err
 	}
 	p.seen++
 	if p.seen <= p.resume {
 		return nil
+	}
+	item, err := build()
+	if err != nil {
+		return err
 	}
 	p.page = append(p.page, item)
 	if len(p.page) < filmTVImportPageItems {

@@ -165,11 +165,11 @@ func TestLocalNFOHydrationFieldsAreDeclared(t *testing.T) {
 func TestNFOSignatureTracksSidecars(t *testing.T) {
 	media := nfoGoldenLayouts["episode"].materialize(t)
 	dir := filepath.Dir(media)
-	initial := NFOSignature(media)
+	initial := mustNFOSignature(t, media)
 	if initial == "" {
 		t.Fatal("signature empty with a sidecar present")
 	}
-	if again := NFOSignature(media); again != initial {
+	if again := mustNFOSignature(t, media); again != initial {
 		t.Fatalf("signature unstable: %q then %q", initial, again)
 	}
 	if got := LocalNFOHydration(media).Signature; got != initial {
@@ -194,7 +194,7 @@ func TestNFOSignatureTracksSidecars(t *testing.T) {
 		if err := step.change(); err != nil {
 			t.Fatal(err)
 		}
-		current := NFOSignature(media)
+		current := mustNFOSignature(t, media)
 		if current == previous {
 			t.Fatalf("%s: signature unchanged (%q)", step.name, current)
 		}
@@ -217,7 +217,7 @@ func TestNFOSignatureTracksSidecars(t *testing.T) {
 func TestNFOSignatureNamesTheSidecar(t *testing.T) {
 	media := nfoGoldenLayouts["folder-film"].materialize(t)
 	folder := filepath.Join(filepath.Dir(media), nfoFilmRoot+".nfo")
-	before := NFOSignature(media)
+	before := mustNFOSignature(t, media)
 	info, err := os.Stat(folder)
 	if err != nil {
 		t.Fatal(err)
@@ -233,7 +233,7 @@ func TestNFOSignatureNamesTheSidecar(t *testing.T) {
 	if err := os.Chtimes(own, info.ModTime(), info.ModTime()); err != nil {
 		t.Fatal(err)
 	}
-	if after := NFOSignature(media); after == before {
+	if after := mustNFOSignature(t, media); after == before {
 		t.Fatalf("signature %q unchanged after a per-file NFO took over", after)
 	}
 }
@@ -255,7 +255,7 @@ func TestLocalNFOHydrationUnreadableIsNotRemoval(t *testing.T) {
 	if err := os.Chmod(sidecar, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if got := LocalNFOHydration(media); got.Unreadable || !got.Found || got.Signature != NFOSignature(media) {
+	if got := LocalNFOHydration(media); got.Unreadable || !got.Found || got.Signature != mustNFOSignature(t, media) {
 		t.Fatalf("restored sidecar plan = %+v", got)
 	}
 }
@@ -314,10 +314,10 @@ func TestFolderFilmNFODescribesOnlyTheMainFeature(t *testing.T) {
 		if err := os.WriteFile(path, nil, 0o600); err != nil {
 			t.Fatal(err)
 		}
-		if got := LocalNFOHydration(path); got.Found || NFOSignature(path) != "" {
+		if got := LocalNFOHydration(path); got.Found || mustNFOSignature(t, path) != "" {
 			t.Errorf("%s took the folder NFO: %+v", extra, got)
 		}
-		if got := nfoWatchState(path); got.Present {
+		if got := mustWatchState(t, path); got.Present {
 			t.Errorf("%s took the folder NFO play: %+v", extra, got)
 		}
 	}
@@ -403,15 +403,18 @@ func TestSelectCertification(t *testing.T) {
 		label  string
 		policy bool
 	}{
-		"Rated PG-13":    {"PG-13", true},
-		"US:R / UK:15":   {"R", true},
-		"CA:PG / US:R":   {"R", true},
-		"CA:PG / R":      {"R", true},
-		"CA:PG":          {"PG", false},
-		"US:Rated R":     {"R", true},
-		"TV-14":          {"TV-14", true},
-		" ":              {"", false},
-		"Germany:FSK 12": {"Germany:FSK 12", true},
+		"Rated PG-13":        {"PG-13", true},
+		"US:R / UK:15":       {"R", true},
+		"CA:PG / US:R":       {"R", true},
+		"CA:PG / R":          {"R", true},
+		"CA:PG":              {"PG", false},
+		"US:Rated R":         {"R", true},
+		"TV-14":              {"TV-14", true},
+		" ":                  {"", false},
+		"Germany:FSK 12":     {"FSK 12", false},
+		"Germany:FSK 16 / R": {"R", true},
+		"United States:PG":   {"PG", true},
+		"U.S.A.:PG-13":       {"PG-13", true},
 	} {
 		label, policy := selectCertification(in)
 		if label != want.label || policy != want.policy {
@@ -458,5 +461,194 @@ func TestNFOSourceHonoursCategorySelection(t *testing.T) {
 				t.Fatalf("items = %+v, want one with watch state %v", items, tc.watched)
 			}
 		})
+	}
+}
+
+func mustNFOSignature(t *testing.T, media string) string {
+	t.Helper()
+	signature, err := NFOSignature(media)
+	if err != nil {
+		t.Fatalf("NFOSignature(%s): %v", media, err)
+	}
+	return signature
+}
+
+func mustWatchState(t *testing.T, media string) sdk.WatchState {
+	t.Helper()
+	state, err := nfoWatchState(media)
+	if err != nil {
+		t.Fatalf("nfoWatchState(%s): %v", media, err)
+	}
+	return state
+}
+
+func writeNFO(t *testing.T, path, doc string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(doc), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestNFOLookupErrorIsUnreadable: a sidecar behind a folder that denies
+// traversal is unreadable everywhere, never absent (Codex r1).
+func TestNFOLookupErrorIsUnreadable(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("root traverses a mode-000 folder")
+	}
+	root := t.TempDir()
+	media := filepath.Join(root, "Film", "Film.mkv")
+	writeNFO(t, media, "")
+	hidden := filepath.Join(root, "hidden")
+	writeNFO(t, filepath.Join(hidden, "real.nfo"), "<"+nfoFilmRoot+"><title>Real</title><playcount>1</playcount></"+nfoFilmRoot+">")
+	if err := os.Symlink(filepath.Join(hidden, "real.nfo"), filepath.Join(root, "Film", "Film.nfo")); err != nil {
+		t.Fatal(err)
+	}
+	if got := LocalNFOHydration(media); !got.Found || got.Title != "Real" {
+		t.Fatalf("reachable symlinked sidecar plan = %+v", got)
+	}
+	if err := os.Chmod(hidden, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(hidden, 0o750) })
+	if got := LocalNFOHydration(media); !got.Unreadable || got.Signature != "" {
+		t.Errorf("plan behind a denied folder = %+v, want Unreadable", got)
+	}
+	if signature, err := NFOSignature(media); err == nil {
+		t.Errorf("NFOSignature behind a denied folder = %q, nil; want an error", signature)
+	}
+	if state, err := nfoWatchState(media); err == nil {
+		t.Errorf("nfoWatchState behind a denied folder = %+v, nil; want an error", state)
+	}
+}
+
+// TestOversizedNFOIsUnreadable: a file past the read limit is not parsed from
+// its head, which would drop the credits after the limit (Codex r1).
+func TestOversizedNFOIsUnreadable(t *testing.T) {
+	media := nfoGoldenLayouts["none"].materialize(t)
+	sidecar := strings.TrimSuffix(media, filepath.Ext(media)) + ".nfo"
+	doc := "<" + nfoFilmRoot + "><title>Big</title><plot>" + strings.Repeat("x", maxNFOFileBytes) +
+		"</plot><actor><name>Late Actor</name></actor></" + nfoFilmRoot + ">"
+	writeNFO(t, sidecar, doc)
+	if got := LocalNFOHydration(media); !got.Unreadable || got.Found || got.Signature != "" {
+		t.Fatalf("oversized sidecar plan Unreadable=%v Found=%v Signature=%q, want Unreadable", got.Unreadable, got.Found, got.Signature)
+	}
+}
+
+// TestSpacedSampleIsAnExtra follows Jellyfin's suffix list: trailer and
+// sample after a space, dot or underscore; other extras after a hyphen only.
+func TestSpacedSampleIsAnExtra(t *testing.T) {
+	media := nfoGoldenLayouts["folder-film"].materialize(t)
+	dir := filepath.Dir(media)
+	for name, extra := range map[string]bool{
+		"Film sample.mkv": true, "Film.sample.mkv": true, "Film_trailer.mkv": true, "Film Trailer.mkv": true,
+		"The Big Short.mkv": false, "Short Circuit.mkv": false,
+	} {
+		path := filepath.Join(dir, name)
+		writeNFO(t, path, "")
+		if got := LocalNFOHydration(path).Found; got == extra {
+			t.Errorf("%s took the folder NFO = %v, want %v", name, got, !extra)
+		}
+		if got := mustWatchState(t, path).Present; extra && got {
+			t.Errorf("%s took the folder NFO play", name)
+		}
+	}
+}
+
+// TestEpisodeTagsComeFromEveryRoot (Codex r1).
+func TestEpisodeTagsComeFromEveryRoot(t *testing.T) {
+	media := nfoGoldenLayouts["none"].materialize(t)
+	sidecar := strings.TrimSuffix(media, filepath.Ext(media)) + ".nfo"
+	writeNFO(t, sidecar, "<episodedetails><title>One</title><tag>Opener</tag></episodedetails>"+
+		"<episodedetails><title>Two</title><tag>Finale</tag><tag>opener</tag></episodedetails>")
+	got := ""
+	for _, field := range LocalNFOHydration(media).MediaFields {
+		if field.Name == tagsField {
+			got = field.Text
+		}
+	}
+	if got != "Opener, Finale" {
+		t.Fatalf("tags = %q, want both roots' tags once", got)
+	}
+}
+
+// TestNonFiniteRatingKeepsTheRest: a NaN rating is no rating, and the title
+// and credits still reach the plan (Codex r1).
+func TestNonFiniteRatingKeepsTheRest(t *testing.T) {
+	media := nfoGoldenLayouts["none"].materialize(t)
+	sidecar := strings.TrimSuffix(media, filepath.Ext(media)) + ".nfo"
+	for _, rating := range []string{"<ratings><rating><value>NaN</value></rating></ratings>", "<rating>Inf</rating>",
+		`<ratings><rating max="1e-300"><value>1e300</value></rating></ratings>`} {
+		writeNFO(t, sidecar, "<"+nfoFilmRoot+"><title>Kept</title>"+rating+"<userrating>NaN</userrating></"+nfoFilmRoot+">")
+		got := LocalNFOHydration(media)
+		if got.Title != "Kept" {
+			t.Fatalf("%s: title %q, want Kept", rating, got.Title)
+		}
+		for _, field := range got.MediaFields {
+			if field.Type == "number" {
+				t.Errorf("%s: number field %s = %v survived", rating, field.Name, field.Number)
+			}
+		}
+	}
+}
+
+// TestSignatureNamesTheAbsoluteSidecar: two folders' film NFOs with the same
+// name, size and mtime sign differently (Codex r1).
+func TestSignatureNamesTheAbsoluteSidecar(t *testing.T) {
+	root := t.TempDir()
+	stamp := time.Date(2024, 1, 2, 3, 4, 5, 0, time.UTC)
+	var signatures []string
+	for _, folder := range []string{"A", "B"} {
+		media := filepath.Join(root, folder, "Film.mkv")
+		writeNFO(t, media, "")
+		sidecar := filepath.Join(root, folder, nfoFilmRoot+".nfo")
+		writeNFO(t, sidecar, "<"+nfoFilmRoot+"><title>"+folder+"</title></"+nfoFilmRoot+">")
+		if err := os.Chtimes(sidecar, stamp, stamp); err != nil {
+			t.Fatal(err)
+		}
+		signature := mustNFOSignature(t, media)
+		if !strings.Contains(signature, sidecar) {
+			t.Errorf("signature %q does not name %s", signature, sidecar)
+		}
+		signatures = append(signatures, signature)
+	}
+	if signatures[0] == signatures[1] {
+		t.Fatalf("both folders sign %q", signatures[0])
+	}
+}
+
+// TestNFOSourceFailsOnAnUnreadableNFO: a watch-state run errors instead of
+// checkpointing past a play it could not read, and a resume past that item
+// does not read it again (Codex r1).
+func TestNFOSourceFailsOnAnUnreadableNFO(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("root reads a mode-000 file")
+	}
+	root := t.TempDir()
+	locked := filepath.Join(root, "a", "Film.nfo")
+	writeNFO(t, filepath.Join(root, "a", "Film.mkv"), "")
+	writeNFO(t, locked, "<"+nfoFilmRoot+"><playcount>1</playcount></"+nfoFilmRoot+">")
+	writeNFO(t, filepath.Join(root, "b", "Film.mkv"), "")
+	if err := os.Chmod(locked, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o600) })
+	source := nfoSource{root: root, categories: []string{sdk.CategoryWatchState}}
+	if items, err := source.Items(context.Background()); err == nil {
+		t.Errorf("Items over an unreadable NFO = %+v, nil; want an error", items)
+	}
+	emitted := 0
+	emit := func(_ context.Context, items []sdk.ForeignItem, _ string) error {
+		emitted += len(items)
+		return nil
+	}
+	if err := source.Stream(context.Background(), "", emit); err == nil {
+		t.Error("Stream over an unreadable NFO returned nil")
+	}
+	emitted = 0
+	if err := source.Stream(context.Background(), "1", emit); err != nil || emitted != 1 {
+		t.Errorf("resumed Stream = %v with %d items, want nil and 1 (the skipped NFO is not read)", err, emitted)
 	}
 }

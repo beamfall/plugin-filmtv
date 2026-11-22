@@ -3,7 +3,10 @@ package filmtv
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
+	"io/fs"
+	"math"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -105,9 +108,13 @@ func NFOOwnedRelations() []SidecarRelationKind {
 // else the folder film NFO when the file is the folder's main feature. A
 // malformed document contributes what parsed. Container sidecars (tvshow.nfo,
 // season.nfo) are not read: Core has no field provenance for the show and
-// season Entities they describe.
+// season Entities they describe. A failed sidecar lookup reads as unreadable,
+// never as no sidecar.
 func LocalNFOHydration(mediaPath string) NFOHydration {
-	path := mediaNFOPath(mediaPath)
+	path, err := mediaNFOPath(mediaPath)
+	if err != nil {
+		return NFOHydration{Unreadable: true}
+	}
 	if path == "" {
 		return NFOHydration{}
 	}
@@ -121,68 +128,80 @@ func LocalNFOHydration(mediaPath string) NFOHydration {
 }
 
 // NFOSignature identifies the NFO sidecar LocalNFOHydration reads for
-// mediaPath by its path relative to the media file's folder, its size and its
-// modification time, without reading it. It is "" when there is none, so it
-// changes when the sidecar appears, changes or is removed.
-func NFOSignature(mediaPath string) string {
-	path := mediaNFOPath(mediaPath)
-	if path == "" {
-		return ""
+// mediaPath by its absolute path, its size and its modification time, without
+// reading it. It is "" when there is none, so it changes when the sidecar
+// appears, changes or is removed. A lookup that fails for any reason other
+// than the file not existing is an error, never "".
+func NFOSignature(mediaPath string) (string, error) {
+	path, err := mediaNFOPath(mediaPath)
+	if err != nil || path == "" {
+		return "", err
 	}
 	info, err := os.Stat(path)
-	if err != nil || !info.Mode().IsRegular() {
-		return ""
+	if err != nil {
+		// The sidecar was found a moment ago: gone now is a change mid-lookup.
+		return "", fmt.Errorf("nfo sidecar %q: %w", path, err)
 	}
-	return nfoSignature(path, info)
+	if !info.Mode().IsRegular() {
+		return "", fmt.Errorf("nfo sidecar %q: %w", path, errNFOChanged)
+	}
+	return nfoSignature(path, info), nil
 }
 
 // nfoSignature is the signature of the sidecar at path with the given stat.
-// The sidecar always sits in the media file's folder, so its base name is its
-// path relative to that folder.
 func nfoSignature(path string, info os.FileInfo) string {
-	return filepath.Base(path) + ":" + strconv.FormatInt(info.Size(), 10) + ":" +
+	if absolute, err := filepath.Abs(path); err == nil {
+		path = absolute
+	}
+	return path + ":" + strconv.FormatInt(info.Size(), 10) + ":" +
 		strconv.FormatInt(info.ModTime().UnixNano(), 10)
 }
 
 // nfoWatchState is the play the media file's NFO records: watched when its
 // playcount is above zero or <watched> is true, at <lastplayed> when given.
-// It is the zero value (no watch-state) otherwise. The play count itself is
-// not carried: sdk.WatchState has no field for it.
-func nfoWatchState(mediaPath string) sdk.WatchState {
-	path := mediaNFOPath(mediaPath)
-	if path == "" {
-		return sdk.WatchState{}
+// It is the zero value (no watch-state) otherwise, and an error when the NFO
+// exists but cannot be read. The play count itself is not carried:
+// sdk.WatchState has no field for it.
+func nfoWatchState(mediaPath string) (sdk.WatchState, error) {
+	path, err := mediaNFOPath(mediaPath)
+	if err != nil || path == "" {
+		return sdk.WatchState{}, err
 	}
 	entries, _, err := readNFOSnapshot(path)
 	if err != nil {
-		return sdk.WatchState{}
+		return sdk.WatchState{}, fmt.Errorf("nfo sidecar %q: %w", path, err)
 	}
 	for _, entry := range entries {
 		if entry.Root != nfoFilmRoot && entry.Root != "episodedetails" {
 			continue
 		}
 		if entry.PlayCount > 0 || entry.Watched {
-			return sdk.WatchState{Present: true, Watched: true, OccurredAt: entry.LastPlayed}
+			return sdk.WatchState{Present: true, Watched: true, OccurredAt: entry.LastPlayed}, nil
 		}
 	}
-	return sdk.WatchState{}
+	return sdk.WatchState{}, nil
 }
 
 // mediaNFOPath returns the per-file sidecar, else the folder film NFO when
-// mediaPath is the folder's main feature, else "".
-func mediaNFOPath(mediaPath string) string {
+// mediaPath is the folder's main feature, else "". Looking up a candidate
+// that fails for any reason but its absence is an error.
+func mediaNFOPath(mediaPath string) (string, error) {
 	dir := filepath.Dir(mediaPath)
 	stem := strings.TrimSuffix(filepath.Base(mediaPath), filepath.Ext(mediaPath))
-	if candidate := filepath.Join(dir, stem+".nfo"); isRegularFile(candidate) {
-		return candidate
+	candidates := []string{filepath.Join(dir, stem+".nfo")}
+	if !isExtraStem(stem) {
+		candidates = append(candidates, filepath.Join(dir, nfoFilmRoot+".nfo"))
 	}
-	if isExtraStem(stem) {
-		return ""
+	for _, candidate := range candidates {
+		found, err := isRegularFile(candidate)
+		if err != nil {
+			return "", fmt.Errorf("nfo sidecar %q: %w", candidate, err)
+		}
+		if found {
+			return candidate, nil
+		}
 	}
-	if candidate := filepath.Join(dir, nfoFilmRoot+".nfo"); isRegularFile(candidate) {
-		return candidate
-	}
-	return ""
+	return "", nil
 }
 
 // reExtraLabel matches the Kodi extras suffix of a file stem, folded by
@@ -190,23 +209,43 @@ func mediaNFOPath(mediaPath string) string {
 // stem that is only such a label ("trailer.mkv").
 var reExtraLabel = regexp.MustCompile(`^(?:trailer|sample|featurette|behindthescene|deleted|deletedscene|interview|scene|short|clip|extra|other|blooper|outtake|gagreel|makingof|teaser|bonus)s?\d*$`)
 
+// looseExtraLabels are the suffixes Jellyfin also accepts after a dot, an
+// underscore or a space ("Film sample.mkv"); the rest need a hyphen.
+var looseExtraLabels = []string{"trailer", "sample"}
+
 // isExtraStem reports whether a file stem names an extra rather than the
 // main feature.
 func isExtraStem(stem string) bool {
 	if reExtraLabel.MatchString(notVersionKey(stem)) {
 		return true
 	}
-	at := strings.LastIndex(stem, "-")
-	return at >= 0 && reExtraLabel.MatchString(notVersionKey(stem[at+1:]))
+	if at := strings.LastIndex(stem, "-"); at >= 0 && reExtraLabel.MatchString(notVersionKey(stem[at+1:])) {
+		return true
+	}
+	at := strings.LastIndexAny(stem, " ._")
+	return at >= 0 && slices.Contains(looseExtraLabels, asciiLower(stem[at+1:]))
 }
 
-func isRegularFile(path string) bool {
+// isRegularFile reports whether path names a regular file. Only a clean
+// not-found is false with no error: any other stat failure is returned, so
+// a sidecar behind a folder that denies traversal never reads as absent.
+func isRegularFile(path string) (bool, error) {
 	info, err := os.Stat(path)
-	return err == nil && info.Mode().IsRegular()
+	switch {
+	case err == nil:
+		return info.Mode().IsRegular(), nil
+	case errors.Is(err, fs.ErrNotExist):
+		return false, nil
+	}
+	return false, err
 }
 
 // errNFOChanged reports a sidecar that changed while it was read.
 var errNFOChanged = errors.New("nfo changed while it was read")
+
+// errNFOTooLarge reports a sidecar past the read limit: reading only its
+// head would drop what follows (credits) as if the file had removed it.
+var errNFOTooLarge = errors.New("nfo larger than the read limit")
 
 // afterNFORead runs between reading a sidecar and checking it is unchanged;
 // tests replace it to edit the file mid-read.
@@ -214,8 +253,9 @@ var afterNFORead = func(string) {}
 
 // readNFOSnapshot parses one sidecar, bounded like the identification read,
 // and returns the signature of the bytes it parsed. It fails when the file
-// cannot be read, changed during the read (its stat before and after differ,
-// or the path now names another file), or holds an XML syntax error before
+// cannot be read, is larger than the read limit, changed during the read (its
+// stat before and after differ, or the path now names another file), or holds
+// an XML syntax error before
 // any root element. A file with no XML element at all (a bare provider URL)
 // parses to no entries.
 func readNFOSnapshot(path string) ([]mediaimport.NFOEntry, string, error) {
@@ -231,9 +271,12 @@ func readNFOSnapshot(path string) ([]mediaimport.NFOEntry, string, error) {
 	if !before.Mode().IsRegular() {
 		return nil, "", errNFOChanged
 	}
-	data, err := io.ReadAll(io.LimitReader(f, maxNFOFileBytes))
+	data, err := io.ReadAll(io.LimitReader(f, maxNFOFileBytes+1))
 	if err != nil {
 		return nil, "", err
+	}
+	if len(data) > maxNFOFileBytes {
+		return nil, "", errNFOTooLarge
 	}
 	afterNFORead(path)
 	after, err := f.Stat()
@@ -311,9 +354,24 @@ func episodeHydration(entries []mediaimport.NFOEntry) NFOHydration {
 	out.MediaFields = appendText(out.MediaFields, EpisodeTitleField, strings.Join(titles, " / "))
 	out.MediaFields = appendText(out.MediaFields, "original-title", first.OriginalTitle)
 	out.MediaFields = appendDate(out.MediaFields, AirDateField, aired)
-	out.MediaFields = append(out.MediaFields, commonFields(first)...)
+	out.MediaFields = append(out.MediaFields, commonFields(withAllTags(entries))...)
 	out.Relations = creditRelations(entries)
 	return out
+}
+
+// withAllTags is the first entry carrying the tags of every entry, so a tag
+// named only by a later episode root still reaches the plan.
+func withAllTags(entries []mediaimport.NFOEntry) mediaimport.NFOEntry {
+	merged := entries[0]
+	merged.Tags = nil
+	for _, entry := range entries {
+		for _, tag := range entry.Tags {
+			if !slices.ContainsFunc(merged.Tags, func(have string) bool { return strings.EqualFold(have, tag) }) {
+				merged.Tags = append(merged.Tags, tag)
+			}
+		}
+	}
+	return merged
 }
 
 // commonFields are the Media fields a film and an episode NFO share.
@@ -363,7 +421,7 @@ func selectCertification(mpaa string) (label string, policy bool) {
 			continue
 		}
 		switch {
-		case country == "us" || country == "usa":
+		case isUSQualifier(country):
 			return value, true
 		case country == "" && !policy:
 			label, policy = value, true
@@ -377,18 +435,31 @@ func selectCertification(mpaa string) (label string, policy bool) {
 	return fallback, false
 }
 
-// splitCertification splits "US:Rated R" into its lowercased country and the
-// bare label. A label with no country of at most three letters before a colon
-// is unqualified ("Germany:FSK 12" stays whole).
+// reCertificationQualifier matches the country before a rating's colon: a
+// code or a name ("US", "Germany", "United States").
+var reCertificationQualifier = regexp.MustCompile(`^[\pL][\pL .]{0,39}$`)
+
+// splitCertification splits "US:Rated R" or "Germany:FSK 12" into its
+// lowercased country and the bare label. A label with no country before a
+// colon is unqualified.
 func splitCertification(entry string) (country, label string) {
 	label = strings.TrimSpace(entry)
-	if prefix, rest, ok := strings.Cut(label, ":"); ok && len(strings.TrimSpace(prefix)) <= 3 {
+	if prefix, rest, ok := strings.Cut(label, ":"); ok && reCertificationQualifier.MatchString(strings.TrimSpace(prefix)) {
 		country, label = strings.ToLower(strings.TrimSpace(prefix)), strings.TrimSpace(rest)
 	}
 	if rest, ok := strings.CutPrefix(label, "Rated "); ok {
 		label = strings.TrimSpace(rest)
 	}
 	return country, label
+}
+
+// isUSQualifier reports whether a lowercased rating qualifier names the US.
+func isUSQualifier(country string) bool {
+	switch strings.NewReplacer(".", "", " ", "").Replace(country) {
+	case "us", "usa", "unitedstates", "unitedstatesofamerica":
+		return true
+	}
+	return false
 }
 
 // creditRelations links genres, studios and people to the Media. Each person
@@ -479,7 +550,7 @@ func appendText(fields []SidecarField, name, value string) []SidecarField {
 }
 
 func appendNumber(fields []SidecarField, name string, value float64) []SidecarField {
-	if value <= 0 {
+	if value <= 0 || math.IsInf(value, 0) || math.IsNaN(value) {
 		return fields
 	}
 	return append(fields, SidecarField{Name: name, Type: "number", Number: value})

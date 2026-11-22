@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -212,9 +213,9 @@ func entryFromNode(root *nfoNode) NFOEntry {
 		case "tag":
 			entry.Tags = appendUnique(entry.Tags, value)
 		case "director":
-			entry.Directors = appendUnique(entry.Directors, value)
+			entry.Directors = appendSplit(entry.Directors, value)
 		case "writer", "credits":
-			entry.Writers = appendUnique(entry.Writers, value)
+			entry.Writers = appendSplit(entry.Writers, value)
 		case "set", "collection":
 			// Current form <set><name>…</name></set>; older files put the
 			// name directly in <set>, and some writers say <collection>.
@@ -309,7 +310,7 @@ func readRatings(ratings *nfoNode, entry *NFOEntry) {
 	if scale, ok := parseNumber(chosen.attrs["max"]); ok && scale > 0 && scale != 10 {
 		value = value * 10 / scale
 	}
-	if value <= 0 {
+	if value <= 0 || math.IsInf(value, 0) {
 		return
 	}
 	entry.Rating, entry.HasRating = value, true
@@ -345,9 +346,11 @@ func parseNFODate(value string) (time.Time, bool) {
 	return time.Time{}, false
 }
 
+// parseNumber reads a finite number: "NaN" and "Inf" are no value, since
+// Core's number fields cannot store them.
 func parseNumber(value string) (float64, bool) {
 	v, err := strconv.ParseFloat(strings.ReplaceAll(strings.TrimSpace(value), ",", "."), 64)
-	if err != nil {
+	if err != nil || math.IsNaN(v) || math.IsInf(v, 0) {
 		return 0, false
 	}
 	return v, true
