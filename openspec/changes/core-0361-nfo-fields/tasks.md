@@ -13,6 +13,9 @@
 - [x] 2.2 Watch state from `playcount`, category selection, extras; bundle validates
 - [x] 2.3 Unreadable and changed-while-read sidecars; certification selection
 - [x] 2.4 `openspec validate --all --strict` passes
+- [x] 2.5 Lookup errors and oversized files read as unreadable; watch-state source fails on them
+- [x] 2.6 Space-separated sample, split director and credits, non-finite ratings, tags from every root, country-name qualifiers
+- [x] 2.7 Absolute-path signature; resume skips NFO reads before the checkpoint
 
 ## 3. Release (owner approval)
 
