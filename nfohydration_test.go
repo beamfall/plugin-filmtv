@@ -7,6 +7,8 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -122,13 +124,8 @@ func TestLocalNFOHydrationFieldsAreDeclared(t *testing.T) {
 	for _, spec := range bundle.MediaFields {
 		mediaTypes[spec.Name] = spec.Type
 	}
-	kindFields := map[string]map[string]string{}
 	relations := map[string]sdk.RelationSpec{}
 	for _, kind := range bundle.EntityKinds {
-		kindFields[kind.Name] = map[string]string{}
-		for _, spec := range kind.Fields {
-			kindFields[kind.Name][spec.Name] = spec.Type
-		}
 		for _, relation := range kind.Relations {
 			relations[kind.Name+"\x00"+relation.Name] = relation
 		}
@@ -146,8 +143,6 @@ func TestLocalNFOHydrationFieldsAreDeclared(t *testing.T) {
 	for name, layout := range nfoGoldenLayouts {
 		got := LocalNFOHydration(layout.materialize(t))
 		check(name+" media", mediaTypes, got.MediaFields)
-		check(name+" season", kindFields["season"], got.GroupFields)
-		check(name+" show", kindFields["show"], got.ParentFields)
 		for _, relation := range got.Relations {
 			spec, ok := relations[relation.FromKind+"\x00"+relation.Name]
 			if !ok || spec.ToKind != sdk.MediaKindName {
@@ -172,10 +167,13 @@ func TestNFOSignatureTracksSidecars(t *testing.T) {
 	dir := filepath.Dir(media)
 	initial := NFOSignature(media)
 	if initial == "" {
-		t.Fatal("signature empty with sidecars present")
+		t.Fatal("signature empty with a sidecar present")
 	}
 	if again := NFOSignature(media); again != initial {
 		t.Fatalf("signature unstable: %q then %q", initial, again)
+	}
+	if got := LocalNFOHydration(media).Signature; got != initial {
+		t.Fatalf("plan signature %q, want the stat signature %q", got, initial)
 	}
 	episodeNFO := filepath.Join(dir, "Tidewater S01E01.nfo")
 	steps := []struct {
@@ -187,10 +185,9 @@ func TestNFOSignatureTracksSidecars(t *testing.T) {
 			return os.Chtimes(episodeNFO, future, future)
 		}},
 		{"size", func() error {
-			return os.WriteFile(filepath.Join(dir, "season.nfo"), []byte("<season><plot>Longer plot now.</plot></season>"), 0o600)
+			return os.WriteFile(episodeNFO, []byte("<episodedetails><plot>Longer plot now.</plot></episodedetails>"), 0o600)
 		}},
 		{"removed", func() error { return os.Remove(episodeNFO) }},
-		{"show removed", func() error { return os.Remove(filepath.Join(filepath.Dir(dir), "tvshow.nfo")) }},
 	}
 	previous := initial
 	for _, step := range steps {
@@ -201,16 +198,158 @@ func TestNFOSignatureTracksSidecars(t *testing.T) {
 		if current == previous {
 			t.Fatalf("%s: signature unchanged (%q)", step.name, current)
 		}
+		if got := LocalNFOHydration(media).Signature; got != current {
+			t.Fatalf("%s: plan signature %q, want %q", step.name, got, current)
+		}
 		previous = current
 	}
-	if err := os.Remove(filepath.Join(dir, "season.nfo")); err != nil {
+	if previous != "" {
+		t.Fatalf("signature with no media NFO = %q, want empty (container sidecars are not read)", previous)
+	}
+	if got := LocalNFOHydration(media); got.Found || got.Unreadable {
+		t.Fatalf("hydration with only container sidecars = %+v", got)
+	}
+}
+
+// TestNFOSignatureNamesTheSidecar: a per-file NFO and the folder film NFO with
+// the same size and mtime still sign differently, so switching which one
+// feeds the plan triggers a rescan.
+func TestNFOSignatureNamesTheSidecar(t *testing.T) {
+	media := nfoGoldenLayouts["folder-film"].materialize(t)
+	folder := filepath.Join(filepath.Dir(media), nfoFilmRoot+".nfo")
+	before := NFOSignature(media)
+	info, err := os.Stat(folder)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if got := NFOSignature(media); got != "" {
-		t.Fatalf("signature with no sidecars = %q, want empty", got)
+	data, err := os.ReadFile(folder)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if got := LocalNFOHydration(media); got.Found || len(got.GroupFields)+len(got.ParentFields) != 0 {
-		t.Fatalf("hydration with no sidecars = %+v", got)
+	own := strings.TrimSuffix(media, filepath.Ext(media)) + ".nfo"
+	if err := os.WriteFile(own, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(own, info.ModTime(), info.ModTime()); err != nil {
+		t.Fatal(err)
+	}
+	if after := NFOSignature(media); after == before {
+		t.Fatalf("signature %q unchanged after a per-file NFO took over", after)
+	}
+}
+
+func TestLocalNFOHydrationUnreadableIsNotRemoval(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("root reads a mode-000 file")
+	}
+	media := nfoGoldenLayouts["kodi-film"].materialize(t)
+	sidecar := strings.TrimSuffix(media, filepath.Ext(media)) + ".nfo"
+	if err := os.Chmod(sidecar, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(sidecar, 0o600) })
+	got := LocalNFOHydration(media)
+	if !got.Unreadable || got.Found || got.Signature != "" || got.Title != "" {
+		t.Fatalf("unreadable sidecar plan = %+v, want Unreadable with no values or signature", got)
+	}
+	if err := os.Chmod(sidecar, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := LocalNFOHydration(media); got.Unreadable || !got.Found || got.Signature != NFOSignature(media) {
+		t.Fatalf("restored sidecar plan = %+v", got)
+	}
+}
+
+func TestLocalNFOHydrationSyntaxErrorIsUnreadable(t *testing.T) {
+	media := nfoGoldenLayouts["none"].materialize(t)
+	sidecar := strings.TrimSuffix(media, filepath.Ext(media)) + ".nfo"
+	if err := os.WriteFile(sidecar, []byte("<?xml version=\"1.0\"?>\n</broken>"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := LocalNFOHydration(media); !got.Unreadable {
+		t.Fatalf("syntax-error sidecar plan = %+v, want Unreadable", got)
+	}
+	if err := os.WriteFile(sidecar, []byte("https://www.imdb.com/title/tt0000001/\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := LocalNFOHydration(media); got.Unreadable || got.Found || got.Signature == "" {
+		t.Fatalf("URL-only sidecar plan = %+v, want readable, empty, signed", got)
+	}
+}
+
+func TestLocalNFOHydrationRefusesAnEditDuringTheRead(t *testing.T) {
+	media := nfoGoldenLayouts["kodi-film"].materialize(t)
+	sidecar := strings.TrimSuffix(media, filepath.Ext(media)) + ".nfo"
+	for name, edit := range map[string]func() error{
+		"rewritten": func() error {
+			return os.WriteFile(sidecar, []byte("<"+nfoFilmRoot+"><title>New</title></"+nfoFilmRoot+">"), 0o600)
+		},
+		"replaced": func() error {
+			next := sidecar + ".tmp"
+			if err := os.WriteFile(next, []byte("<"+nfoFilmRoot+"><title>Other</title></"+nfoFilmRoot+">"), 0o600); err != nil {
+				return err
+			}
+			return os.Rename(next, sidecar)
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			afterNFORead = func(string) {
+				if err := edit(); err != nil {
+					t.Error(err)
+				}
+			}
+			t.Cleanup(func() { afterNFORead = func(string) {} })
+			if got := LocalNFOHydration(media); !got.Unreadable || got.Signature != "" {
+				t.Fatalf("plan read across an edit = %+v, want Unreadable", got)
+			}
+		})
+	}
+}
+
+func TestFolderFilmNFODescribesOnlyTheMainFeature(t *testing.T) {
+	media := nfoGoldenLayouts["folder-film"].materialize(t)
+	dir := filepath.Dir(media)
+	for _, extra := range []string{"lantern.keeper.2019-trailer.mkv", "Behind the Scenes-featurette.mkv", "trailer.mkv", "Film - Deleted Scenes.mkv"} {
+		path := filepath.Join(dir, extra)
+		if err := os.WriteFile(path, nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if got := LocalNFOHydration(path); got.Found || NFOSignature(path) != "" {
+			t.Errorf("%s took the folder NFO: %+v", extra, got)
+		}
+		if got := nfoWatchState(path); got.Present {
+			t.Errorf("%s took the folder NFO play: %+v", extra, got)
+		}
+	}
+	if got := LocalNFOHydration(media); !got.Found {
+		t.Fatal("main feature lost the folder NFO")
+	}
+}
+
+func TestEpisodeKeepsExplicitYearAndSortTitle(t *testing.T) {
+	media := nfoGoldenLayouts["none"].materialize(t)
+	sidecar := strings.TrimSuffix(media, filepath.Ext(media)) + ".nfo"
+	doc := "<episodedetails><title>Pilot</title><year>1999</year><sorttitle>First</sorttitle></episodedetails>"
+	if err := os.WriteFile(sidecar, []byte(doc), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got := LocalNFOHydration(media)
+	if got.Year != 1999 || got.SortTitle != "First" {
+		t.Fatalf("episode year %d sort title %q, want 1999 and First", got.Year, got.SortTitle)
+	}
+}
+
+func TestNFOOwnedRelationsCoverEveryPlannedRelation(t *testing.T) {
+	owned := map[SidecarRelationKind]bool{}
+	for _, kind := range NFOOwnedRelations() {
+		owned[kind] = true
+	}
+	for name, layout := range nfoGoldenLayouts {
+		for _, relation := range LocalNFOHydration(layout.materialize(t)).Relations {
+			if !owned[SidecarRelationKind{FromKind: relation.FromKind, Name: relation.Name}] {
+				t.Errorf("%s relation %s/%s is not owned", name, relation.FromKind, relation.Name)
+			}
+		}
 	}
 }
 
@@ -259,16 +398,65 @@ func TestNFOSourceCarriesPlayRecord(t *testing.T) {
 	}
 }
 
-func TestNormalizeCertification(t *testing.T) {
-	for in, want := range map[string]string{
-		"Rated PG-13":    "PG-13",
-		"US:R / UK:15":   "R",
-		"TV-14":          "TV-14",
-		" ":              "",
-		"Germany:FSK 12": "Germany:FSK 12",
+func TestSelectCertification(t *testing.T) {
+	for in, want := range map[string]struct {
+		label  string
+		policy bool
+	}{
+		"Rated PG-13":    {"PG-13", true},
+		"US:R / UK:15":   {"R", true},
+		"CA:PG / US:R":   {"R", true},
+		"CA:PG / R":      {"R", true},
+		"CA:PG":          {"PG", false},
+		"US:Rated R":     {"R", true},
+		"TV-14":          {"TV-14", true},
+		" ":              {"", false},
+		"Germany:FSK 12": {"Germany:FSK 12", true},
 	} {
-		if got := normalizeCertification(in); got != want {
-			t.Errorf("normalizeCertification(%q) = %q, want %q", in, got, want)
+		label, policy := selectCertification(in)
+		if label != want.label || policy != want.policy {
+			t.Errorf("selectCertification(%q) = %q, %v, want %q, %v", in, label, policy, want.label, want.policy)
 		}
+	}
+}
+
+func TestForeignRatingNeverSetsTheCeiling(t *testing.T) {
+	for mpaa, want := range map[string]string{"CA:PG / US:R": "R", "CA:PG": "", "PG-13": "PG-13"} {
+		got := ""
+		for _, field := range certificationFields(mpaa) {
+			if field.Name == "certification" {
+				got = field.Text
+			}
+		}
+		if got != want {
+			t.Errorf("certification for %q = %q, want %q", mpaa, got, want)
+		}
+	}
+}
+
+func TestNFOSourceHonoursCategorySelection(t *testing.T) {
+	media := nfoGoldenLayouts["kodi-film"].materialize(t)
+	root := filepath.Dir(filepath.Dir(media))
+	for name, tc := range map[string]struct {
+		requested []string
+		watched   bool
+	}{
+		"collections only": {[]string{sdk.CategoryCollections}, false},
+		"watch state":      {[]string{sdk.CategoryWatchState}, true},
+		"default":          {nil, true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			source := NewNFOSourceForCategories(root, tc.requested)
+			if got := slices.Contains(source.Categories(), sdk.CategoryWatchState); got != tc.watched {
+				t.Fatalf("watch-state advertised = %v, want %v", got, tc.watched)
+			}
+			items, err := source.Items(context.Background()) //nolint:staticcheck // deliberate SDK 0.x compatibility assertion
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(items) != 1 || items[0].WatchState.Present != tc.watched {
+				t.Fatalf("items = %+v, want one with watch state %v", items, tc.watched)
+			}
+		})
 	}
 }

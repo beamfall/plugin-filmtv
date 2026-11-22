@@ -69,6 +69,10 @@ type NFOActor struct {
 	Thumb    string
 }
 
+// ErrNoNFORoot reports a document that decoded cleanly but holds no XML
+// element, such as an NFO that is only a provider URL.
+var ErrNoNFORoot = errors.New("nfo: no root element")
+
 // ParseNFODocument reads every root element of a Kodi-family NFO. It is
 // tolerant: a malformed or truncated document returns the entries and fields
 // decoded before the fault, and an error only when nothing at all was read.
@@ -81,7 +85,7 @@ func ParseNFODocument(r io.Reader) ([]NFOEntry, error) {
 	}
 	if len(entries) == 0 {
 		if err == nil {
-			err = errors.New("nfo: no root element")
+			err = ErrNoNFORoot
 		}
 		return nil, err
 	}
@@ -211,16 +215,16 @@ func entryFromNode(root *nfoNode) NFOEntry {
 			entry.Directors = appendUnique(entry.Directors, value)
 		case "writer", "credits":
 			entry.Writers = appendUnique(entry.Writers, value)
-		case "set":
+		case "set", "collection":
 			// Current form <set><name>…</name></set>; older files put the
-			// name directly in <set>.
+			// name directly in <set>, and some writers say <collection>.
 			if name := child.child("name").value(); name != "" {
 				entry.Set = name
 			} else if len(child.children) == 0 && value != "" {
 				entry.Set = value
 			}
 		case "year":
-			if y := parseYear(value); y > 0 {
+			if y := parseNFOYear(value); y > 0 {
 				entry.Year = y
 			}
 		case "premiered":
@@ -442,4 +446,16 @@ func (r *singleByteReader) Read(p []byte) (int, error) {
 		r.pending = append(r.pending[:0], buf[:utf8.EncodeRune(buf[:], ch)]...)
 	}
 	return n, nil
+}
+
+// parseNFOYear reads <year>: a bare four-digit year from 1870 (the first
+// films) on, else the first 19xx/20xx year in the text.
+func parseNFOYear(value string) int {
+	trimmed := strings.TrimSpace(value)
+	if len(trimmed) == 4 {
+		if y, err := strconv.Atoi(trimmed); err == nil && y >= 1870 {
+			return y
+		}
+	}
+	return parseYear(value)
 }

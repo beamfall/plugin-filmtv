@@ -281,24 +281,32 @@ func newJellyfinSource(dbPath string, categories []string) multiUserSource {
 }
 
 // nfoSource adapts an NFO sidecar tree to sdk.Source. Each video file is a
-// path-keyed item; when its own NFO records a play (<playcount>, <watched>,
-// <lastplayed>) the item carries that as watch-state, which the handler writes
-// for the importing profile only. NFO provider IDs ride into identification
-// through the scan/identify path (Parse Hints) and the NFO metadata through
-// the local hydration seam (nfohydration.go), not through this source.
+// path-keyed item; when the run selected watch state and the file's NFO
+// records a play (<playcount>, <watched>, <lastplayed>) the item carries that
+// as watch-state, which the handler writes for the importing profile only.
+// NFO provider IDs ride into identification through the scan/identify path
+// (Parse Hints) and the NFO metadata through the local hydration seam
+// (nfohydration.go), not through this source.
 type nfoSource struct {
-	root string
+	root       string
+	categories []string
 }
 
-// Categories: watch-state from the NFO play record, plus "collections" for
+// nfoCategories: watch-state from the NFO play record, plus "collections" for
 // the local-artwork material the tree carries.
-func (nfoSource) Categories() []string {
-	return []string{sdk.CategoryWatchState, sdk.CategoryCollections}
+var nfoCategories = []string{sdk.CategoryWatchState, sdk.CategoryCollections}
+
+// Categories are the run's selected categories the NFO tree carries.
+func (s nfoSource) Categories() []string {
+	return slices.Clone(s.categories)
 }
 
-// nfoForeignItem keys a video file by path and adds the play its own NFO
-// records, if any.
-func nfoForeignItem(path string) sdk.ForeignItem {
+// item keys a video file by path and adds the play its own NFO records when
+// the run selected watch state.
+func (s nfoSource) item(path string) sdk.ForeignItem {
+	if !slices.Contains(s.categories, sdk.CategoryWatchState) {
+		return sdk.ForeignItem{Path: path}
+	}
 	return sdk.ForeignItem{Path: path, WatchState: nfoWatchState(path)}
 }
 
@@ -312,7 +320,7 @@ func (s nfoSource) Items(ctx context.Context) ([]sdk.ForeignItem, error) {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		items = append(items, nfoForeignItem(it.Path))
+		items = append(items, s.item(it.Path))
 	}
 	return items, nil
 }
@@ -352,7 +360,7 @@ func (s nfoSource) Stream(
 		if err != nil {
 			return fmt.Errorf("nfo tree: resolve %q: %w", path, err)
 		}
-		callbackErr = pager.add(nfoForeignItem(absolute))
+		callbackErr = pager.add(s.item(absolute))
 		return callbackErr
 	})
 	if callbackErr != nil {
@@ -442,5 +450,13 @@ func parseImportCheckpoint(checkpoint string) (int, error) {
 // NewNFOSource returns the NFO migration Source over a sidecar library rooted at
 // root. (filmtv, "nfo") → here.
 func NewNFOSource(root string) sdk.Source { //nolint:staticcheck // deliberate SDK 0.x compatibility path for pre-streaming consumers
-	return nfoSource{root: root}
+	return nfoSource{root: root, categories: slices.Clone(nfoCategories)}
+}
+
+// NewNFOSourceForCategories returns an NFO source scoped to the run's
+// requested categories, as NewPlexSourceForCategories does: a nil selection
+// defaults to watch state, and a selection without watch state emits items
+// with none.
+func NewNFOSourceForCategories(root string, requested []string) sdk.Source { //nolint:staticcheck // deliberate SDK 0.x compatibility path for pre-streaming consumers
+	return nfoSource{root: root, categories: scopeCategories(nfoCategories, requested)}
 }

@@ -2,6 +2,7 @@ package mediaimport
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"reflect"
 	"strings"
@@ -190,5 +191,21 @@ func TestParseNFODateRejectsImplausibleValues(t *testing.T) {
 	}
 	if _, ok := parseVotes("-3"); ok {
 		t.Error("negative votes accepted")
+	}
+}
+
+func TestParseNFODocumentCollectionAndEarlyYear(t *testing.T) {
+	entries, err := ParseNFODocument(strings.NewReader("<" + "mo" + "vie><year>1896</year><collection>Lumiere Shorts</collection></" + "mo" + "vie>"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if entries[0].Year != 1896 || entries[0].Set != "Lumiere Shorts" {
+		t.Fatalf("year %d set %q, want 1896 and Lumiere Shorts", entries[0].Year, entries[0].Set)
+	}
+}
+
+func TestParseNFODocumentURLOnlyHasNoRoot(t *testing.T) {
+	if _, err := ParseNFODocument(strings.NewReader("https://www.imdb.com/title/tt0000001/\n")); !errors.Is(err, ErrNoNFORoot) {
+		t.Fatalf("err = %v, want ErrNoNFORoot", err)
 	}
 }

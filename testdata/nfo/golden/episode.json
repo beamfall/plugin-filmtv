@@ -65,54 +65,5 @@
       },
       "SortOrder": 1001
     }
-  ],
-  "GroupFields": [
-    {
-      "Name": "overview",
-      "Type": "text",
-      "Text": "The first winter after the storm."
-    },
-    {
-      "Name": "air-date",
-      "Type": "date",
-      "Date": "2021-01-15T00:00:00Z"
-    }
-  ],
-  "ParentFields": [
-    {
-      "Name": "summary",
-      "Type": "text",
-      "Text": "A coastal town and the families who keep it afloat."
-    },
-    {
-      "Name": "first-air-date",
-      "Type": "date",
-      "Date": "2021-01-15T00:00:00Z"
-    },
-    {
-      "Name": "status",
-      "Type": "text",
-      "Text": "Continuing"
-    },
-    {
-      "Name": "network",
-      "Type": "text",
-      "Text": "Coastline Network"
-    },
-    {
-      "Name": "certification-display",
-      "Type": "text",
-      "Text": "TV-14"
-    },
-    {
-      "Name": "community-rating",
-      "Type": "number",
-      "Number": 8.1
-    },
-    {
-      "Name": "community-rating-votes",
-      "Type": "number",
-      "Number": 3400
-    }
   ]
 }
