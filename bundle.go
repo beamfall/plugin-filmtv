@@ -818,6 +818,29 @@ func Bundle() sdk.Bundle {
 				// takes; the element's `id` is the prefixed objectID form
 				// ("series-121361") and cannot feed the lookup.
 				CandidateIDPath: "tvdb_id",
+				Children: []sdk.ChildListing{
+					{
+						Level:        "season",
+						ListTemplate: "/series/{id}/extended",
+						ItemsPath:    "data.seasons[?type.type=official]",
+						Key:          "id",
+						Label:        "name",
+						Sequence:     "number",
+						Year:         "year",
+						Artwork:      "image",
+					},
+					{
+						Level:        "episode",
+						ListTemplate: "/seasons/{parent}/extended",
+						ItemsPath:    "data.episodes",
+						Key:          "id",
+						Label:        "name",
+						Sequence:     "seasonNumber",
+						Index:        "number",
+						Year:         "aired",
+						Artwork:      "image",
+					},
+				},
 				// GET /series/{id}/extended?meta=translations — TVDB v4 wraps
 				// payloads in {"status": "success", "data": {...}}; the
 				// extended record adds translations and every artwork.
@@ -874,20 +897,48 @@ func Bundle() sdk.Bundle {
 				ImpliedMediaFields: map[string]string{"media.class": "episode"},
 			},
 			// TVmaze needs no key or account (tvmaze.com/api, read
-			// 2026-11-14). Its search response is a bare JSON array, which
-			// the SDK refuses as a candidates path, so this scraper has no
-			// free-text search yet: it looks a show up by its TVmaze id, and
-			// declares lookups for TheTVDB and IMDb ids. Its child endpoints
-			// also return bare arrays. The child path dialect has no way to
-			// map unnumbered special episodes to sequence zero based on type.
-			// Summaries are HTML and stay unmapped until the transform
-			// vocabulary can strip it.
+			// 2026-11-14). Summaries are HTML and stay unmapped.
 			{
 				ID:          "tvmaze-show",
 				DisplayName: sdk.L("TVmaze"),
 				Attribution: tvmazeAttribution,
 				Kind:        "http-json",
 				Endpoint:    "https://api.tvmaze.com",
+				// GET /search/shows — a bare array of {score, show} results.
+				SearchTemplate:  "/search/shows?q={query}",
+				CandidatesPath:  "$",
+				CandidateIDPath: "show.id",
+				SearchFieldMap: map[string]string{
+					"title":         "show.name",
+					"year":          "show.premiered",
+					"media.network": "show.network.name",
+				},
+				SearchArtworkMap: map[string]string{"poster": "show.image.original"},
+				Children: []sdk.ChildListing{
+					{
+						Level:        "season",
+						ListTemplate: "/shows/{id}/seasons",
+						ItemsPath:    "$",
+						Key:          "id",
+						Label:        "name",
+						Sequence:     "number",
+						Year:         "premiereDate",
+						Artwork:      "image.medium",
+					},
+					{
+						Level:        "episode",
+						ListTemplate: "/seasons/{parent}/episodes",
+						ItemsPath:    "$",
+						Key:          "id",
+						Label:        "name",
+						Sequence:     "season",
+						// Specials have a null number. They stay in their airing
+						// season and the picker asks the operator for an index.
+						Index:   "number",
+						Year:    "airdate",
+						Artwork: "image.medium",
+					},
+				},
 				// GET /shows/{id}?embed=episodes — the show document with its
 				// episode list under _embedded.episodes (the list the
 				// absolute-episode mapper reads, see absolute.go).

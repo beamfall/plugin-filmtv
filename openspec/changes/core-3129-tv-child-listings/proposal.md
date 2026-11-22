@@ -10,12 +10,11 @@ provider ordinals.
 
 ## What changes
 
-- Declare season and episode listings for TMDB TV, TheTVDB, and TVmaze wherever the pinned SDK can
-  resolve the provider's response shape and ordering.
+- Declare season and episode listings for TMDB TV, TheTVDB, and TVmaze.
 - Preserve season zero when a provider supplies it. AniList remains show-level.
-- TheTVDB needs an array of aired-order seasons. Its extended series record mixes orders, and the
-  current path predicate selects one row. TVmaze needs support for root arrays in search and child
-  listing responses. Its unnumbered specials also need a way to map to season zero.
+- Filter TheTVDB's extended series record to aired-order seasons.
+- Enable free-text search for TVmaze and read its search and child listings from root arrays.
+  TVmaze specials without an episode number keep their airing season and leave the index empty.
 
 ## Verification and rollback
 
