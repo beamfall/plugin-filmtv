@@ -13,8 +13,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
-	"unicode/utf8"
 
 	"github.com/beamfall/plugin-filmtv/internal/mediaimport"
 	sdk "github.com/beamfall/plugin-sdk"
@@ -231,13 +231,10 @@ func isExtraStem(stem string) bool {
 var errNFODangling = errors.New("nfo symlink target is missing")
 
 // isRegularFile reports whether path names a regular file. Only a clean
-// not-found is false with no error: any other failure is returned, so a
-// sidecar behind a folder that denies traversal, or a symlink whose target
-// moved, never reads as absent. A name longer than maxNameRunes fits no
-// filesystem, so it is absent. A name past that many bytes may fit a
-// filesystem that counts characters but not one that counts bytes, so a
-// failed stat of one is absent only when the folder listing, compared without
-// case, proves no such entry exists.
+// not-found, or a path the system refuses as too long (no file can live
+// there), is false with no error: any other failure is returned, so a sidecar
+// behind a folder that denies traversal, or a symlink whose target moved,
+// never reads as absent.
 func isRegularFile(path string) (bool, error) {
 	info, err := os.Stat(path)
 	switch {
@@ -252,28 +249,29 @@ func isRegularFile(path string) (bool, error) {
 			return false, nil
 		}
 		return false, lerr
-	}
-	name := filepath.Base(path)
-	switch {
-	case utf8.RuneCountInString(name) > maxNameRunes:
+	case nameTooLong(err):
 		return false, nil
-	case len(name) <= maxNameRunes:
-		return false, err
 	}
-	entries, lerr := os.ReadDir(filepath.Dir(path))
-	if lerr != nil {
-		return false, err
-	}
-	if slices.ContainsFunc(entries, func(e fs.DirEntry) bool { return strings.EqualFold(e.Name(), name) }) {
-		return false, err
-	}
-	return false, nil
+	return false, err
 }
 
-// maxNameRunes is the longest file name common filesystems hold: ext4 counts
-// 255 bytes, APFS and NTFS 255 UTF-16 units, and each count is at least the
-// name's rune count.
-const maxNameRunes = 255
+// errNameTooLong is the system's error for a path past its length limits,
+// taken from a stat of a name no filesystem holds: the plugin cannot import
+// syscall to name it. It stays nil, matching nothing, if the probe fails
+// some other way.
+var errNameTooLong = sync.OnceValue(func() error {
+	_, err := os.Stat(filepath.Join(os.TempDir(), strings.Repeat("n", 8192)))
+	var pathErr *fs.PathError
+	if errors.As(err, &pathErr) && !errors.Is(err, fs.ErrNotExist) {
+		return pathErr.Err
+	}
+	return nil
+})
+
+func nameTooLong(err error) bool {
+	probe := errNameTooLong()
+	return probe != nil && errors.Is(err, probe)
+}
 
 // errNFOChanged reports a sidecar that changed while it was read.
 var errNFOChanged = errors.New("nfo changed while it was read")

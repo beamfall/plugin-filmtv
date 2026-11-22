@@ -603,6 +603,57 @@ func TestCaseFoldedLoopIsUnreadable(t *testing.T) {
 	}
 }
 
+// TestFullPathLimitFallsBackToFolderNFO: a media path that fits the system's
+// path limit while its derived .nfo path does not still finds the folder NFO
+// (Codex r5).
+func TestFullPathLimitFallsBackToFolderNFO(t *testing.T) {
+	for _, limit := range []int{1024, 4096} {
+		// The kernel counts the resolved path: macOS's temp dir sits under the
+		// /var symlink.
+		dir, err := filepath.EvalSymlinks(t.TempDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+		for len(dir) < limit-120 {
+			next := filepath.Join(dir, strings.Repeat("d", min(200, limit-120-len(dir))))
+			if err := os.Mkdir(next, 0o700); err != nil {
+				break
+			}
+			dir = next
+		}
+		stem := strings.Repeat("f", limit-1-len(dir)-1-len(".ts"))
+		media := filepath.Join(dir, stem+".ts")
+		if len(stem) < 1 || os.WriteFile(media, nil, 0o600) != nil {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(dir, stem+".nfo")); !nameTooLong(err) {
+			continue
+		}
+		folder := filepath.Join(dir, nfoFilmRoot+".nfo")
+		writeNFO(t, folder, "<"+nfoFilmRoot+"><title>Real</title></"+nfoFilmRoot+">")
+		if got, err := mediaNFOPath(media); err != nil || got != folder {
+			t.Fatalf("mediaNFOPath = %q, %v; want %q", got, err, folder)
+		}
+		return
+	}
+	t.Skip("no path limit of 1024 or 4096 bytes")
+}
+
+// TestNameTooLongProbe: the probe finds the system's too-long error, and a
+// symlink loop is not mistaken for it.
+func TestNameTooLongProbe(t *testing.T) {
+	if errNameTooLong() == nil {
+		t.Fatal("probe found no too-long error")
+	}
+	loop := filepath.Join(t.TempDir(), "loop.nfo")
+	if err := os.Symlink(loop, loop); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(loop); err == nil || nameTooLong(err) {
+		t.Fatalf("loop stat error %v read as too long", err)
+	}
+}
+
 // TestLongMultibyteSidecarNameIsFound: a sidecar whose name passes 255 bytes
 // but fits the filesystem's limit is still found (Codex r3).
 func TestLongMultibyteSidecarNameIsFound(t *testing.T) {
