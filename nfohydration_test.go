@@ -642,28 +642,39 @@ func TestFullPathLimitFallsBackToFolderNFO(t *testing.T) {
 		if got, err := mediaNFOPath(media); err != nil || got != folder {
 			t.Fatalf("mediaNFOPath = %q, %v; want %q", got, err, folder)
 		}
+		// A folder that grants traversal but not reading cannot be searched,
+		// so the sidecar is unknown, not absent (Codex r7).
+		if err := os.Chmod(dir, 0o300); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
+		if _, err := os.ReadDir(dir); err == nil {
+			t.Skip("folder stays listable; running as root?")
+		}
+		if got, err := mediaNFOPath(media); err == nil {
+			t.Fatalf("unlistable mediaNFOPath = %q, nil; want an error", got)
+		}
 		return
 	}
 	t.Skip("no path limit of 1024 or 4096 bytes")
 }
 
-// TestNameTooLongProbe: the probe finds the system's too-long error, and a
-// symlink loop is not mistaken for it.
-func TestNameTooLongProbe(t *testing.T) {
-	probe := errNameTooLong()
-	if probe == nil || errors.Is(probe, fs.ErrPermission) {
-		t.Fatalf("probe = %v, want the system's too-long error", probe)
+// TestTooLongProbe: an over-long name reads as too long in its folder, and a
+// symlink loop or a missing file does not.
+func TestTooLongProbe(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := os.Stat(filepath.Join(dir, strings.Repeat("x", 300))); !tooLong(dir, err) {
+		t.Fatalf("300-byte name stat = %v, want too long", err)
 	}
-	// A single over-long name in a writable folder fails the same way.
-	if _, err := os.Stat(filepath.Join(t.TempDir(), strings.Repeat("x", 300))); !errors.Is(err, probe) {
-		t.Fatalf("300-byte name stat = %v, want %v", err, probe)
-	}
-	loop := filepath.Join(t.TempDir(), "loop.nfo")
+	loop := filepath.Join(dir, "loop.nfo")
 	if err := os.Symlink(loop, loop); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(loop); err == nil || nameTooLong(err) {
+	if _, err := os.Stat(loop); err == nil || tooLong(dir, err) {
 		t.Fatalf("loop stat error %v read as too long", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "absent.nfo")); tooLong(dir, err) {
+		t.Fatalf("missing file read as too long")
 	}
 }
 
