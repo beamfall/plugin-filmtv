@@ -1,16 +1,18 @@
 ## 1. Build
 
-- [x] 1.1 Tolerant full NFO reader with encoding-declaration support
-- [x] 1.2 `season.nfo` lookup and the sidecar size+mtime signature
-- [x] 1.3 `LocalNFOHydration` neutral plan (fields, credits, genre, studio, film-series, containers)
+- [x] 1.1 Tolerant full NFO reader with encoding-declaration support, `<collection>` and pre-1900 years
+- [x] 1.2 Signature of the parsed bytes, the unreadable state and the cheap size+mtime signature
+- [x] 1.3 `LocalNFOHydration` neutral plan (fields, credits, genre, studio, film-series) and the owned relations
 - [x] 1.4 Bundle Media fields and the film-series membership relation
-- [x] 1.5 `nfo` migration source emits watch state
+- [x] 1.5 `nfo` migration source emits watch state for the main feature, only when selected
+- [x] 1.6 US-first certification selection
 
 ## 2. Prove
 
-- [x] 2.1 Golden fixtures: Kodi film, tvshow + season + episode, multi-episode, Latin-1, truncated
-- [x] 2.2 Watch state from `playcount`; bundle validates
-- [x] 2.3 `openspec validate --all --strict` passes
+- [x] 2.1 Golden fixtures: Kodi film, folder film, episode, multi-episode, Latin-1, truncated
+- [x] 2.2 Watch state from `playcount`, category selection, extras; bundle validates
+- [x] 2.3 Unreadable and changed-while-read sidecars; certification selection
+- [x] 2.4 `openspec validate --all --strict` passes
 
 ## 3. Release (owner approval)
 
