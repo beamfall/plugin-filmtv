@@ -291,7 +291,8 @@ func entryInFolder(path string) (bool, error) {
 	switch {
 	case err == nil:
 		return false, errNFOUnreachable
-	case errors.Is(err, fs.ErrNotExist):
+	case errors.Is(err, fs.ErrNotExist) || tooLong(dir, err):
+		// A bare name refused as too long is past the folder's name limit.
 		return false, nil
 	}
 	return false, err

@@ -659,6 +659,41 @@ func TestFullPathLimitFallsBackToFolderNFO(t *testing.T) {
 	t.Skip("no path limit of 1024 or 4096 bytes")
 }
 
+// TestPathAndNameLimitsTogetherFallBackToFolderNFO: a 255-byte media name
+// whose path just fits, so its .nfo passes both the path and the name limit,
+// still finds the folder NFO (Codex r8).
+func TestPathAndNameLimitsTogetherFallBackToFolderNFO(t *testing.T) {
+	for _, limit := range []int{1024, 4096} {
+		dir, err := filepath.EvalSymlinks(t.TempDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := limit - 1 - 1 - 255
+		for len(dir) < want {
+			n := min(200, want-len(dir)-1)
+			if n < 1 {
+				break
+			}
+			next := filepath.Join(dir, strings.Repeat("d", n))
+			if err := os.Mkdir(next, 0o700); err != nil {
+				break
+			}
+			dir = next
+		}
+		media := filepath.Join(dir, strings.Repeat("f", 252)+".ts")
+		if len(dir) != want || os.WriteFile(media, nil, 0o600) != nil {
+			continue
+		}
+		folder := filepath.Join(dir, nfoFilmRoot+".nfo")
+		writeNFO(t, folder, "<"+nfoFilmRoot+"><title>Real</title></"+nfoFilmRoot+">")
+		if got, err := mediaNFOPath(media); err != nil || got != folder {
+			t.Fatalf("mediaNFOPath = %q, %v; want %q", got, err, folder)
+		}
+		return
+	}
+	t.Skip("no 255-byte name fits a path limit of 1024 or 4096 bytes")
+}
+
 // TestTooLongProbe: an over-long name reads as too long in its folder, and a
 // symlink loop or a missing file does not.
 func TestTooLongProbe(t *testing.T) {
