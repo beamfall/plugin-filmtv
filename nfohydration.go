@@ -97,7 +97,7 @@ func NFOOwnedRelations() []SidecarRelationKind {
 		{FromKind: "genre", Name: "genre-of"},
 		{FromKind: "studio", Name: "produced"},
 		{FromKind: "person", Name: "credited-in"},
-		{FromKind: "film-series", Name: FilmSeriesMemberRelation},
+		{FromKind: "film-series", Name: FilmSeriesFilmRelation},
 	}
 }
 
