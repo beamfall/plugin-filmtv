@@ -403,20 +403,21 @@ func TestSelectCertification(t *testing.T) {
 		label  string
 		policy bool
 	}{
-		"Rated PG-13":          {"PG-13", true},
-		"US:R / UK:15":         {"R", true},
-		"CA:PG / US:R":         {"R", true},
-		"CA:PG / R":            {"R", true},
-		"CA:PG":                {"PG", false},
-		"US:Rated R":           {"R", true},
-		"TV-14":                {"TV-14", true},
-		" ":                    {"", false},
-		"Germany:FSK 12":       {"FSK 12", false},
-		"Germany:FSK 16 / R":   {"R", true},
-		"United States:PG":     {"PG", true},
-		"U.S.A.:PG-13":         {"PG-13", true},
-		"Côte d’Ivoire:12 / R": {"R", true},
-		"Guinea-Bissau:12 / R": {"R", true},
+		"Rated PG-13":                {"PG-13", true},
+		"US:R / UK:15":               {"R", true},
+		"CA:PG / US:R":               {"R", true},
+		"CA:PG / R":                  {"R", true},
+		"CA:PG":                      {"PG", false},
+		"US:Rated R":                 {"R", true},
+		"TV-14":                      {"TV-14", true},
+		" ":                          {"", false},
+		"Germany:FSK 12":             {"FSK 12", false},
+		"Germany:FSK 16 / R":         {"R", true},
+		"United States:PG":           {"PG", true},
+		"U.S.A.:PG-13":               {"PG-13", true},
+		"Côte d’Ivoire:12 / R":       {"R", true},
+		"Guinea-Bissau:12 / R":       {"R", true},
+		"Co\u0302te d’Ivoire:12 / R": {"R", true},
 	} {
 		label, policy := selectCertification(in)
 		if label != want.label || policy != want.policy {
@@ -557,6 +558,23 @@ func TestOverlongSidecarNameFallsBackToFolderNFO(t *testing.T) {
 	writeNFO(t, folder, "<"+nfoFilmRoot+"><title>Real</title></"+nfoFilmRoot+">")
 	if got, err := mediaNFOPath(media); err != nil || got != folder {
 		t.Fatalf("mediaNFOPath = %q, %v; want %q", got, err, folder)
+	}
+}
+
+// TestLongMultibyteSidecarNameIsFound: a sidecar whose name passes 255 bytes
+// but fits the filesystem's limit is still found (Codex r3).
+func TestLongMultibyteSidecarNameIsFound(t *testing.T) {
+	root := t.TempDir()
+	stem := strings.Repeat("映", 90)
+	media := filepath.Join(root, "Film", stem+".mkv")
+	writeNFO(t, media, "")
+	sidecar := filepath.Join(root, "Film", stem+".nfo")
+	if err := os.WriteFile(sidecar, []byte("<"+nfoFilmRoot+"><title>Long</title></"+nfoFilmRoot+">"), 0o600); err != nil {
+		t.Skipf("filesystem refuses a %d-byte name: %v", len(stem)+4, err)
+	}
+	writeNFO(t, filepath.Join(root, "Film", nfoFilmRoot+".nfo"), "<"+nfoFilmRoot+"><title>Folder</title></"+nfoFilmRoot+">")
+	if got, err := mediaNFOPath(media); err != nil || got != sidecar {
+		t.Fatalf("mediaNFOPath = %q, %v; want %q", got, err, sidecar)
 	}
 }
 
