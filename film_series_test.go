@@ -1,6 +1,7 @@
 package filmtv_test
 
 import (
+	"strconv"
 	"testing"
 
 	sdk "github.com/beamfall/plugin-sdk"
@@ -12,8 +13,9 @@ import (
 // TestTMDBMovieFilmSeriesMaps pins the film-series build from TMDB's
 // belongs_to_collection (CORE-3152): film-series holds each film through a
 // single-holder relation, the tmdb-movie scraper's series map creates the
-// series (name, tmdb-id, poster) and links the film, and its container map adds
-// the backdrop. The TV scraper builds no series.
+// series keyed by the collection id (tmdb-id, poster) and links the film, and
+// its container map titles it with the collection name and adds the backdrop.
+// The TV scraper builds no series.
 func TestTMDBMovieFilmSeriesMaps(t *testing.T) {
 	var series sdk.EntityKind
 	for _, kind := range filmtv.Bundle().EntityKinds {
@@ -39,12 +41,12 @@ func TestTMDBMovieFilmSeriesMaps(t *testing.T) {
 		}
 	}
 	if len(link) != 1 || link[0].Relation != filmtv.FilmSeriesFilmRelation || link[0].Path != "belongs_to_collection" ||
-		link[0].NamePath != "name" || link[0].ArtworkPath != "poster_path" || link[0].FieldMap["tmdb-id"] != "id" {
-		t.Errorf("tmdb-movie series map = %+v, want belongs_to_collection name, poster_path and tmdb-id=id", link)
+		link[0].NamePath != "id" || link[0].ArtworkPath != "poster_path" || link[0].FieldMap["tmdb-id"] != "id" {
+		t.Errorf("tmdb-movie series map = %+v, want belongs_to_collection keyed by id, poster_path and tmdb-id=id", link)
 	}
-	if len(container) != 1 || container[0].Path != "belongs_to_collection" ||
+	if len(container) != 1 || container[0].Path != "belongs_to_collection" || container[0].TitlePath != "name" ||
 		container[0].ArtworkMap["backdrop"] != "backdrop_path" {
-		t.Errorf("tmdb-movie series container map = %+v, want the belongs_to_collection backdrop", container)
+		t.Errorf("tmdb-movie series container map = %+v, want the belongs_to_collection name and backdrop", container)
 	}
 	for _, em := range scraperByID(t, "tmdb-tv").EntityMaps {
 		if em.Kind == "film-series" {
@@ -53,10 +55,40 @@ func TestTMDBMovieFilmSeriesMaps(t *testing.T) {
 	}
 }
 
+// TestTMDBMovieFilmSeriesHolderKey resolves the bundle's series link map
+// against the recorded movie documents: both films of one collection key the
+// same series (collection 7700), a film outside any collection keys none, and
+// the first film moved to another collection keys that one (8800).
+func TestTMDBMovieFilmSeriesHolderKey(t *testing.T) {
+	var link sdk.EntityMap
+	for _, em := range scraperByID(t, "tmdb-movie").EntityMaps {
+		if em.Kind == "film-series" && !em.Container {
+			link = em
+		}
+	}
+	for fixture, want := range map[string]string{
+		"tmdb-movie-saga-first.json":   "7700",
+		"tmdb-movie-saga-second.json":  "7700",
+		"tmdb-movie-standalone.json":   "",
+		"tmdb-movie-another-saga.json": "8800",
+	} {
+		got := ""
+		if element, ok := loadFixture(t, fixture)[link.Path].(map[string]any); ok {
+			if id, ok := element[link.NamePath].(float64); ok {
+				got = strconv.FormatFloat(id, 'f', -1, 64)
+			}
+		}
+		if got != want {
+			t.Errorf("%s: series key = %q, want %q", fixture, got, want)
+		}
+	}
+}
+
 // TestTMDBMovieFilmSeriesTrace freezes the series container output for
 // recorded movie documents: both films of one collection name the same series
-// backdrop, and a film outside any collection (belongs_to_collection null)
-// emits no series container.
+// title and backdrop, a film outside any collection (belongs_to_collection
+// null) emits no series container, and the first film moved to another
+// collection names that one.
 func TestTMDBMovieFilmSeriesTrace(t *testing.T) {
 	const image = "https://image.tmdb.org/t/p/original"
 	spec := scraperByID(t, "tmdb-movie")
@@ -91,11 +123,18 @@ func TestTMDBMovieFilmSeriesTrace(t *testing.T) {
 	}
 	saga := []sdktest.TraceContainer{{
 		Kind:    "film-series",
+		Title:   "The Synthetic Saga",
 		Artwork: map[string]string{"backdrop": image + "/saga-backdrop.jpg"},
+	}}
+	another := []sdktest.TraceContainer{{
+		Kind:    "film-series",
+		Title:   "Another Saga",
+		Artwork: map[string]string{"backdrop": image + "/another-backdrop.jpg"},
 	}}
 	sdktest.RunScraperTraceConformance(t, []sdktest.ScraperTraceVector{
 		vector("first film of a collection", "501", "tmdb-movie-saga-first.json", "Saga Origins", "1999-03-31", saga),
 		vector("second film of the same collection", "502", "tmdb-movie-saga-second.json", "A Saga Returns", "2003-05-15", saga),
 		vector("film outside any collection", "503", "tmdb-movie-standalone.json", "Standalone Feature", "2001-07-04", []sdktest.TraceContainer{}),
+		vector("first film moved to another collection", "501", "tmdb-movie-another-saga.json", "Saga Origins", "1999-03-31", another),
 	})
 }

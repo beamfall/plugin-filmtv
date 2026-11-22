@@ -619,11 +619,14 @@ func Bundle() sdk.Bundle {
 					// backdrop_path} (null outside a franchise) builds the
 					// film's series (CORE-3152): the first map creates the
 					// series and links the film; the container map then
-					// adds the backdrop to the series now holding it.
+					// titles the series now holding it and adds the
+					// backdrop. The series is keyed by the TMDB collection
+					// id, so a renamed collection stays one series and two
+					// collections sharing a name stay two.
 					{Kind: "film-series", Relation: FilmSeriesFilmRelation, Path: "belongs_to_collection",
-						NamePath: "name", ArtworkPath: "poster_path",
+						NamePath: "id", ArtworkPath: "poster_path",
 						FieldMap: map[string]string{"tmdb-id": "id"}},
-					{Kind: "film-series", Container: true, Path: "belongs_to_collection",
+					{Kind: "film-series", Container: true, Path: "belongs_to_collection", TitlePath: "name",
 						ArtworkMap: map[string]string{"backdrop": "backdrop_path"}},
 				},
 			},
