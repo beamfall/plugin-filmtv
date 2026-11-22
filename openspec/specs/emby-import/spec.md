@@ -1,7 +1,8 @@
 # emby-import Specification
 
 ## Purpose
-TBD - created by archiving change core-2678-jellyfin-emby-ratings. Update Purpose after archive.
+Import watch state, source users and collections from an Emby server's database into Beamfall, so a
+move from Emby keeps what each person has watched.
 
 ## Requirements
 
