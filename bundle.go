@@ -620,6 +620,29 @@ func Bundle() sdk.Bundle {
 				SearchTemplate:  "/search/tv?query={query}",
 				CandidatesPath:  "results",
 				CandidateIDPath: "id",
+				Children: []sdk.ChildListing{
+					{
+						Level:        "season",
+						ListTemplate: "/tv/{id}",
+						ItemsPath:    "seasons",
+						Key:          "season_number",
+						Label:        "name",
+						Sequence:     "season_number",
+						Year:         "air_date",
+						Artwork:      "poster_path",
+					},
+					{
+						Level:        "episode",
+						ListTemplate: "/tv/{id}/season/{parent}",
+						ItemsPath:    "episodes",
+						Key:          "episode_number",
+						Label:        "name",
+						Sequence:     "season_number",
+						Index:        "episode_number",
+						Year:         "air_date",
+						Artwork:      "still_path",
+					},
+				},
 				// GET /tv/{id} — TMDB TV series details shape.
 				// append_to_response=credits folds the cast/crew list onto
 				// this document, matching tmdb-movie —
@@ -854,8 +877,11 @@ func Bundle() sdk.Bundle {
 			// 2026-11-14). Its search response is a bare JSON array, which
 			// the SDK refuses as a candidates path, so this scraper has no
 			// free-text search yet: it looks a show up by its TVmaze id, and
-			// declares lookups for TheTVDB and IMDb ids. Summaries are HTML
-			// and stay unmapped until the transform vocabulary can strip it.
+			// declares lookups for TheTVDB and IMDb ids. Its child endpoints
+			// also return bare arrays. The child path dialect has no way to
+			// map unnumbered special episodes to sequence zero based on type.
+			// Summaries are HTML and stay unmapped until the transform
+			// vocabulary can strip it.
 			{
 				ID:          "tvmaze-show",
 				DisplayName: sdk.L("TVmaze"),

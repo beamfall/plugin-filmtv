@@ -1,0 +1,13 @@
+{
+  "status": "success",
+  "data": {
+    "id": 432087,
+    "name": "Harbor Watch",
+    "defaultSeasonType": 1,
+    "seasons": [
+      {"id": 2064401, "seriesId": 432087, "number": 0, "name": "Specials", "year": "2022", "image": "https://artworks.thetvdb.com/banners/seasons/2064401.jpg", "type": {"id": 1, "name": "Aired Order", "type": "official"}},
+      {"id": 2064402, "seriesId": 432087, "number": 1, "name": "Season 1", "year": "2023", "image": "https://artworks.thetvdb.com/banners/seasons/2064402.jpg", "type": {"id": 1, "name": "Aired Order", "type": "official"}},
+      {"id": 2064407, "seriesId": 432087, "number": 1, "name": "Season 1", "year": "2023", "image": "https://artworks.thetvdb.com/banners/seasons/2064407.jpg", "type": {"id": 2, "name": "DVD Order", "type": "dvd"}}
+    ]
+  }
+}

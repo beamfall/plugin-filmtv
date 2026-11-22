@@ -1,0 +1,10 @@
+{
+  "id": 78121,
+  "name": "Season 1",
+  "season_number": 1,
+  "episodes": [
+    {"id": 1018151, "season_number": 1, "episode_number": 1, "name": "Le retour", "air_date": "2024-03-21", "still_path": "/qavbgM4MQY37kxfAeg3h2Vdk86N.jpg"},
+    {"id": 1018152, "season_number": 1, "episode_number": 2, "name": "La marée haute", "air_date": "2024-03-28", "still_path": "/vrrYE9M2ezwbsPwA6LKsfNbFMko.jpg"},
+    {"id": 1018153, "season_number": 1, "episode_number": 3, "name": "Les lettres", "air_date": "2024-04-04", "still_path": "/GjV1mFeOSv49fQnC3PpLugRoIHr.jpg"}
+  ]
+}

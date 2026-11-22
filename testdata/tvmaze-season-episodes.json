@@ -1,0 +1,5 @@
+[
+  {"id": 2846101, "season": 1, "number": 1, "type": "regular", "name": "Night Ferry", "airdate": "2024-09-05", "image": {"medium": "https://static.tvmaze.com/uploads/images/medium_landscape/542/1355376.jpg"}},
+  {"id": 2846102, "season": 1, "number": 2, "type": "regular", "name": "The Island Road", "airdate": "2024-09-12", "image": {"medium": "https://static.tvmaze.com/uploads/images/medium_landscape/542/1355377.jpg"}},
+  {"id": 2846103, "season": 1, "number": null, "type": "significant_special", "name": "Christmas on the Sound", "airdate": "2024-12-24", "image": {"medium": "https://static.tvmaze.com/uploads/images/medium_landscape/550/1375378.jpg"}}
+]
