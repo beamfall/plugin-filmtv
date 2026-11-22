@@ -684,6 +684,11 @@ func TestPathAndNameLimitsTogetherFallBackToFolderNFO(t *testing.T) {
 		if len(dir) != want || os.WriteFile(media, nil, 0o600) != nil {
 			continue
 		}
+		// The trial counts only where the .nfo path also passes the path
+		// limit, so the lookup reaches the folder (Codex r9).
+		if _, err := os.Lstat(dir + strings.Repeat(string(filepath.Separator)+".", 129)); err == nil {
+			continue
+		}
 		folder := filepath.Join(dir, nfoFilmRoot+".nfo")
 		writeNFO(t, folder, "<"+nfoFilmRoot+"><title>Real</title></"+nfoFilmRoot+">")
 		if got, err := mediaNFOPath(media); err != nil || got != folder {
