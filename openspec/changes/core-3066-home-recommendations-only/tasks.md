@@ -1,0 +1,6 @@
+- [x] Remove the `browse-episodes`, `browse-filter` and `browse-all` home sections
+- [x] Test: the home declares no grid, filter bar, class filter or unnarrowed `all-items` Source
+- [x] README and layout comments
+- [x] Plugin tests, gofmt and lint
+- [ ] Tag a release, repin Core, run the binding gate and check the TV and Film Recommended tabs
+- [ ] Archive after landing

@@ -2,7 +2,7 @@
 
 ### Requirement: Shared home has no film-only rail
 
-The Film & TV browse layout SHALL NOT declare a fixed movie-class grid or shelf. Loose Media SHALL remain reachable through All Titles and its class filter; removing a rail SHALL NOT remove or reclassify Media or bypass the owner Unmatched / fix-match workflow.
+The Film & TV browse layout SHALL NOT declare a fixed movie-class grid or shelf. Loose Media SHALL remain reachable through the host's Library browse (All Titles until CORE-3066); removing a rail SHALL NOT remove or reclassify Media or bypass the owner Unmatched / fix-match workflow.
 
 #### Scenario: Unmatched file classified as a film in a TV Library
 
