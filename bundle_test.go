@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 
 	sdk "github.com/beamfall/plugin-sdk"
@@ -354,7 +355,7 @@ func TestTMDBCreditAttributes(t *testing.T) {
 			}
 		}
 	}
-	for _, a := range []string{"character", "billing", "job", "department"} {
+	for _, a := range []string{"role", "character", "billing", "department", "job"} {
 		if !declared[a] {
 			t.Errorf("credited-in does not declare attribute %q", a)
 		}
@@ -362,7 +363,14 @@ func TestTMDBCreditAttributes(t *testing.T) {
 
 	personMaps := map[string][]sdk.EntityMap{}
 	for _, scraperID := range []string{"tmdb-movie", "tmdb-tv"} {
-		for _, em := range scraperByID(t, scraperID).EntityMaps {
+		scraper := scraperByID(t, scraperID)
+		if !strings.Contains(scraper.LookupTemplate, "credits") || !strings.Contains(scraper.LookupByIDTemplate["tmdb"], "credits") {
+			t.Errorf("%s lookup templates (%q, %q) must request credits", scraperID, scraper.LookupTemplate, scraper.LookupByIDTemplate["tmdb"])
+		}
+		if scraper.ArtworkBaseURL != "https://image.tmdb.org/t/p/original" {
+			t.Errorf("%s ArtworkBaseURL = %q, want the TMDB image base the profile_path composes with", scraperID, scraper.ArtworkBaseURL)
+		}
+		for _, em := range scraper.EntityMaps {
 			if em.Kind == "person" {
 				personMaps[scraperID] = append(personMaps[scraperID], em)
 			}
@@ -377,29 +385,46 @@ func TestTMDBCreditAttributes(t *testing.T) {
 	}
 
 	cast, crew := movie[0], movie[1]
-	if cast.Path != "credits.cast" || cast.OrdinalField != "billing" || cast.OrdinalOffset != 0 ||
+	wantPersonFields := map[string]string{
+		"birth-date": "birthday",
+		"death-date": "deathday",
+		"birthplace": "place_of_birth",
+		"biography":  "biography",
+		"homepage":   "homepage",
+	}
+	if cast.Path != "credits.cast" || cast.Relation != "credited-in" || cast.NamePath != "name" ||
+		cast.LookupTemplate != "/person/{id}" || cast.LookupIDPath != "id" || cast.MaxLookups != 10 ||
+		!reflect.DeepEqual(cast.FieldMap, wantPersonFields) ||
+		cast.OrdinalField != "billing" || cast.OrdinalOffset != 0 ||
 		!reflect.DeepEqual(cast.RelationAttributeMap, map[string]string{"character": "character", "billing": "order"}) {
-		t.Errorf("cast map = %+v, want character and billing (order) attributes, ordered by billing", cast)
+		t.Errorf("cast map = %+v, want character and billing (order) attributes, /person/{id} lookup, ordered by billing", cast)
 	}
 	// Each credited person's TMDB profile image becomes the person Entity's
 	// headshot, so media(id).credits carries an artwork slot (CORE-2432).
 	if cast.ArtworkPath != "profile_path" || cast.ArtworkURLTemplate != "" {
 		t.Errorf("cast map ArtworkPath = %q (template %q), want TMDB profile_path headshots", cast.ArtworkPath, cast.ArtworkURLTemplate)
 	}
-	for _, scraperID := range []string{"tmdb-movie", "tmdb-tv"} {
-		if base := scraperByID(t, scraperID).ArtworkBaseURL; base != "https://image.tmdb.org/t/p/original" {
-			t.Errorf("%s ArtworkBaseURL = %q, want the TMDB image base the profile_path composes with", scraperID, base)
-		}
-	}
 	wantJobs := []string{"Director", "Screenplay", "Writer", "Producer", "Original Music Composer", "Director of Photography"}
 	if crew.Path != "credits.crew" || crew.Relation != "credited-in" || crew.NamePath != "name" ||
-		crew.ArtworkPath != "profile_path" || crew.LookupTemplate != "" ||
+		crew.ArtworkPath != "profile_path" || crew.ArtworkURLTemplate != "" ||
+		crew.LookupTemplate != "" || crew.LookupIDPath != "" || crew.MaxLookups != 0 || len(crew.FieldMap) != 0 ||
+		crew.OrdinalField != "" ||
 		!reflect.DeepEqual(crew.RelationAttributeMap, map[string]string{"job": "job", "department": "department"}) ||
 		!reflect.DeepEqual(crew.ElementFilter, map[string][]string{"job": wantJobs}) {
 		t.Errorf("crew map = %+v, want key jobs with job and department, no lookups", crew)
 	}
 	if crew.OrdinalOffset < 1000 {
 		t.Errorf("crew OrdinalOffset = %d, want every crew credit after the cast", crew.OrdinalOffset)
+	}
+
+	var showCreditMapped bool
+	for _, em := range scraperByID(t, "tmdb-tv").EntityMaps {
+		if em.Container && em.Kind == "show" && em.ContainerRelations["credit"] == "credited-in" {
+			showCreditMapped = true
+		}
+	}
+	if !showCreditMapped {
+		t.Error("tmdb-tv show container does not wire credit -> credited-in")
 	}
 }
 

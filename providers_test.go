@@ -2,7 +2,9 @@ package filmtv_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -277,6 +279,89 @@ func TestTMDBTVShowContainerTrace(t *testing.T) {
 					{Relation: "in-genre", Kind: "genre", Name: "Drama"},
 					{Relation: "in-genre", Kind: "genre", Name: "Sci-Fi & Fantasy"},
 				},
+			}},
+		},
+	}})
+}
+
+// TestTMDBCreditsTrace exercises tmdb-tv's cast lookup cap (10 /person/{id}
+// docs, skipping id-less entries without burning slots, hydrating the 11th+
+// cast element directly) and key-crew ElementFilter through the SDK trace.
+func TestTMDBCreditsTrace(t *testing.T) {
+	cast := make([]any, 0, 12)
+	entityDocs := map[string]map[string]any{}
+	wantLinks := make([]sdktest.TraceLink, 0, 17)
+	for i := 1; i <= 10; i++ {
+		id := fmt.Sprintf("%d", 200+i)
+		resolved := fmt.Sprintf("Resolved Cast %02d", i)
+		cast = append(cast, map[string]any{
+			"id":           float64(200 + i),
+			"name":         fmt.Sprintf("Cast %02d", i),
+			"character":    fmt.Sprintf("Role %02d", i),
+			"order":        float64(i - 1),
+			"profile_path": fmt.Sprintf("/cast-%02d.jpg", i),
+		})
+		entityDocs["/person/"+id] = map[string]any{
+			"name":         resolved,
+			"profile_path": fmt.Sprintf("/cast-%02d.jpg", i),
+		}
+		wantLinks = append(wantLinks, sdktest.TraceLink{Relation: "credit", Kind: "person", Name: resolved})
+	}
+	// An id-less entry before the lookup cap is skipped without spending a slot.
+	cast = slices.Insert(cast, 2, any(map[string]any{"name": "Uncredited Extra", "order": float64(99)}))
+	// Past MaxLookups (10), cast hydrates straight from the element itself even when a /person doc exists.
+	cast = append(cast, map[string]any{
+		"id":           float64(211),
+		"name":         "Cast 11 Past Cap",
+		"character":    "Role 11",
+		"order":        float64(10),
+		"profile_path": "/cast-11.jpg",
+	})
+	entityDocs["/person/211"] = map[string]any{
+		"name":         "Should Not Fetch 11",
+		"profile_path": "/cast-11.jpg",
+	}
+	wantLinks = append(wantLinks, sdktest.TraceLink{Relation: "credit", Kind: "person", Name: "Cast 11 Past Cap"})
+
+	crew := []any{
+		map[string]any{"name": "Filtered Casting", "job": "Casting", "department": "Production", "profile_path": "/casting.jpg"},
+		map[string]any{"name": "Crew Director", "job": "Director", "department": "Directing", "profile_path": "/dir.jpg"},
+		map[string]any{"name": "Crew Screenplay", "job": "Screenplay", "department": "Writing", "profile_path": "/screen.jpg"},
+		map[string]any{"name": "Crew Writer", "job": "Writer", "department": "Writing", "profile_path": "/writer.jpg"},
+		map[string]any{"name": "Crew Producer", "job": "Producer", "department": "Production", "profile_path": "/prod.jpg"},
+		map[string]any{"name": "Crew Composer", "job": "Original Music Composer", "department": "Sound", "profile_path": "/music.jpg"},
+		map[string]any{"name": "Crew DP", "job": "Director of Photography", "department": "Camera", "profile_path": "/dp.jpg"},
+		map[string]any{"name": "Filtered Grip", "job": "Key Grip", "department": "Camera", "profile_path": "/grip.jpg"},
+	}
+	for _, name := range []string{"Crew Director", "Crew Screenplay", "Crew Writer", "Crew Producer", "Crew Composer", "Crew DP"} {
+		wantLinks = append(wantLinks, sdktest.TraceLink{Relation: "credit", Kind: "person", Name: name})
+	}
+
+	sdktest.RunScraperTraceConformance(t, []sdktest.ScraperTraceVector{{
+		Name: "tmdb-tv cast cap and key crew filter",
+		Spec: scraperByID(t, "tmdb-tv"),
+		Input: sdktest.TraceInput{
+			ID: "9001",
+			LookupDoc: map[string]any{
+				"id":   float64(9001),
+				"name": "Credit Roster",
+				"credits": map[string]any{
+					"cast": cast,
+					"crew": crew,
+				},
+			},
+			EntityDocs: entityDocs,
+		},
+		Want: sdktest.ScraperTrace{
+			Requests: []sdktest.TraceRequest{{Role: "lookup", Method: "GET",
+				URL:  "https://api.themoviedb.org/3/tv/9001?append_to_response=credits,content_ratings",
+				Auth: sdktest.AuthPlacement{Location: "query", Name: "api_key", InURL: true}}},
+			Fields: map[string]string{"title": "Credit Roster"},
+			Containers: []sdktest.TraceContainer{{
+				Kind:   "show",
+				Title:  "Credit Roster",
+				Fields: map[string]string{},
+				Links:  wantLinks,
 			}},
 		},
 	}})

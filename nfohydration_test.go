@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -880,5 +881,56 @@ func TestNFOSourceFailsOnAnUnreadableNFO(t *testing.T) {
 	emitted = 0
 	if err := source.Stream(context.Background(), "1", emit); err != nil || emitted != 1 {
 		t.Errorf("resumed Stream = %v with %d items, want nil and 1 (the skipped NFO is not read)", err, emitted)
+	}
+}
+
+// TestNFOHydrationCreditsBillingOrderAndMerge verifies explicit <order> values
+// override XML document order, unordered actors fall back to list index, and
+// an actor who also directs/writes merges into one relation keeping cast order.
+func TestNFOHydrationCreditsBillingOrderAndMerge(t *testing.T) {
+	media := nfoGoldenLayouts["none"].materialize(t)
+	sidecar := strings.TrimSuffix(media, filepath.Ext(media)) + ".nfo"
+	doc := "<" + nfoFilmRoot + `><title>Billing Order</title>
+		<actor><name>Actor Late</name><role>Support</role><order>4</order></actor>
+		<actor><name>Actor Lead</name><role>Hero</role><order>0</order></actor>
+		<actor><name>Actor Unordered</name><role>Guest</role></actor>
+		<director>Actor Late</director>
+		<director>Director Only</director>
+		<credits>Actor Late</credits>
+		<writer>Writer Only</writer>
+	</` + nfoFilmRoot + ">"
+	writeNFO(t, sidecar, doc)
+
+	got := LocalNFOHydration(media)
+	order := func(v int) *int { return &v }
+	want := []SidecarRelation{
+		{
+			FromKind: "person", FromTitle: "Actor Late", Name: "credited-in",
+			Attributes: map[string]string{"character": "Support", "billing": "4", "job": "Director, Writer", "department": "Directing, Writing"},
+			SortOrder:  order(4),
+		},
+		{
+			FromKind: "person", FromTitle: "Actor Lead", Name: "credited-in",
+			Attributes: map[string]string{"character": "Hero", "billing": "0"},
+			SortOrder:  order(0),
+		},
+		{
+			FromKind: "person", FromTitle: "Actor Unordered", Name: "credited-in",
+			Attributes: map[string]string{"character": "Guest", "billing": "2"},
+			SortOrder:  order(2),
+		},
+		{
+			FromKind: "person", FromTitle: "Director Only", Name: "credited-in",
+			Attributes: map[string]string{"job": "Director", "department": "Directing"},
+			SortOrder:  order(nfoCrewOrdinalOffset + 1),
+		},
+		{
+			FromKind: "person", FromTitle: "Writer Only", Name: "credited-in",
+			Attributes: map[string]string{"job": "Writer", "department": "Writing"},
+			SortOrder:  order(nfoCrewOrdinalOffset + 3),
+		},
+	}
+	if !reflect.DeepEqual(got.Relations, want) {
+		t.Fatalf("Relations =\n%#v\nwant\n%#v", got.Relations, want)
 	}
 }
